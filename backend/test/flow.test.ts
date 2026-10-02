@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
-import { bootstrap, createApp } from '../src/server.js';
+import { bootstrap, createServer } from '../src/server.js';
+import { closeRealtime } from '../src/realtime.js';
 import { pool } from '../src/db.js';
 
 const CUSTOMER = '9111111111';
 const OTHER = '9111111112';
 let base = '';
-let server: ReturnType<ReturnType<typeof createApp>['listen']>;
+let server: ReturnType<typeof createServer>;
 
 async function call(method: string, path: string, token?: string, body?: unknown) {
   const res = await fetch(base + path, {
@@ -28,14 +29,14 @@ async function login(phone: string) {
 describe('order lifecycle', () => {
   before(async () => {
     await bootstrap();
-    server = createApp().listen(0);
+    server = createServer().listen(0);
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
   after(async () => {
     await pool.query('delete from orders where customer_id in (select id from users where phone = any($1))', [[CUSTOMER, OTHER]]);
     await pool.query('delete from users where phone = any($1)', [[CUSTOMER, OTHER]]);
     await pool.query("update delivery_partners set is_available = true where user_id in (select id from users where phone in ('9000000002','9000000003'))");
-    server.close();
+    closeRealtime(); server.close();
     await pool.end();
   });
 

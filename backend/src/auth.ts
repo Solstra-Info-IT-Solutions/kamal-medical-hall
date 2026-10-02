@@ -32,7 +32,7 @@ export function normalisePhone(raw: string): string {
   return ten;
 }
 
-async function verifyToken(token: string): Promise<{ uid: string; phone: string }> {
+export async function verifyToken(token: string): Promise<{ uid: string; phone: string }> {
   if (config.authMode === 'dev') {
     const payload = jwt.verify(token, config.jwtSecret) as { sub: string; phone: string };
     return { uid: payload.sub, phone: payload.phone };
@@ -40,6 +40,12 @@ async function verifyToken(token: string): Promise<{ uid: string; phone: string 
   const decoded = await getAuth(firebase()).verifyIdToken(token);
   if (!decoded.phone_number) throw new Error('No phone number on token');
   return { uid: decoded.uid, phone: normalisePhone(decoded.phone_number) };
+}
+
+/** Removes the Firebase identity so the phone number can be registered again later. No-op in dev mode. */
+export async function deleteFirebaseUser(uid: string | null) {
+  if (!uid || config.authMode !== 'firebase' || uid.startsWith('dev-')) return;
+  try { await getAuth(firebase()).deleteUser(uid); } catch (e) { console.error('firebase deleteUser failed', e); }
 }
 
 export function signDevToken(phone: string) {
@@ -60,12 +66,11 @@ export async function verified(req: Request, _res: Response, next: NextFunction)
 
 /** Verifies the token and loads the server-side user (and so the role). */
 export async function authed(req: Request, res: Response, next: NextFunction) {
-  await verified(req, res, async () => {
-    const { rows } = await pool.query('select id, phone, role, name, email from users where phone = $1', [req.verified!.phone]);
-    if (!rows[0]) throw new HttpError(401, 'no_account', 'Account not found. Please sign in again.');
-    req.user = rows[0];
-    next();
-  });
+  await verified(req, res, () => undefined); // throws 401 itself if the token is bad
+  const { rows } = await pool.query('select id, phone, role, name, email from users where phone = $1', [req.verified!.phone]);
+  if (!rows[0]) throw new HttpError(401, 'no_account', 'Account not found. Please sign in again.');
+  req.user = rows[0];
+  next();
 }
 
 export const requireRole = (...roles: Role[]) => (req: Request, _res: Response, next: NextFunction) => {

@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { authed, normalisePhone, signDevToken, verified } from '../auth.js';
+import { authed, deleteFirebaseUser, normalisePhone, signDevToken, verified } from '../auth.js';
 import { config } from '../config.js';
-import { pool } from '../db.js';
+import { pool, tx } from '../db.js';
 import { HttpError, notFound, parse } from '../http.js';
-import { SERVICE_PINCODES } from '../serviceArea.js';
+import { isServiceable, servicePincodes } from '../pincodes.js';
 import { listDeliveryDays } from '../slots.js';
-import { signUpload } from '../services.js';
+import { deletePrescriptionFiles, signUpload } from '../services.js';
 
 export const general = Router();
 
@@ -48,6 +48,11 @@ general.post('/auth/session', verified, async (req, res) => {
   res.json({ user: userView(user), needsProfile: user.role === 'customer' && !user.name });
 });
 
+/** Public list of pincodes we currently deliver to (managed by the store admin). */
+general.get('/pincodes', async (_req, res) => {
+  res.json({ pincodes: [...(await servicePincodes())].sort() });
+});
+
 general.get('/me', authed, (req, res) => { res.json({ user: userView(req.user!) }); });
 
 general.patch('/me', authed, async (req, res) => {
@@ -80,8 +85,8 @@ const addressView = (a: Record<string, unknown>) => ({
   id: a.id, label: a.label, recipientName: a.recipient_name, phone: a.phone, line1: a.line1, line2: a.line2,
   landmark: a.landmark, pincode: a.pincode, city: a.city, latitude: a.latitude, longitude: a.longitude,
 });
-function assertServiceable(pincode: string) {
-  if (!SERVICE_PINCODES.has(pincode)) throw new HttpError(422, 'unsupported_pincode', 'Sorry, we do not deliver to this pincode yet.');
+async function assertServiceable(pincode: string) {
+  if (!(await isServiceable(pincode))) throw new HttpError(422, 'unsupported_pincode', 'Sorry, we do not deliver to this pincode yet.');
 }
 
 general.get('/addresses', authed, async (req, res) => {
@@ -91,7 +96,7 @@ general.get('/addresses', authed, async (req, res) => {
 
 general.post('/addresses', authed, async (req, res) => {
   const a = parse(addressSchema, req.body);
-  assertServiceable(a.pincode);
+  await assertServiceable(a.pincode);
   const { rows } = await pool.query(
     `insert into addresses (user_id, label, recipient_name, phone, line1, line2, landmark, pincode, latitude, longitude)
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *`,
@@ -102,7 +107,7 @@ general.post('/addresses', authed, async (req, res) => {
 
 general.put('/addresses/:id', authed, async (req, res) => {
   const a = parse(addressSchema, req.body);
-  assertServiceable(a.pincode);
+  await assertServiceable(a.pincode);
   const { rows } = await pool.query(
     `update addresses set label=$3, recipient_name=$4, phone=$5, line1=$6, line2=$7, landmark=$8, pincode=$9, latitude=$10, longitude=$11
      where id = $1 and user_id = $2 returning *`,
@@ -145,5 +150,35 @@ general.post('/devices', authed, async (req, res) => {
      on conflict (token) do update set user_id = excluded.user_id, platform = excluded.platform, updated_at = now()`,
     [token, req.user!.id, platform ?? null],
   );
+  res.status(204).end();
+});
+
+// ---- Account deletion ------------------------------------------------------
+const OPEN_STATUSES = "('requested','quoted','accepted','awaiting_payment','ready_to_dispatch','out_for_delivery')";
+
+/**
+ * Customer self-service account deletion. Personal data (profile, addresses, device tokens, notifications,
+ * prescriptions, typed medicines, notes) is removed; completed order rows are kept in anonymised form
+ * (amounts and dates only) for the store's accounting. Blocked while an order is still in progress.
+ */
+general.delete('/me', authed, async (req, res) => {
+  const user = req.user!;
+  if (user.role !== 'customer') throw new HttpError(403, 'not_allowed', 'Staff accounts are removed by the store admin.');
+  const open = await pool.query(`select 1 from orders where customer_id = $1 and status in ${OPEN_STATUSES} limit 1`, [user.id]);
+  if (open.rows[0]) throw new HttpError(409, 'active_orders', 'You have an order in progress. Please wait until it is delivered or cancel it first.');
+
+  const uid = (await pool.query('select firebase_uid from users where id = $1', [user.id])).rows[0]?.firebase_uid ?? null;
+  const files = (await pool.query('select p.public_id from prescriptions p join orders o on o.id = p.order_id where o.customer_id = $1', [user.id])).rows.map((r) => r.public_id as string);
+  await tx(async (c) => {
+    await c.query('delete from prescriptions where order_id in (select id from orders where customer_id = $1)', [user.id]);
+    await c.query('delete from order_items where order_id in (select id from orders where customer_id = $1)', [user.id]);
+    await c.query(`update orders set note = null, address_snapshot = jsonb_build_object('redacted', true, 'pincode', address_snapshot->>'pincode') where customer_id = $1`, [user.id]);
+    await c.query('delete from addresses where user_id = $1', [user.id]);
+    await c.query('delete from device_tokens where user_id = $1', [user.id]);
+    await c.query('delete from notifications where user_id = $1', [user.id]);
+    await c.query(`update users set name = null, email = null, firebase_uid = null, phone = 'deleted-' || id::text, updated_at = now() where id = $1`, [user.id]);
+  });
+  await deletePrescriptionFiles(files);
+  await deleteFirebaseUser(uid);
   res.status(204).end();
 });

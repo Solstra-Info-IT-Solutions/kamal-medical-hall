@@ -7,7 +7,7 @@ import { pool, tx } from '../db.js';
 import { HttpError, bad, conflict, notFound, parse } from '../http.js';
 import { notify, notifyAdmins } from '../notify.js';
 import { CANCELLABLE, loadOrder, transition } from '../orderService.js';
-import { SERVICE_PINCODES } from '../serviceArea.js';
+import { isServiceable } from '../pincodes.js';
 import { isSlotBookable, SLOTS } from '../slots.js';
 import { razorpayClient, verifyPaymentSignature, verifyWebhookSignature } from '../services.js';
 
@@ -46,7 +46,7 @@ orders.post('/', authed, requireRole('customer'), async (req, res) => {
 
   const addr = await pool.query('select * from addresses where id = $1 and user_id = $2', [b.addressId, user.id]);
   if (!addr.rows[0]) throw notFound('Address not found');
-  if (!SERVICE_PINCODES.has(addr.rows[0].pincode)) throw new HttpError(422, 'unsupported_pincode', 'Sorry, we do not deliver to this pincode yet.');
+  if (!(await isServiceable(addr.rows[0].pincode))) throw new HttpError(422, 'unsupported_pincode', 'Sorry, we do not deliver to this pincode yet.');
   const a = addr.rows[0];
   const snapshot = { recipientName: a.recipient_name, phone: a.phone, line1: a.line1, line2: a.line2, landmark: a.landmark, pincode: a.pincode, city: a.city, latitude: a.latitude, longitude: a.longitude };
 

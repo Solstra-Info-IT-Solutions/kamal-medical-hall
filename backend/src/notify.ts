@@ -1,9 +1,14 @@
-import { pool, type Queryable } from './db.js';
+import { pool, hasAfterCommit, type Queryable } from './db.js';
 import { firebaseMessaging } from './auth.js';
+import { emitUser } from './realtime.js';
 
 export async function notify(userId: string, orderId: string | null, type: string, title: string, body: string, db: Queryable = pool) {
-  await db.query('insert into notifications (user_id, order_id, type, title, body) values ($1,$2,$3,$4,$5)', [userId, orderId, type, title, body]);
-  void push(userId, title, body, orderId).catch((e) => console.error('push failed', e));
+  const { rows } = await db.query('insert into notifications (user_id, order_id, type, title, body) values ($1,$2,$3,$4,$5) returning id', [userId, orderId, type, title, body]);
+  const deliver = () => {
+    emitUser(userId, 'notification', { id: rows[0].id, type, title, body, orderId }); // instant, in-app
+    void push(userId, title, body, orderId).catch((e) => console.error('push failed', e)); // background / app closed
+  };
+  if (hasAfterCommit(db)) db.afterCommit(deliver); else deliver();
 }
 
 export async function notifyAdmins(orderId: string | null, type: string, title: string, body: string, db: Queryable = pool) {

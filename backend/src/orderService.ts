@@ -1,5 +1,6 @@
 import type pg from 'pg';
-import { pool, type Queryable } from './db.js';
+import { pool, hasAfterCommit, type Queryable } from './db.js';
+import { emitOrder } from './realtime.js';
 import { conflict, notFound } from './http.js';
 import { signedPrescriptionUrl } from './services.js';
 import type { AuthUser } from './auth.js';
@@ -44,7 +45,7 @@ export async function loadOrder(id: string, viewer: AuthUser, db: Queryable = po
 
 /** Atomic compare-and-set status change; fails with 409 when the order is not in an allowed state. */
 export async function transition(
-  c: pg.PoolClient, orderId: string, from: OrderStatus[], to: OrderStatus, actorId: string | null,
+  c: pg.PoolClient | (pg.PoolClient & { afterCommit: (fn: () => void) => void }), orderId: string, from: OrderStatus[], to: OrderStatus, actorId: string | null,
   set: Record<string, unknown> = {}, reason?: string,
 ) {
   const cols = Object.keys(set);
@@ -53,5 +54,6 @@ export async function transition(
   const { rows } = await c.query(sql, [to, orderId, from, ...cols.map((k) => set[k])]);
   if (!rows[0]) throw conflict('This order can no longer be changed this way. Please refresh.', 'invalid_state');
   await c.query('insert into status_history (order_id, status, actor_id, reason) values ($1,$2,$3,$4)', [orderId, to, actorId, reason ?? null]);
+  if (hasAfterCommit(c)) c.afterCommit(() => emitOrder(rows[0]));
   return rows[0];
 }

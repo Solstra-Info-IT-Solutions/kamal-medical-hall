@@ -1,3 +1,4 @@
+import http from 'node:http';
 import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
@@ -5,6 +6,7 @@ import helmet from 'helmet';
 import { config } from './config.js';
 import { pool } from './db.js';
 import { errorHandler } from './http.js';
+import { attachRealtime } from './realtime.js';
 import { general } from './routes/general.js';
 import { orders, razorpayWebhook } from './routes/orders.js';
 import { adminRouter, partnerRouter } from './routes/staff.js';
@@ -27,6 +29,13 @@ export function createApp() {
   return app;
 }
 
+/** HTTP server with the real-time (socket.io) channel attached. */
+export function createServer() {
+  const server = http.createServer(createApp());
+  attachRealtime(server);
+  return server;
+}
+
 /** Provisions the first admin(s) from env and, in dev auth mode only, two demo delivery partners. */
 export async function bootstrap() {
   for (const phone of config.bootstrapAdminPhones) {
@@ -42,5 +51,5 @@ export async function bootstrap() {
 
 if (process.argv[1]?.endsWith('server.ts') || process.argv[1]?.endsWith('server.js')) {
   await bootstrap();
-  createApp().listen(config.port, () => console.log(`API listening on :${config.port} (auth: ${config.authMode})`));
+  createServer().listen(config.port, () => console.log(`API listening on :${config.port} (auth: ${config.authMode})`));
 }

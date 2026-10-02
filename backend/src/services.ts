@@ -47,3 +47,10 @@ export function verifyWebhookSignature(rawBody: Buffer, signature: string) {
   if (!rz.webhookSecret) return false;
   return safeEqual(crypto.createHmac('sha256', rz.webhookSecret).update(rawBody).digest('hex'), signature);
 }
+
+/** Best-effort removal of uploaded prescription files (used when a customer deletes their account). */
+export async function deletePrescriptionFiles(publicIds: string[]) {
+  if (!cloudinaryConfigured() || !publicIds.length) return;
+  try { await cloudinary.api.delete_resources(publicIds, { type: 'authenticated', resource_type: 'image' }); }
+  catch (e) { console.error('cloudinary delete failed', e); }
+}

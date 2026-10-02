@@ -3,8 +3,10 @@ import { z } from 'zod';
 import { authed, normalisePhone, requireRole } from '../auth.js';
 import { config } from '../config.js';
 import { pool, tx } from '../db.js';
-import { bad, conflict, notFound, parse } from '../http.js';
+import { bad, bad as bad_, conflict, notFound, parse } from '../http.js';
 import { notify, notifyAdmins } from '../notify.js';
+import { clearPincodeCache } from '../pincodes.js';
+import { emitAdmins } from '../realtime.js';
 import { CANCELLABLE, loadOrder, transition } from '../orderService.js';
 
 export const adminRouter = Router();
@@ -93,8 +95,11 @@ adminRouter.post('/orders/:id/assign', async (req, res) => {
   const { partnerId } = parse(z.object({ partnerId: z.string().uuid() }), req.body);
   const order = await loadOrder(String(req.params.id), req.user!);
   await tx(async (c) => {
+    const cover = await c.query('select pincode from partner_pincodes where partner_id = $1', [partnerId]);
+    if (cover.rows.length && !cover.rows.some((r) => r.pincode === order.address.pincode)) throw conflict('That delivery partner does not cover this pincode.', 'out_of_coverage');
     const p = await c.query('update delivery_partners set is_available = false where user_id = $1 and is_available and active returning user_id', [partnerId]);
     if (!p.rows[0]) throw conflict('That delivery partner is not available.', 'partner_unavailable');
+    c.afterCommit(() => emitAdmins('partner:update', { partnerId, isAvailable: false }));
     await transition(c, order.id, ['ready_to_dispatch'], 'ready_to_dispatch', req.user!.id, { partner_id: partnerId }, 'Partner assigned');
     await notify(partnerId, order.id, 'assigned', 'New delivery assigned', `${order.orderNumber} to ${order.address.line1}`, c);
     await notify(order.customer!.id, order.id, 'partner_assigned', 'Delivery partner assigned', `${order.orderNumber} will be delivered by our staff.`, c);
@@ -106,10 +111,11 @@ adminRouter.get('/partners', async (_req, res) => {
   const { rows } = await pool.query(`
     select u.id, u.name, u.phone, d.is_available, d.active,
       (select count(*) from orders o where o.partner_id = u.id and o.status in ('ready_to_dispatch','out_for_delivery')) as active_orders,
+      (select coalesce(array_agg(pp.pincode order by pp.pincode), '{}') from partner_pincodes pp where pp.partner_id = u.id) as pincodes,
       (select coalesce(sum(o.quoted_amount),0) from orders o join payments p on p.order_id = o.id
         where o.partner_id = u.id and p.status = 'cod_collected' and o.updated_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as cod_today
     from users u join delivery_partners d on d.user_id = u.id order by u.name`);
-  res.json({ partners: rows.map((r) => ({ id: r.id, name: r.name, phone: r.phone, isAvailable: r.is_available, active: r.active, activeOrders: +r.active_orders, codCollectedToday: Number(r.cod_today) })) });
+  res.json({ partners: rows.map((r) => ({ id: r.id, name: r.name, phone: r.phone, isAvailable: r.is_available, active: r.active, activeOrders: +r.active_orders, codCollectedToday: Number(r.cod_today), pincodes: r.pincodes })) });
 });
 
 adminRouter.post('/partners', async (req, res) => {
@@ -129,6 +135,51 @@ adminRouter.patch('/partners/:id', async (req, res) => {
   const { active } = parse(z.object({ active: z.boolean() }), req.body);
   const { rowCount } = await pool.query('update delivery_partners set active = $2, is_available = case when $2 then is_available else false end where user_id = $1', [req.params.id, active]);
   if (!rowCount) throw notFound('Partner not found');
+  res.status(204).end();
+});
+
+adminRouter.put('/partners/:id/pincodes', async (req, res) => {
+  const { pincodes } = parse(z.object({ pincodes: z.array(z.string().regex(/^\d{6}$/)).max(300) }), req.body);
+  const unique = [...new Set(pincodes)];
+  if (unique.length) {
+    const ok = await pool.query('select pincode from service_pincodes where pincode = any($1)', [unique]);
+    const bad = unique.filter((p) => !ok.rows.some((r) => r.pincode === p));
+    if (bad.length) throw bad_(`Not in the delivery area: ${bad.join(', ')}`);
+  }
+  await tx(async (c) => {
+    const exists = await c.query('select 1 from delivery_partners where user_id = $1', [req.params.id]);
+    if (!exists.rows[0]) throw notFound('Partner not found');
+    await c.query('delete from partner_pincodes where partner_id = $1', [req.params.id]);
+    for (const p of unique) await c.query('insert into partner_pincodes (partner_id, pincode) values ($1,$2)', [req.params.id, p]);
+  });
+  res.status(204).end();
+});
+
+// ---- Delivery area (pincodes) ----
+adminRouter.get('/pincodes', async (_req, res) => {
+  const { rows } = await pool.query('select pincode, area, active from service_pincodes order by pincode');
+  res.json({ pincodes: rows });
+});
+adminRouter.post('/pincodes', async (req, res) => {
+  const b = parse(z.object({ pincodes: z.array(z.string().regex(/^\d{6}$/, 'Pincodes must be 6 digits')).min(1).max(200), area: z.string().trim().max(80).optional() }), req.body);
+  for (const p of new Set(b.pincodes)) {
+    await pool.query(`insert into service_pincodes (pincode, area) values ($1,$2) on conflict (pincode) do update set active = true, area = coalesce($2, service_pincodes.area)`, [p, b.area ?? null]);
+  }
+  clearPincodeCache();
+  res.status(201).json({ added: new Set(b.pincodes).size });
+});
+adminRouter.patch('/pincodes/:pincode', async (req, res) => {
+  const { active } = parse(z.object({ active: z.boolean() }), req.body);
+  const { rowCount } = await pool.query('update service_pincodes set active = $2 where pincode = $1', [req.params.pincode, active]);
+  if (!rowCount) throw notFound('Pincode not found');
+  clearPincodeCache();
+  res.status(204).end();
+});
+adminRouter.delete('/pincodes/:pincode', async (req, res) => {
+  const { rowCount } = await pool.query('delete from service_pincodes where pincode = $1', [req.params.pincode]);
+  if (!rowCount) throw notFound('Pincode not found');
+  await pool.query('delete from partner_pincodes where pincode = $1', [req.params.pincode]);
+  clearPincodeCache();
   res.status(204).end();
 });
 
@@ -190,6 +241,7 @@ partnerRouter.put('/availability', async (req, res) => {
   }
   const { rowCount } = await pool.query('update delivery_partners set is_available = $2 where user_id = $1 and active', [req.user!.id, available]);
   if (!rowCount) throw conflict('Your account is not active.', 'inactive');
+  emitAdmins('partner:update', { partnerId: req.user!.id, isAvailable: available });
   res.json({ isAvailable: available });
 });
 
@@ -220,6 +272,7 @@ partnerRouter.post('/orders/:id/delivered', async (req, res) => {
     await transition(c, order.id, ['out_for_delivery'], 'delivered', req.user!.id, cod ? { payment_status: 'cod_collected' } : {});
     if (cod) await c.query("update payments set status = 'cod_collected', collected_by = $2 where order_id = $1 and method = 'cod'", [order.id, req.user!.id]);
     await c.query('update delivery_partners set is_available = true where user_id = $1', [req.user!.id]);
+    c.afterCommit(() => emitAdmins('partner:update', { partnerId: req.user!.id, isAvailable: true }));
     await notify(order.customer!.id, order.id, 'delivered', 'Order delivered', `${order.orderNumber} has been delivered. Thank you!`, c);
     await notifyAdmins(order.id, 'delivered', 'Order delivered', `${order.orderNumber} delivered${cod ? ' (cash collected)' : ''}`, c);
   });
