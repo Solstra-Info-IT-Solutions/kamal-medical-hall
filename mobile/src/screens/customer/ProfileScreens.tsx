@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
+import { Enter, Tap } from '../../components/motion';
 import { Button, Card, Icon, Loading, Message, Screen, TextField, type IconName } from '../../components/ui';
 import { confirmAsync } from '../../dialog';
 import { useLoad } from '../../hooks';
@@ -20,20 +21,21 @@ export function ProfileScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Pr
   const { t } = useTranslation();
   const nav = useNavigation<Nav>();
   const { user, logout } = useSession();
+  let rowIndex = 1;
   const row = (icon: IconName, label: string, onPress: () => void, danger = false) => (
-    <Pressable accessibilityRole="button" onPress={onPress} style={s.row}>
+    <Enter index={rowIndex++}><Tap accessibilityRole="button" onPress={onPress} scaleTo={0.98} style={s.row}>
       <Icon name={icon} size={24} color={danger ? colors.red : colors.navy} />
       <Text style={[type.bodyMedium, { flex: 1, color: danger ? colors.red : colors.text }]}>{label}</Text>
       {!danger ? <Icon name="chevron-forward" size={20} color={colors.muted} /> : null}
-    </Pressable>
+    </Tap></Enter>
   );
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.white }} edges={['top']}>
       <Screen>
-        <View style={s.avatarRow}>
+        <Enter index={0}><View style={s.avatarRow}>
           <View style={s.avatar}><Icon name="person" size={34} color={colors.white} /></View>
           <View style={{ flex: 1 }}><Text style={[type.h3, { color: colors.text }]}>{user?.name}</Text><Text style={[type.body, { color: colors.secondary }]}>+91 {user?.phone}</Text></View>
-        </View>
+        </View></Enter>
         {row('create-outline', t('profile.edit'), () => nav.navigate('EditProfile'))}
         {row('location-outline', t('profile.addresses'), () => nav.navigate('Addresses'))}
         {row('notifications-outline', t('home.notifications'), () => nav.navigate('Notifications'))}

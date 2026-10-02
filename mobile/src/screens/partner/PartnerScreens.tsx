@@ -5,7 +5,9 @@ import { useTranslation } from 'react-i18next';
 import { Linking, Platform, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
-import { Button, Card, ErrorView, Icon, Loading, Pill, Screen } from '../../components/ui';
+import { OrderCard } from '../../components/OrderCard';
+import { Enter } from '../../components/motion';
+import { Button, Card, ErrorView, Icon, Loading, Screen } from '../../components/ui';
 import { confirmAsync } from '../../dialog';
 import { useLoad } from '../../hooks';
 import type { PartnerStackParamList } from '../../navigation/types';
@@ -34,19 +36,14 @@ export function PartnerHomeScreen() {
     <SafeAreaView style={s.fill} edges={['top']}>
       <Text style={[type.h2, s.heading]}>{t('partner.title')}</Text>
       <ScrollView contentContainerStyle={s.pad} refreshControl={<RefreshControl refreshing={jobs.loading} onRefresh={refresh} />}>
-        <Card style={s.avail}>
+        <Enter><Card style={s.avail}>
           <View style={{ flex: 1 }}><Text style={[type.h3, { color: colors.text }]}>{me.data!.isAvailable ? t('partner.available') : t('partner.busy')}</Text><Text style={[type.small, { color: colors.secondary }]}>{t('partner.availableHelp')}</Text></View>
           <Switch accessibilityLabel={t('partner.available')} value={me.data!.isAvailable} onValueChange={toggle} />
-        </Card>
+        </Card></Enter>
         {err ? <Text style={[type.small, { color: colors.red, marginTop: 6 }]}>{err}</Text> : null}
         <Text style={[type.h3, s.sec]}>{t('partner.assigned')}</Text>
         {jobs.data && !jobs.data.orders.length ? <Text style={[type.body, { color: colors.secondary }]}>{t('partner.noJobs')}</Text> : null}
-        {jobs.data?.orders.map((o) => (
-          <Card key={o.id} onPress={() => nav.navigate('Job', { orderId: o.id })} style={s.job}>
-            <View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]}>#{o.orderNumber} · {o.customerName}</Text><Text style={[type.small, { color: colors.secondary }]}>{o.deliveryDate ? formatDate(o.deliveryDate) : ''} {o.deliverySlot}</Text></View>
-            <Pill text={t(`status.${o.status}`)} tone="blue" />
-          </Card>
-        ))}
+        {jobs.data?.orders.map((o, i) => <OrderCard key={o.id} order={o} index={i} onPress={() => nav.navigate('Job', { orderId: o.id })} subtitle={`${o.customerName ?? ''} · ${o.deliverySlot ?? ''}`} />)}
         {history.data?.orders.length ? <>
           <Text style={[type.h3, s.sec]}>{t('partner.history')}</Text>
           {history.data.orders.slice(0, 10).map((o) => <Text key={o.id} style={[type.body, { color: colors.secondary }]}>#{o.orderNumber} · {o.customerName}{o.paymentMethod === 'cod' && o.quotedAmount !== null ? ` · ${t('pay.cod')} ${formatMoney(o.quotedAmount)}` : ''}</Text>)}

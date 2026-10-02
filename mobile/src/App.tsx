@@ -2,11 +2,13 @@ import { NotoSansDevanagari_400Regular, NotoSansDevanagari_500Medium, NotoSansDe
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Text, TextInput } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { restoreLanguage } from './localization';
+import { AnimatedSplash } from './components/AnimatedSplash';
+import i18n, { restoreLanguage } from './localization';
 import { Navigation } from './navigation';
-import { fonts } from './theme';
+import { useSession } from './store/session';
+import { colors, fonts } from './theme';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -15,12 +17,30 @@ const patch = (C: { defaultProps?: { style?: unknown } }) => { C.defaultProps = 
 patch(Text as never);
 patch(TextInput as never);
 
+const MIN_SPLASH_MS = 2200;
+
 export function App() {
   const [fontsLoaded, fontError] = useFonts({ NotoSansDevanagari_400Regular, NotoSansDevanagari_500Medium, NotoSansDevanagari_600SemiBold, NotoSansDevanagari_700Bold });
   const [langReady, setLangReady] = useState(false);
+  const [minElapsed, setMinElapsed] = useState(false);
+  const sessionStatus = useSession((s) => s.status);
   useEffect(() => { void restoreLanguage().finally(() => setLangReady(true)); }, []);
   const ready = (fontsLoaded || !!fontError) && langReady;
-  useEffect(() => { if (ready) void SplashScreen.hideAsync(); }, [ready]);
+  useEffect(() => {
+    if (!ready) return;
+    void SplashScreen.hideAsync();
+    const id = setTimeout(() => setMinElapsed(true), MIN_SPLASH_MS);
+    return () => clearTimeout(id);
+  }, [ready]);
   if (!ready) return null;
-  return <SafeAreaProvider><StatusBar style="dark" /><Navigation /></SafeAreaProvider>;
+  const showSplash = !minElapsed || sessionStatus === 'loading';
+  return (
+    <SafeAreaProvider>
+      <View style={{ flex: 1, backgroundColor: colors.white }}>
+        <StatusBar style="dark" />
+        <Navigation />
+        {showSplash ? <AnimatedSplash tagline={i18n.t('brand.tagline')} /> : null}
+      </View>
+    </SafeAreaProvider>
+  );
 }

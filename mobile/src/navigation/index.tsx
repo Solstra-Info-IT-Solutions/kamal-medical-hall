@@ -3,7 +3,8 @@ import { NavigationContainer, type LinkingOptions } from '@react-navigation/nati
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Image, View } from 'react-native';
+import { View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { Icon, type IconName } from '../components/ui';
 import { LoginScreen, OtpScreen, SignupScreen, WelcomeScreen } from '../screens/auth/AuthScreens';
 import { AllOrdersScreen, CustomersScreen, DashboardScreen, MoreScreen, OrderReviewScreen, ReportsScreen, RequestsScreen, StoreSettingsScreen, TeamScreen } from '../screens/admin/AdminScreens';
@@ -20,7 +21,6 @@ import { useSession } from '../store/session';
 import { colors, fonts } from '../theme';
 import type { AdminStackParamList, AdminTabParamList, AuthStackParamList, CustomerStackParamList, CustomerTabParamList, PartnerStackParamList } from './types';
 
-const logo = require('../../assets/logo.png');
 
 const headerOptions = {
   headerTitleAlign: 'center' as const,
@@ -29,16 +29,30 @@ const headerOptions = {
   headerTitleStyle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
   headerBackButtonDisplayMode: 'minimal' as const,
   contentStyle: { backgroundColor: colors.white },
+  animation: 'slide_from_right' as const,
+  animationDuration: 280,
 };
 
 const tabOptions = {
   headerShown: false,
+  animation: 'fade' as const,
   tabBarActiveTintColor: colors.primary,
   tabBarInactiveTintColor: colors.secondary,
   tabBarLabelStyle: { fontFamily: fonts.medium, fontSize: 12 },
   tabBarStyle: { height: 66, paddingTop: 6, paddingBottom: 8, borderTopColor: colors.border },
 };
-const tabIcon = (name: IconName, focusedName: IconName) => ({ color, focused }: { color: string; focused: boolean }) => <Icon name={focused ? focusedName : name} size={25} color={color} />;
+function TabIcon({ name, focusedName, color, focused }: { name: IconName; focusedName: IconName; color: string; focused: boolean }) {
+  const sc = useSharedValue(1);
+  const dot = useSharedValue(0);
+  useEffect(() => {
+    if (focused) sc.value = withSequence(withTiming(0.8, { duration: 90 }), withSpring(1.18, { damping: 5, stiffness: 240 }), withSpring(1, { damping: 10 }));
+    dot.value = withSpring(focused ? 1 : 0, { damping: 12 });
+  }, [focused, sc, dot]);
+  const a = useAnimatedStyle(() => ({ transform: [{ scale: sc.value }] }));
+  const d = useAnimatedStyle(() => ({ opacity: dot.value, transform: [{ scaleX: dot.value }] }));
+  return <View style={{ alignItems: 'center' }}><Animated.View style={a}><Icon name={focused ? focusedName : name} size={25} color={color} /></Animated.View><Animated.View style={[{ position: 'absolute', top: -7, width: 22, height: 3, borderRadius: 2, backgroundColor: colors.primary }, d]} /></View>;
+}
+const tabIcon = (name: IconName, focusedName: IconName) => ({ color, focused }: { color: string; focused: boolean }) => <TabIcon name={name} focusedName={focusedName} color={color} focused={focused} />;
 
 const Auth = createNativeStackNavigator<AuthStackParamList>();
 function AuthNavigator() {
@@ -79,9 +93,9 @@ function CustomerNavigator() {
       <CStack.Screen name="AddressForm" component={AddressFormScreen} options={{ title: t('screens.addressForm') }} />
       <CStack.Screen name="DeliveryTime" component={DeliveryTimeScreen} options={{ title: t('screens.time') }} />
       <CStack.Screen name="Review" component={ReviewScreen} options={{ title: t('screens.review') }} />
-      <CStack.Screen name="Success" component={SuccessScreen} options={{ headerShown: false, gestureEnabled: false }} />
+      <CStack.Screen name="Success" component={SuccessScreen} options={{ headerShown: false, gestureEnabled: false, animation: 'fade_from_bottom', animationDuration: 420 }} />
       <CStack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: t('screens.orderDetail') }} />
-      <CStack.Screen name="Payment" component={PaymentScreen} options={{ title: t('screens.payment') }} />
+      <CStack.Screen name="Payment" component={PaymentScreen} options={{ title: t('screens.payment'), animation: 'fade_from_bottom' }} />
       <CStack.Screen name="Notifications" component={NotificationsScreen} options={{ title: t('home.notifications') }} />
       <CStack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: t('profile.edit') }} />
       <CStack.Screen name="Language" component={LanguageScreen} options={{ title: t('profile.language') }} />
@@ -145,9 +159,7 @@ export function Navigation() {
   const bootstrap = useSession((s) => s.bootstrap);
   useEffect(() => { void bootstrap(); }, [bootstrap]);
 
-  if (status === 'loading') {
-    return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white }}><Image source={logo} style={{ width: 220, height: 220 }} resizeMode="contain" /><ActivityIndicator color={colors.primary} /></View>;
-  }
+  if (status === 'loading') return <View style={{ flex: 1, backgroundColor: colors.white }} />; // the animated splash covers this
   return (
     <NavigationContainer linking={linking}>
       {status === 'out' ? <AuthNavigator /> : role === 'admin' ? <AdminNavigator /> : role === 'delivery_partner' ? <PartnerNavigator /> : <CustomerGate />}

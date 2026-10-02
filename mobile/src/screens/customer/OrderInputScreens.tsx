@@ -4,7 +4,10 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import Animated, { FadeIn, FadeInRight, FadeOutLeft, LinearTransition, SlideInDown, ZoomIn, ZoomOut } from 'react-native-reanimated';
+import { Enter, Float, Ripples, Tap } from '../../components/motion';
 import { Button, Card, Icon, Screen } from '../../components/ui';
+import { useAutoFocus } from '../../hooks';
 import { confirmAsync } from '../../dialog';
 import type { CustomerStackParamList } from '../../navigation/types';
 import { MAX_FILE_BYTES, MAX_FILES, useCart, type PrescriptionFile } from '../../store/cart';
@@ -85,33 +88,33 @@ export function UploadScreen({ navigation }: NativeStackScreenProps<CustomerStac
 
   return (
     <Screen footer={<Button title={t('common.next')} onPress={next} disabled={busy} />}>
-      <Card onPress={() => (files.length >= MAX_FILES ? setError(t('upload.limit')) : setSheet(true))} style={s.drop}>
-        <Icon name="camera" size={64} />
+      <Enter><Card onPress={() => (files.length >= MAX_FILES ? setError(t('upload.limit')) : setSheet(true))} style={s.drop}>
+        <View style={s.camWrap}><Ripples size={100} count={2} /><Float amplitude={4} duration={1800}><Icon name="camera" size={64} /></Float></View>
         <Text style={[type.h3, { color: colors.text, marginTop: spacing.md }]}>{t('upload.cardTitle')}</Text>
         <Text style={[type.small, { color: colors.secondary }]}>{t('upload.cardSub')}</Text>
-      </Card>
+      </Card></Enter>
       <View style={s.strip}>
         {files.map((f) => (
-          <View key={f.id} style={s.thumb}>
+          <Animated.View key={f.id} entering={ZoomIn.duration(320).springify().damping(12)} exiting={ZoomOut.duration(200)} layout={LinearTransition.springify()} style={s.thumb}>
             {f.mimeType === 'application/pdf' ? <View style={s.pdf}><Icon name="document-text" size={30} /><Text style={type.smallMedium}>PDF</Text></View> : <Image source={{ uri: f.uri }} style={s.img} />}
             <Pressable accessibilityRole="button" accessibilityLabel={t('upload.remove', { name: f.name })} onPress={() => setFiles((c) => c.filter((x) => x.id !== f.id))} style={s.x}><Icon name="close" size={14} color={colors.white} /></Pressable>
-          </View>
+          </Animated.View>
         ))}
-        {files.length > 0 && files.length < MAX_FILES ? <Pressable accessibilityRole="button" accessibilityLabel={t('upload.add')} onPress={() => setSheet(true)} style={[s.thumb, s.plus]}><Icon name="add" size={30} /></Pressable> : null}
+        {files.length > 0 && files.length < MAX_FILES ? <Animated.View entering={FadeIn.duration(300)} layout={LinearTransition.springify()}><Tap accessibilityRole="button" accessibilityLabel={t('upload.add')} onPress={() => setSheet(true)} style={[s.thumb, s.plus]}><Icon name="add" size={30} /></Tap></Animated.View> : null}
       </View>
       {error ? <Text style={[type.small, { color: colors.red, marginTop: spacing.sm }]}>{error}</Text> : null}
-      <View style={{ marginTop: spacing.lg, gap: 4 }}>
+      <Enter index={2}><View style={{ marginTop: spacing.lg, gap: 4 }}>
         <Text style={[type.body, { color: colors.secondary }]}>• {t('upload.hint1')}</Text>
         <Text style={[type.body, { color: colors.secondary }]}>• {t('upload.hint2', { max: MAX_FILES })}</Text>
         <Text style={[type.small, { color: colors.green, marginTop: spacing.sm }]}>{t('upload.notice')}</Text>
-      </View>
+      </View></Enter>
       <Modal transparent visible={sheet} animationType="fade" onRequestClose={() => setSheet(false)}>
         <Pressable style={s.backdrop} onPress={() => setSheet(false)}>
-          <View style={s.sheet}>
+          <Animated.View entering={SlideInDown.duration(320).springify().damping(18)} style={s.sheet}>
             {([['camera', 'upload.camera', () => pickImages('camera')], ['images', 'upload.gallery', () => pickImages('gallery')], ['document-text', 'upload.pdf', pickPdf]] as const).map(([icon, label, fn]) => (
               <Pressable key={label} accessibilityRole="button" onPress={fn} style={s.sheetRow}><Icon name={icon} size={24} /><Text style={[type.bodyMedium, { color: colors.text }]}>{t(label)}</Text></Pressable>
             ))}
-          </View>
+          </Animated.View>
         </Pressable>
       </Modal>
     </Screen>
@@ -128,6 +131,7 @@ export function TypeMedicinesScreen({ navigation }: NativeStackScreenProps<Custo
   const [instruction, setInstruction] = useState(note);
   const [error, setError] = useState('');
   const input = useRef<TextInput>(null);
+  useAutoFocus(input);
 
   const add = () => {
     const name = text.trim();
@@ -151,13 +155,13 @@ export function TypeMedicinesScreen({ navigation }: NativeStackScreenProps<Custo
     <Screen footer={<Button title={t('common.next')} onPress={next} />}>
       <View style={s.search}>
         <Icon name="search" size={22} color={colors.secondary} />
-        <TextInput ref={input} autoFocus value={text} onChangeText={setText} onSubmitEditing={add} returnKeyType="done" maxLength={120} placeholder={t('medicines.placeholder')} placeholderTextColor={colors.muted} accessibilityLabel={t('medicines.placeholder')} style={s.searchInput} />
+        <TextInput ref={input} value={text} onChangeText={setText} onSubmitEditing={add} blurOnSubmit={false} returnKeyType="done" maxLength={120} placeholder={t('medicines.placeholder')} placeholderTextColor={colors.muted} accessibilityLabel={t('medicines.placeholder')} style={s.searchInput} />
         {text.trim().length >= 2 ? <Pressable accessibilityRole="button" accessibilityLabel={t('medicines.addBtn')} onPress={add} hitSlop={8}><Icon name="add-circle" size={30} /></Pressable> : null}
       </View>
       <Text style={[type.small, { color: colors.secondary, marginTop: 6 }]}>{t('medicines.example')}</Text>
       {rows.length > 0 ? <Text style={[type.h3, { color: colors.text, marginTop: spacing.xl, marginBottom: spacing.sm }]}>{t('medicines.listTitle')}</Text> : null}
       {rows.map((r, i) => (
-        <View key={r.id} style={s.row}>
+        <Animated.View key={r.id} entering={FadeInRight.duration(380).springify().damping(16)} exiting={FadeOutLeft.duration(220)} layout={LinearTransition.springify().damping(18)} style={s.row}>
           <View style={s.num}><Text style={[type.smallMedium, { color: colors.white }]}>{i + 1}</Text></View>
           <Text style={[type.bodyMedium, { flex: 1, color: colors.text }]} numberOfLines={2}>{r.name}</Text>
           <View style={s.stepper}>
@@ -165,9 +169,9 @@ export function TypeMedicinesScreen({ navigation }: NativeStackScreenProps<Custo
             <Text style={[type.bodyMedium, { minWidth: 26, textAlign: 'center' }]}>{r.quantity}</Text>
             <Pressable accessibilityRole="button" accessibilityLabel={t('medicines.increase', { name: r.name })} onPress={() => qty(r.id, 1)} style={s.stepBtn}><Icon name="add" size={20} color={colors.navy} /></Pressable>
           </View>
-        </View>
+        </Animated.View>
       ))}
-      <Pressable accessibilityRole="button" onPress={() => input.current?.focus()} style={s.addMore}><Icon name="add" size={22} /><Text style={[type.bodyMedium, { color: colors.primary }]}>{t('medicines.addMore')}</Text></Pressable>
+      <Animated.View layout={LinearTransition.springify().damping(18)}><Tap accessibilityRole="button" onPress={() => input.current?.focus()} style={s.addMore}><Icon name="add" size={22} /><Text style={[type.bodyMedium, { color: colors.primary }]}>{t('medicines.addMore')}</Text></Tap></Animated.View>
       {error ? <Text style={[type.small, { color: colors.red, marginTop: spacing.sm }]}>{error}</Text> : null}
       <View style={s.instr}>
         <Icon name="create-outline" size={22} color={colors.navy} />
@@ -178,7 +182,8 @@ export function TypeMedicinesScreen({ navigation }: NativeStackScreenProps<Custo
 }
 
 const s = StyleSheet.create({
-  drop: { alignItems: 'center', paddingVertical: spacing.xxxl, borderRadius: radius.xl },
+  drop: { alignItems: 'center', paddingVertical: spacing.xxl, borderRadius: radius.xl },
+  camWrap: { width: 110, height: 110, alignItems: 'center', justifyContent: 'center' },
   strip: { flexDirection: 'row', gap: 12, marginTop: spacing.lg },
   thumb: { width: 84, height: 108, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.tint },
   img: { flex: 1, borderRadius: radius.md },

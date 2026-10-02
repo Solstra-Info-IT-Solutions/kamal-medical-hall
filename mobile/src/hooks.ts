@@ -1,5 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /** Loads data every time the screen gains focus; keeps showing old data while refreshing. */
 export function useLoad<T>(fn: () => Promise<T>) {
@@ -14,4 +14,12 @@ export function useLoad<T>(fn: () => Promise<T>) {
   }, []);
   useFocusEffect(useCallback(() => { void reload(); }, [reload]));
   return { data, error, loading, reload, setData };
+}
+
+/** Focuses an input shortly after the screen finishes its transition (autoFocus fires too early during animations). */
+export function useAutoFocus(ref: { current: { focus(): void } | null }, delay = 450) {
+  useEffect(() => {
+    const id = setTimeout(() => ref.current?.focus(), delay);
+    return () => clearTimeout(id);
+  }, [ref, delay]);
 }

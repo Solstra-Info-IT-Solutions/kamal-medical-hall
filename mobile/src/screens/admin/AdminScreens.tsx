@@ -7,6 +7,8 @@ import { Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Swit
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
 import type { OrderSummary } from '../../api/types';
+import { OrderCard } from '../../components/OrderCard';
+import { CountUp, Enter, Skeleton, Tap } from '../../components/motion';
 import { Button, Card, ErrorView, Icon, Loading, Message, Pill, Screen, TextField, type IconName } from '../../components/ui';
 import { confirmAsync } from '../../dialog';
 import { useLoad } from '../../hooks';
@@ -18,31 +20,22 @@ import { formatDate, formatDateTime, formatMoney, statusTone } from '../../utils
 type Nav = NativeStackNavigationProp<AdminStackParamList>;
 const Header = ({ title }: { title: string }) => <Text style={[type.h2, s.heading]}>{title}</Text>;
 
-function OrderRow({ o, onPress }: { o: OrderSummary; onPress: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <Card onPress={onPress} style={s.orderRow}>
-      <View style={{ flex: 1 }}>
-        <Text style={[type.bodyMedium, { color: colors.text }]}>#{o.orderNumber} · {o.customerName ?? o.customerPhone}</Text>
-        <Text style={[type.small, { color: colors.secondary }]} numberOfLines={1}>{o.kind === 'prescription' ? t('admin.rxFiles', { count: o.fileCount }) : o.summary}</Text>
-        <Text style={[type.small, { color: colors.muted }]}>{formatDateTime(o.createdAt)}{o.quotedAmount !== null ? ` · ${formatMoney(o.quotedAmount)}` : ''}</Text>
-      </View>
-      <Pill text={t(`status.${o.status}`)} tone={statusTone(o.status)} />
-    </Card>
-  );
+function OrderRow({ o, onPress, index = 0 }: { o: OrderSummary; onPress: () => void; index?: number }) {
+  return <OrderCard order={o} index={index} onPress={onPress} subtitle={`${o.customerName ?? o.customerPhone ?? ''}${o.summary ? ' · ' + o.summary : ''}`} />;
 }
 
 export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Dashboard'>) {
   const { t } = useTranslation();
   const nav = useNavigation<Nav>();
   const { data, error, loading, reload } = useLoad(() => endpoints.admin.dashboard());
-  const tile = (icon: IconName, label: string, value: string | number) => (
-    <Card style={s.tile}><Icon name={icon} size={26} /><Text style={[type.h1, { color: colors.text }]}>{value}</Text><Text style={[type.small, { color: colors.secondary }]}>{label}</Text></Card>
+  let tileIndex = 0;
+  const tile = (icon: IconName, label: string, value: number, money = false) => (
+    <Enter index={tileIndex++} style={s.tile}><Card style={{ gap: 4 }}><Icon name={icon} size={26} /><CountUp value={value} prefix={money ? '₹' : ''} style={[type.h1, { color: colors.text }]} /><Text style={[type.small, { color: colors.secondary }]}>{label}</Text></Card></Enter>
   );
   return (
     <SafeAreaView style={s.fill} edges={['top']}>
       <Header title={t('admin.dashboard')} />
-      {loading && !data ? <Loading /> : error && !data ? <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} /> : (
+      {loading && !data ? <View style={{ padding: spacing.lg, gap: 12 }}><Skeleton h={96} r={16} /><Skeleton h={96} r={16} /><Skeleton h={96} r={16} /></View> : error && !data ? <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} /> : (
         <ScrollView contentContainerStyle={s.pad} refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}>
           <View style={s.grid}>
             {tile('mail-unread', t('admin.newRequests'), data!.requested)}
@@ -50,7 +43,7 @@ export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Das
             {tile('cube', t('admin.ready'), data!.readyToDispatch)}
             {tile('bicycle', t('admin.outForDelivery'), data!.outForDelivery)}
             {tile('checkmark-done', t('admin.deliveredToday'), data!.deliveredToday)}
-            {tile('cash', t('admin.salesToday'), formatMoney(data!.salesToday))}
+            {tile('cash', t('admin.salesToday'), data!.salesToday, true)}
           </View>
           <Button title={t('admin.openRequests')} onPress={() => nav.navigate('Tabs', { screen: 'Requests' })} style={{ marginTop: spacing.lg }} />
         </ScrollView>)}
@@ -78,7 +71,7 @@ function OrderList({ status, title, search }: { status?: string; title: string; 
         </ScrollView></> : null}
       {loading && !data ? <Loading /> : error && !data ? <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} /> : !data?.orders.length ? <Message icon="file-tray-outline" title={t('admin.noOrders')} /> : (
         <ScrollView contentContainerStyle={s.pad} refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}>
-          {data.orders.map((o) => <OrderRow key={o.id} o={o} onPress={() => nav.navigate('OrderReview', { orderId: o.id })} />)}
+          {data.orders.map((o, i) => <OrderRow key={o.id} o={o} index={i} onPress={() => nav.navigate('OrderReview', { orderId: o.id })} />)}
         </ScrollView>)}
     </SafeAreaView>
   );
@@ -269,7 +262,7 @@ const s = StyleSheet.create({
   heading: { color: colors.text, textAlign: 'center', paddingVertical: spacing.md },
   pad: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  tile: { width: '47.5%', gap: 4 },
+  tile: { width: '47.5%' },
   orderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: spacing.md, backgroundColor: colors.white },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
   sec: { color: colors.text, marginTop: spacing.xl, marginBottom: 6 },

@@ -1,68 +1,111 @@
 import { Ionicons } from '@expo/vector-icons';
+import { HeaderHeightContext } from '@react-navigation/elements';
 import { useNavigation } from '@react-navigation/native';
-import type { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
+import { forwardRef, useContext, useEffect, useState, type ReactNode } from 'react';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
+import Animated, { FadeIn, FadeInDown, interpolate, interpolateColor, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radius, spacing, type } from '../theme';
+import { Float, Ripples, Tap, useShake } from './motion';
 
 export type IconName = keyof typeof Ionicons.glyphMap;
 export const Icon = ({ name, size = 24, color = colors.primary }: { name: IconName; size?: number; color?: string }) => <Ionicons name={name} size={size} color={color} />;
 
+/**
+ * Standard screen: scrolls, avoids the keyboard (so inputs and the sticky footer button are never hidden)
+ * and animates its footer in.
+ */
 export function Screen({ children, scroll = true, footer, padded = true, style }: { children: ReactNode; scroll?: boolean; footer?: ReactNode; padded?: boolean; style?: StyleProp<ViewStyle> }) {
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const body = scroll
-    ? <ScrollView style={s.flex} contentContainerStyle={[padded && s.pad, style]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>{children}</ScrollView>
+    ? <ScrollView style={s.flex} contentContainerStyle={[padded && s.pad, style]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets showsVerticalScrollIndicator={false}>{children}</ScrollView>
     : <View style={[s.flex, padded && s.pad, style]}>{children}</View>;
-  return <SafeAreaView style={s.screen} edges={['bottom', 'left', 'right']}>{body}{footer ? <View style={s.footer}>{footer}</View> : null}</SafeAreaView>;
+  return (
+    <SafeAreaView style={s.screen} edges={['bottom', 'left', 'right']}>
+      <KeyboardAvoidingView style={s.flex} behavior="padding" keyboardVerticalOffset={headerHeight}>
+        {body}
+        {footer ? <Animated.View entering={FadeInDown.delay(150).duration(420)} style={s.footer}>{footer}</Animated.View> : null}
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
 }
 
 export function BackButton({ onPress }: { onPress?: () => void }) {
   const nav = useNavigation();
-  return <Pressable accessibilityRole="button" accessibilityLabel="Back" hitSlop={12} onPress={onPress ?? (() => nav.goBack())} style={s.back}><Icon name="chevron-back" size={28} color={colors.text} /></Pressable>;
+  return <Tap accessibilityRole="button" accessibilityLabel="Back" hitSlop={12} onPress={onPress ?? (() => nav.goBack())} style={s.back}><Icon name="chevron-back" size={28} color={colors.text} /></Tap>;
 }
 
 export function Button({ title, onPress, variant = 'primary', loading, disabled, icon, style }: { title: string; onPress: () => void; variant?: 'primary' | 'outline' | 'danger' | 'ghost'; loading?: boolean; disabled?: boolean; icon?: IconName; style?: StyleProp<ViewStyle> }) {
   const off = disabled || loading;
   const fg = variant === 'primary' ? colors.white : variant === 'danger' ? colors.red : colors.primary;
+  const lift = useSharedValue(off ? 0 : 1);
+  useEffect(() => { lift.value = withTiming(off ? 0 : 1, { duration: 240 }); }, [off, lift]);
+  const glow = useAnimatedStyle(() => ({ opacity: interpolate(lift.value, [0, 1], [0.5, 1]) }));
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!off, busy: !!loading }} disabled={off} onPress={onPress}
-      style={({ pressed }) => [s.btn, variant === 'primary' && s.btnPrimary, variant === 'outline' && s.btnOutline, variant === 'danger' && s.btnDanger, variant === 'ghost' && s.btnGhost, off && s.btnOff, pressed && { opacity: 0.85 }, style]}>
-      {loading ? <ActivityIndicator color={fg} /> : <>
-        <Text style={[type.button, { color: fg }]}>{title}</Text>
-        {icon ? <Icon name={icon} size={20} color={fg} /> : null}
-      </>}
-    </Pressable>
+    <Tap accessibilityRole="button" accessibilityState={{ disabled: !!off, busy: !!loading }} disabled={off} onPress={onPress} haptic={!off}
+      style={[s.btn, variant === 'primary' && s.btnPrimary, variant === 'outline' && s.btnOutline, variant === 'danger' && s.btnDanger, variant === 'ghost' && s.btnGhost, style]}>
+      <Animated.View style={[s.btnInner, glow]}>
+        {loading ? <Animated.View entering={FadeIn.duration(200)}><ActivityIndicator color={fg} /></Animated.View> : <>
+          <Text style={[type.button, { color: fg }]}>{title}</Text>
+          {icon ? <Icon name={icon} size={20} color={fg} /> : null}
+        </>}
+      </Animated.View>
+    </Tap>
   );
 }
 
-export function TextField({ label, error, style, ...rest }: TextInputProps & { label?: string; error?: string }) {
+type FieldProps = TextInputProps & { label?: string; error?: string; valid?: boolean; hint?: string };
+/** Text field with an animated focus ring, error shake and inline status icon. */
+export const TextField = forwardRef<TextInput, FieldProps>(function TextField({ label, error, valid, hint, style, onFocus, onBlur, ...rest }, ref) {
+  const f = useSharedValue(0);
+  const [errCount, setErrCount] = useState(0);
+  useEffect(() => { if (error) setErrCount((c) => c + 1); }, [error]);
+  const shake = useShake(errCount);
+  const ring = useAnimatedStyle(() => ({
+    borderColor: error ? colors.red : interpolateColor(f.value, [0, 1], [valid ? colors.green : colors.border, colors.primary]),
+    backgroundColor: interpolateColor(f.value, [0, 1], [colors.white, colors.tint]),
+    transform: [{ scale: interpolate(f.value, [0, 1], [1, 1.008]) }],
+  }));
   return (
-    <View style={{ marginBottom: spacing.md }}>
+    <Animated.View style={[{ marginBottom: spacing.md }, shake]}>
       {label ? <Text style={s.label}>{label}</Text> : null}
-      <TextInput placeholderTextColor={colors.muted} {...rest} style={[s.input, !!error && { borderColor: colors.red }, rest.multiline && { minHeight: 84, textAlignVertical: 'top' }, style]} />
-      {error ? <Text style={s.error}>{error}</Text> : null}
-    </View>
+      <Animated.View style={[s.inputWrap, ring]}>
+        <TextInput
+          ref={ref} placeholderTextColor={colors.muted} {...rest}
+          onFocus={(e) => { f.value = withTiming(1, { duration: 180 }); onFocus?.(e); }}
+          onBlur={(e) => { f.value = withTiming(0, { duration: 220 }); onBlur?.(e); }}
+          style={[s.input, rest.multiline && { minHeight: 84, textAlignVertical: 'top' }, style]}
+        />
+        {valid && !error ? <Animated.View entering={FadeIn.duration(220)}><Icon name="checkmark-circle" size={22} color={colors.green} /></Animated.View> : null}
+        {error ? <Animated.View entering={FadeIn.duration(220)}><Icon name="alert-circle" size={22} color={colors.red} /></Animated.View> : null}
+      </Animated.View>
+      {error ? <Animated.Text entering={FadeInDown.duration(220)} style={s.error}>{error}</Animated.Text> : hint ? <Text style={s.hint}>{hint}</Text> : null}
+    </Animated.View>
   );
-}
+});
 
 export const Card = ({ children, style, onPress }: { children: ReactNode; style?: StyleProp<ViewStyle>; onPress?: () => void }) =>
-  onPress ? <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [s.card, style, pressed && { opacity: 0.8 }]}>{children}</Pressable> : <View style={[s.card, style]}>{children}</View>;
+  onPress ? <Tap accessibilityRole="button" onPress={onPress} scaleTo={0.975} style={[s.card, style]}>{children}</Tap> : <View style={[s.card, style]}>{children}</View>;
 
 const PILL = {
   green: { bg: colors.greenBg, fg: colors.green }, red: { bg: colors.redBg, fg: colors.red },
   amber: { bg: colors.amberBg, fg: colors.amber }, blue: { bg: colors.card, fg: colors.primary },
 } as const;
 export const Pill = ({ text, tone = 'blue' }: { text: string; tone?: keyof typeof PILL }) =>
-  <View style={{ backgroundColor: PILL[tone].bg, paddingHorizontal: 12, paddingVertical: 3, borderRadius: radius.md }}><Text style={[type.smallMedium, { color: PILL[tone].fg }]}>{text}</Text></View>;
+  <Animated.View entering={FadeIn.duration(300)} style={{ backgroundColor: PILL[tone].bg, paddingHorizontal: 12, paddingVertical: 3, borderRadius: radius.md }}><Text style={[type.smallMedium, { color: PILL[tone].fg }]}>{text}</Text></Animated.View>;
 
-export const Loading = () => <View style={s.center}><ActivityIndicator size="large" color={colors.primary} /></View>;
+export const Loading = () => <View style={s.center}><View style={s.loadWrap}><Ripples size={90} count={2} /><Float amplitude={4} duration={900}><Icon name="medkit" size={36} /></Float></View></View>;
 
 export function Message({ icon = 'information-circle-outline', title, text, actionLabel, onAction }: { icon?: IconName; title: string; text?: string; actionLabel?: string; onAction?: () => void }) {
   return (
     <View style={s.center}>
-      <View style={s.msgIcon}><Icon name={icon} size={36} /></View>
-      <Text style={[type.h3, { color: colors.text, textAlign: 'center' }]}>{title}</Text>
-      {text ? <Text style={[type.body, { color: colors.secondary, textAlign: 'center', marginTop: 4 }]}>{text}</Text> : null}
-      {actionLabel && onAction ? <Button title={actionLabel} onPress={onAction} variant="outline" style={{ marginTop: spacing.lg, paddingHorizontal: spacing.xxl }} /> : null}
+      <Animated.View entering={FadeIn.duration(500)} style={s.msgIconWrap}>
+        <Ripples size={96} count={2} />
+        <Float amplitude={5} duration={2200}><View style={s.msgIcon}><Icon name={icon} size={36} /></View></Float>
+      </Animated.View>
+      <Animated.Text entering={FadeInDown.delay(150).duration(420)} style={[type.h3, { color: colors.text, textAlign: 'center' }]}>{title}</Animated.Text>
+      {text ? <Animated.Text entering={FadeInDown.delay(250).duration(420)} style={[type.body, { color: colors.secondary, textAlign: 'center', marginTop: 4 }]}>{text}</Animated.Text> : null}
+      {actionLabel && onAction ? <Animated.View entering={FadeInDown.delay(350).duration(420)}><Button title={actionLabel} onPress={onAction} variant="outline" style={{ marginTop: spacing.lg, paddingHorizontal: spacing.xxl }} /></Animated.View> : null}
     </View>
   );
 }
@@ -73,23 +116,61 @@ export const ErrorView = ({ message, onRetry, retryLabel }: { message: string; o
 export const SectionTitle = ({ children, right }: { children: ReactNode; right?: ReactNode }) =>
   <View style={s.sectionRow}><Text style={[type.h3, { color: colors.text }]}>{children}</Text>{right}</View>;
 
+/** Animated step indicator shown on the checkout screens: address → time → review. */
+export function CheckoutSteps({ step, labels }: { step: 0 | 1 | 2; labels: [string, string, string] }) {
+  const p = useSharedValue(0);
+  useEffect(() => { p.value = withSpring(step, { damping: 16, stiffness: 120 }); }, [step, p]);
+  const bar = useAnimatedStyle(() => ({ width: `${(p.value / 2) * 100}%` }));
+  return (
+    <View style={s.stepsWrap}>
+      <View style={s.stepsTrack}><Animated.View style={[s.stepsFill, bar]} /></View>
+      <View style={s.stepsRow}>
+        {labels.map((l, i) => <StepDot key={l} index={i} step={step} label={l} />)}
+      </View>
+    </View>
+  );
+}
+function StepDot({ index, step, label }: { index: number; step: number; label: string }) {
+  const done = index < step, on = index === step;
+  const sc = useSharedValue(1);
+  useEffect(() => { if (on) { sc.value = withSpring(1.18, { damping: 6, stiffness: 200 }, () => { sc.value = withSpring(1); }); } }, [on, sc]);
+  const a = useAnimatedStyle(() => ({ transform: [{ scale: sc.value }] }));
+  return (
+    <View style={s.stepItem}>
+      <Animated.View style={[s.stepDot, (done || on) && s.stepDotOn, a]}>{done ? <Icon name="checkmark" size={14} color={colors.white} /> : <Text style={[type.smallMedium, { color: on ? colors.white : colors.muted }]}>{index + 1}</Text>}</Animated.View>
+      <Text style={[type.small, { color: on || done ? colors.text : colors.muted }]}>{label}</Text>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   flex: { flex: 1 },
   screen: { flex: 1, backgroundColor: colors.background },
   pad: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xxl },
-  footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md, backgroundColor: colors.white },
+  footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md, backgroundColor: colors.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   back: { padding: 4, marginLeft: 4 },
-  btn: { minHeight: 54, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing.lg },
-  btnPrimary: { backgroundColor: colors.primary },
+  btn: { minHeight: 54, borderRadius: radius.md },
+  btnInner: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing.lg },
+  btnPrimary: { backgroundColor: colors.primary, boxShadow: '0px 6px 16px rgba(11,95,219,0.28)' },
   btnOutline: { borderWidth: 1.5, borderColor: colors.primary, backgroundColor: colors.white },
   btnDanger: { borderWidth: 1.5, borderColor: colors.red, backgroundColor: colors.white },
   btnGhost: { backgroundColor: 'transparent' },
-  btnOff: { opacity: 0.5 },
   label: { ...type.smallMedium, color: colors.secondary, marginBottom: 6 },
-  input: { ...type.body, minHeight: 52, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.lg, color: colors.text, backgroundColor: colors.white },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', minHeight: 52, borderWidth: 1.5, borderRadius: radius.md, paddingHorizontal: spacing.lg, gap: 8 },
+  input: { ...type.body, flex: 1, color: colors.text, paddingVertical: 10, outlineStyle: 'none' } as object,
   error: { ...type.small, color: colors.red, marginTop: 4 },
+  hint: { ...type.small, color: colors.secondary, marginTop: 4 },
   card: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.lg, padding: spacing.lg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl },
-  msgIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md },
+  loadWrap: { width: 120, height: 120, alignItems: 'center', justifyContent: 'center' },
+  msgIconWrap: { width: 120, height: 120, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md },
+  msgIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.xl, marginBottom: spacing.sm },
+  stepsWrap: { marginBottom: spacing.xl },
+  stepsTrack: { position: 'absolute', top: 13, left: '8%', right: '8%', height: 3, borderRadius: 2, backgroundColor: colors.border, overflow: 'hidden' },
+  stepsFill: { height: 3, backgroundColor: colors.primary, borderRadius: 2 },
+  stepsRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  stepItem: { flex: 1, alignItems: 'center', gap: 4 },
+  stepDot: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.white, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  stepDotOn: { backgroundColor: colors.primary, borderColor: colors.primary },
 });
