@@ -38,4 +38,4 @@ export interface OrderSummary {
   deliverySlot?: string; deliveryDate?: string; partnerName?: string | null;
 }
 export interface AppNotification { id: string; type: string; title: string; body: string; read: boolean; createdAt: string; orderId: string | null; orderNumber: string | null }
-export interface Partner { id: string; name: string; phone: string; isAvailable: boolean; active: boolean; activeOrders: number; codCollectedToday: number }
+export interface Partner { id: string; name: string; phone: string; isAvailable: boolean; active: boolean; activeOrders: number; codCollectedToday: number; pincodes: string[] }

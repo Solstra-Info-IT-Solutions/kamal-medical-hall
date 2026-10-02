@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnimatedSplash } from './components/AnimatedSplash';
+import { DialogHost } from './components/DialogHost';
+import { NotificationToast } from './components/NotificationToast';
 import i18n, { restoreLanguage } from './localization';
 import { Navigation } from './navigation';
 import { useSession } from './store/session';
@@ -39,6 +41,8 @@ export function App() {
       <View style={{ flex: 1, backgroundColor: colors.white }}>
         <StatusBar style="dark" />
         <Navigation />
+        <NotificationToast />
+        <DialogHost />
         {showSplash ? <AnimatedSplash tagline={i18n.t('brand.tagline')} /> : null}
       </View>
     </SafeAreaProvider>

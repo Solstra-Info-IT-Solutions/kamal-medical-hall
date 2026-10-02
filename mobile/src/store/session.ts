@@ -5,6 +5,7 @@ import type { User } from '../api/types';
 import { otpProvider } from '../auth/provider';
 import { setLanguage } from '../localization';
 import { registerForPush } from '../push';
+import { connectRealtime, disconnectRealtime } from '../realtime';
 
 interface SessionState {
   status: 'loading' | 'out' | 'in';
@@ -16,6 +17,8 @@ interface SessionState {
   login: (token: string) => Promise<{ needsProfile: boolean }>;
   updateProfile: (b: { name?: string; email?: string; language?: 'en' | 'hi' }) => Promise<void>;
   logout: () => Promise<void>;
+  /** Permanently deletes the signed-in customer's account (server enforces the rules), then signs out. */
+  deleteAccount: () => Promise<void>;
 }
 
 export const useSession = create<SessionState>((set, get) => ({
@@ -29,6 +32,7 @@ export const useSession = create<SessionState>((set, get) => ({
     try {
       const { user } = await endpoints.me();
       set({ status: 'in', user });
+      connectRealtime();
       void registerForPush();
     } catch (error) {
       if (error instanceof ApiError && !error.isNetwork) return set({ status: 'out', user: null });
@@ -38,6 +42,7 @@ export const useSession = create<SessionState>((set, get) => ({
   async login(token) {
     const { user, needsProfile } = await endpoints.session(token);
     set({ status: 'in', user, bootError: null });
+    connectRealtime();
     void registerForPush();
     return { needsProfile };
   },
@@ -47,6 +52,13 @@ export const useSession = create<SessionState>((set, get) => ({
     if (b.language) await setLanguage(b.language);
   },
   async logout() {
+    disconnectRealtime();
+    await otpProvider.signOut();
+    set({ status: 'out', user: null });
+  },
+  async deleteAccount() {
+    await endpoints.deleteAccount();
+    disconnectRealtime();
     await otpProvider.signOut();
     set({ status: 'out', user: null });
   },

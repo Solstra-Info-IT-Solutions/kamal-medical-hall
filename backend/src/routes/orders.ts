@@ -6,6 +6,7 @@ import { config } from '../config.js';
 import { pool, tx } from '../db.js';
 import { HttpError, bad, conflict, notFound, parse } from '../http.js';
 import { notify, notifyAdmins } from '../notify.js';
+import { emitPartner } from '../realtime.js';
 import { CANCELLABLE, loadOrder, transition } from '../orderService.js';
 import { isServiceable } from '../pincodes.js';
 import { isSlotBookable, SLOTS } from '../slots.js';
@@ -97,7 +98,10 @@ orders.post('/:id/cancel', authed, requireRole('customer'), async (req, res) => 
   const order = await loadOrder(String(req.params.id), req.user!);
   await tx(async (c) => {
     const row = await transition(c, order.id, CANCELLABLE, 'cancelled', req.user!.id, { cancel_reason: reason, cancelled_by: req.user!.id, partner_id: null }, reason);
-    if (order.partner?.id) await c.query('update delivery_partners set is_available = true where user_id = $1', [order.partner.id]);
+    if (order.partner?.id) {
+      await c.query('update delivery_partners set is_available = true where user_id = $1', [order.partner.id]);
+      c.afterCommit(() => emitPartner(order.partner!.id, true));
+    }
     const paid = row.payment_status === 'paid';
     await notifyAdmins(order.id, 'order_cancelled', 'Order cancelled by customer',
       `${order.orderNumber}: ${reason}${paid ? ' (online payment was already received; handle manually)' : ''}`, c);

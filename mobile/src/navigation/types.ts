@@ -28,6 +28,8 @@ export type AdminStackParamList = {
   Customers: undefined;
   Reports: undefined;
   StoreSettings: undefined;
+  Pincodes: undefined;
+  PartnerAreas: { partnerId: string; name: string };
   Language: undefined;
 };
 

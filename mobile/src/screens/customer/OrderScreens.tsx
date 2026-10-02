@@ -25,7 +25,7 @@ const ListSkeleton = () => <View style={{ gap: 14, padding: spacing.lg }}>{[0, 1
 export function OrdersScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Orders'>) {
   const { t } = useTranslation();
   const nav = useNavigation<Nav>();
-  const { data, error, loading, reload } = useLoad(() => endpoints.orders('completed'));
+  const { data, error, loading, reload } = useLoad(() => endpoints.orders('completed'), ['order:update']);
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.white }} edges={['top']}>
       <Enter><Text style={[type.h2, s.heading]}>{t('orders.title')}</Text></Enter>
@@ -78,7 +78,7 @@ function DetailSkeleton() {
 
 export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<CustomerStackParamList, 'OrderDetail'>) {
   const { t } = useTranslation();
-  const { data, error, loading, reload } = useLoad(() => endpoints.order(route.params.orderId));
+  const { data, error, loading, reload } = useLoad(() => endpoints.order(route.params.orderId), ['order:update']);
   const config = useLoad(() => endpoints.config());
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reason, setReason] = useState('');
@@ -234,7 +234,7 @@ export function PaymentScreen({ navigation, route }: NativeStackScreenProps<Cust
 export function NotificationsScreen() {
   const { t } = useTranslation();
   const nav = useNavigation<Nav>();
-  const { data, error, loading, reload } = useLoad(async () => { const r = await endpoints.notifications(); void endpoints.markAllRead().catch(() => undefined); return r; });
+  const { data, error, loading, reload } = useLoad(async () => { const r = await endpoints.notifications(); void endpoints.markAllRead().catch(() => undefined); return r; }, ['notification']);
   if (loading && !data) return <ListSkeleton />;
   if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
   if (!data?.notifications.length) return <Message icon="notifications-off-outline" title={t('notifications.empty')} />;

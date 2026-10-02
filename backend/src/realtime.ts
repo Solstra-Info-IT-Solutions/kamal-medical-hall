@@ -49,3 +49,10 @@ export function emitOrder(order: { id: string; order_number: string; status: str
 }
 
 export const closeRealtime = () => { void io?.close(); io = null; };
+
+/** A partner's availability changed (assigned, freed, toggled): refresh admin team views and the partner's own screen. */
+export function emitPartner(partnerId: string, isAvailable: boolean) {
+  const payload = { partnerId, isAvailable };
+  emitAdmins('partner:update', payload);
+  emitUser(partnerId, 'partner:update', payload);
+}

@@ -8,7 +8,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
 import { Enter, Tap } from '../../components/motion';
 import { Button, Card, Icon, Loading, Message, Screen, TextField, type IconName } from '../../components/ui';
-import { confirmAsync } from '../../dialog';
+import { ApiError } from '../../api/client';
+import { notice, showDialog } from '../../dialog';
 import { useLoad } from '../../hooks';
 import type { CustomerStackParamList, CustomerTabParamList } from '../../navigation/types';
 import { useCart } from '../../store/cart';
@@ -21,6 +22,16 @@ export function ProfileScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Pr
   const { t } = useTranslation();
   const nav = useNavigation<Nav>();
   const { user, logout } = useSession();
+  const deleteAccountApi = useSession((st) => st.deleteAccount);
+  const logOut = async () => {
+    const ok = await showDialog({ title: t('profile.logout'), message: t('profile.logoutMsg'), icon: 'log-out', tone: 'primary', confirmLabel: t('profile.logout'), cancelLabel: t('common.cancel') });
+    if (ok) { useCart.getState().clear(); await logout(); }
+  };
+  const deleteAccount = async () => {
+    const ok = await showDialog({ title: t('profile.deleteTitle'), message: t('profile.deleteMsg'), icon: 'trash', tone: 'danger', confirmLabel: t('profile.deleteConfirm'), cancelLabel: t('common.cancel'), acknowledge: t('profile.deleteAck') });
+    if (!ok) return;
+    try { useCart.getState().clear(); await deleteAccountApi(); } catch (e) { await notice(t('profile.deleteFailed'), e instanceof ApiError && e.code === 'active_orders' ? t('profile.deleteActive') : (e as Error).message, t('common.ok')); }
+  };
   let rowIndex = 1;
   const row = (icon: IconName, label: string, onPress: () => void, danger = false) => (
     <Enter index={rowIndex++}><Tap accessibilityRole="button" onPress={onPress} scaleTo={0.98} style={s.row}>
@@ -42,7 +53,8 @@ export function ProfileScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Pr
         {row('language-outline', t('profile.language'), () => nav.navigate('Language'))}
         {row('help-circle-outline', t('profile.help'), () => nav.navigate('Help'))}
         {row('document-text-outline', t('profile.legal'), () => nav.navigate('Legal'))}
-        {row('log-out-outline', t('profile.logout'), async () => { if (await confirmAsync(t('profile.logout'), t('profile.logoutMsg'), t('profile.logout'), t('common.cancel'), true)) { useCart.getState().clear(); await logout(); } }, true)}
+        {row('log-out-outline', t('profile.logout'), logOut, true)}
+        {row('trash-outline', t('profile.deleteAccount'), deleteAccount, true)}
       </Screen>
     </SafeAreaView>
   );

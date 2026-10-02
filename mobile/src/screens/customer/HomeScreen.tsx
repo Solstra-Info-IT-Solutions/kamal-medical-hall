@@ -54,9 +54,9 @@ export function HomeScreen(_props: BottomTabScreenProps<CustomerTabParamList, 'H
   const { t } = useTranslation();
   const nav = useNavigation<NativeStackNavigationProp<CustomerStackParamList>>();
   const user = useSession((st) => st.user);
-  const completed = useLoad(() => endpoints.orders('completed'));
-  const active = useLoad(() => endpoints.orders('active'));
-  const unread = useLoad(async () => (await endpoints.notifications()).notifications.filter((n) => !n.read).length);
+  const completed = useLoad(() => endpoints.orders('completed'), ['order:update']);
+  const active = useLoad(() => endpoints.orders('active'), ['order:update']);
+  const unread = useLoad(async () => (await endpoints.notifications()).notifications.filter((n) => !n.read).length, ['notification']);
   const refreshing = completed.loading && !!completed.data;
   const refresh = () => { void completed.reload(); void active.reload(); void unread.reload(); };
   const first = !completed.data && !active.data;

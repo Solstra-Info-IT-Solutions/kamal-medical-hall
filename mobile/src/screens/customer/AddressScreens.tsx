@@ -8,7 +8,7 @@ import { endpoints } from '../../api/endpoints';
 import type { Address } from '../../api/types';
 import { Enter, Skeleton, Tap, tick } from '../../components/motion';
 import { Button, Card, CheckoutSteps, ErrorView, Icon, Message, Screen, TextField, type IconName } from '../../components/ui';
-import { isSupportedPincode } from '../../constants/serviceArea';
+import { usePincodes } from '../../store/pincodes';
 import { confirmAsync } from '../../dialog';
 import { useLoad } from '../../hooks';
 import { goTo } from '../../navigation/helpers';
@@ -85,6 +85,8 @@ export function AddressFormScreen({ navigation, route }: NativeStackScreenProps<
   const [busy, setBusy] = useState(false);
   const [gpsBusy, setGpsBusy] = useState(false);
   const [gpsError, setGpsError] = useState('');
+  const isServiceable = usePincodes((st) => st.isServiceable);
+  useEffect(() => { void usePincodes.getState().load(); }, []);
   const phoneRef = useRef<TextInput>(null);
   const line1Ref = useRef<TextInput>(null);
   const line2Ref = useRef<TextInput>(null);
@@ -115,14 +117,14 @@ export function AddressFormScreen({ navigation, route }: NativeStackScreenProps<
     } catch { setGpsError(t('address.gpsFailed')); } finally { setGpsBusy(false); }
   };
 
-  const pinState = f.pincode.length === 6 ? (isSupportedPincode(f.pincode) ? 'ok' : 'bad') : 'none';
+  const pinState = f.pincode.length === 6 ? (isServiceable(f.pincode) ? 'ok' : 'bad') : 'none';
   const save = async () => {
     const e: Record<string, string> = {};
     if (f.recipientName.trim().length < 2) e.recipientName = t('validation.name');
     if (!/^[6-9]\d{9}$/.test(f.phone)) e.phone = t('auth.invalidPhone');
     if (f.line1.trim().length < 3) e.line1 = t('validation.address');
     if (!/^\d{6}$/.test(f.pincode)) e.pincode = t('validation.pincode');
-    else if (!isSupportedPincode(f.pincode)) e.pincode = t('validation.unsupportedPincode');
+    else if (!isServiceable(f.pincode)) e.pincode = t('validation.unsupportedPincode');
     setErrors(e);
     if (Object.keys(e).length) { tick('error'); return; }
     setBusy(true);

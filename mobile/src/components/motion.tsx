@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Platform, Pressable, type PressableProps, type StyleProp, type TextStyle, Text, type ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleSheet, type PressableProps, type StyleProp, type TextStyle, Text, type ViewStyle } from 'react-native';
 import Animated, {
   Easing, FadeIn, FadeInDown, FadeOut, interpolate, LinearTransition, useAnimatedStyle, useSharedValue,
   withDelay, withRepeat, withSequence, withSpring, withTiming,
@@ -29,18 +29,30 @@ export function Enter({ index = 0, children, style, from = 18 }: { index?: numbe
   return <Animated.View entering={entering} style={style}>{children}</Animated.View>;
 }
 
+const OUTER_KEYS = ['flex', 'flexGrow', 'flexShrink', 'flexBasis', 'alignSelf', 'width', 'minWidth', 'maxWidth', 'margin', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight', 'marginHorizontal', 'marginVertical', 'position', 'top', 'left', 'right', 'bottom', 'zIndex'];
+
+/** Layout props (flex, width, margins, position) belong on the outer pressable so rows of buttons share space correctly. */
+function splitStyle(style: StyleProp<ViewStyle>) {
+  const flat = (StyleSheet.flatten(style) ?? {}) as Record<string, unknown>;
+  const outer: Record<string, unknown> = {}; const inner: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(flat)) (OUTER_KEYS.includes(k) ? outer : inner)[k] = v;
+  return { outer: outer as ViewStyle, inner: inner as ViewStyle };
+}
+
 /** Pressable that squishes on press with a spring and a light haptic. */
 export function Tap({ children, style, scaleTo = 0.965, haptic = true, onPress, ...rest }: PressableProps & { children: ReactNode; style?: StyleProp<ViewStyle>; scaleTo?: number; haptic?: boolean }) {
   const s = useSharedValue(1);
   const a = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
+  const { outer, inner } = splitStyle(style);
   return (
     <Pressable
       {...rest}
+      style={outer}
       onPressIn={() => { s.value = withSpring(scaleTo, { damping: 14, stiffness: 320 }); }}
       onPressOut={() => { s.value = withSpring(1, { damping: 11, stiffness: 240 }); }}
       onPress={(e) => { if (haptic) tick(); onPress?.(e); }}
     >
-      <Animated.View style={[style, a]}>{children}</Animated.View>
+      <Animated.View style={[inner, a]}>{children}</Animated.View>
     </Pressable>
   );
 }

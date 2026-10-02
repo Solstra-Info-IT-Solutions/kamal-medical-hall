@@ -6,7 +6,7 @@ import { pool, tx } from '../db.js';
 import { bad, bad as bad_, conflict, notFound, parse } from '../http.js';
 import { notify, notifyAdmins } from '../notify.js';
 import { clearPincodeCache } from '../pincodes.js';
-import { emitAdmins } from '../realtime.js';
+import { emitAdmins, emitPartner } from '../realtime.js';
 import { CANCELLABLE, loadOrder, transition } from '../orderService.js';
 
 export const adminRouter = Router();
@@ -84,6 +84,7 @@ adminRouter.post('/orders/:id/cancel', async (req, res) => {
     await transition(c, order.id, CANCELLABLE, 'cancelled', req.user!.id, { cancel_reason: reason, cancelled_by: req.user!.id, partner_id: null }, reason);
     if (order.partner?.id) {
       await c.query('update delivery_partners set is_available = true where user_id = $1', [order.partner.id]);
+      c.afterCommit(() => emitPartner(order.partner!.id, true));
       await notify(order.partner.id, order.id, 'order_cancelled', 'Delivery cancelled', `${order.orderNumber} was cancelled by the store`, c);
     }
     await notify(order.customer!.id, order.id, 'order_cancelled', 'Order cancelled by the store', `${order.orderNumber}: ${reason}`, c);
@@ -99,7 +100,7 @@ adminRouter.post('/orders/:id/assign', async (req, res) => {
     if (cover.rows.length && !cover.rows.some((r) => r.pincode === order.address.pincode)) throw conflict('That delivery partner does not cover this pincode.', 'out_of_coverage');
     const p = await c.query('update delivery_partners set is_available = false where user_id = $1 and is_available and active returning user_id', [partnerId]);
     if (!p.rows[0]) throw conflict('That delivery partner is not available.', 'partner_unavailable');
-    c.afterCommit(() => emitAdmins('partner:update', { partnerId, isAvailable: false }));
+    c.afterCommit(() => emitPartner(partnerId, false));
     await transition(c, order.id, ['ready_to_dispatch'], 'ready_to_dispatch', req.user!.id, { partner_id: partnerId }, 'Partner assigned');
     await notify(partnerId, order.id, 'assigned', 'New delivery assigned', `${order.orderNumber} to ${order.address.line1}`, c);
     await notify(order.customer!.id, order.id, 'partner_assigned', 'Delivery partner assigned', `${order.orderNumber} will be delivered by our staff.`, c);
@@ -241,7 +242,7 @@ partnerRouter.put('/availability', async (req, res) => {
   }
   const { rowCount } = await pool.query('update delivery_partners set is_available = $2 where user_id = $1 and active', [req.user!.id, available]);
   if (!rowCount) throw conflict('Your account is not active.', 'inactive');
-  emitAdmins('partner:update', { partnerId: req.user!.id, isAvailable: available });
+  emitPartner(req.user!.id, available);
   res.json({ isAvailable: available });
 });
 
@@ -272,7 +273,7 @@ partnerRouter.post('/orders/:id/delivered', async (req, res) => {
     await transition(c, order.id, ['out_for_delivery'], 'delivered', req.user!.id, cod ? { payment_status: 'cod_collected' } : {});
     if (cod) await c.query("update payments set status = 'cod_collected', collected_by = $2 where order_id = $1 and method = 'cod'", [order.id, req.user!.id]);
     await c.query('update delivery_partners set is_available = true where user_id = $1', [req.user!.id]);
-    c.afterCommit(() => emitAdmins('partner:update', { partnerId: req.user!.id, isAvailable: true }));
+    c.afterCommit(() => emitPartner(req.user!.id, true));
     await notify(order.customer!.id, order.id, 'delivered', 'Order delivered', `${order.orderNumber} has been delivered. Thank you!`, c);
     await notifyAdmins(order.id, 'delivered', 'Order delivered', `${order.orderNumber} delivered${cod ? ' (cash collected)' : ''}`, c);
   });

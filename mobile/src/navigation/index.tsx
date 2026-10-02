@@ -7,7 +7,7 @@ import { View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { Icon, type IconName } from '../components/ui';
 import { LoginScreen, OtpScreen, SignupScreen, WelcomeScreen } from '../screens/auth/AuthScreens';
-import { AllOrdersScreen, CustomersScreen, DashboardScreen, MoreScreen, OrderReviewScreen, ReportsScreen, RequestsScreen, StoreSettingsScreen, TeamScreen } from '../screens/admin/AdminScreens';
+import { AllOrdersScreen, CustomersScreen, DashboardScreen, MoreScreen, OrderReviewScreen, PartnerAreasScreen, PincodesScreen, ReportsScreen, RequestsScreen, StoreSettingsScreen, TeamScreen } from '../screens/admin/AdminScreens';
 import { AddressFormScreen, AddressesScreen } from '../screens/customer/AddressScreens';
 import { CartScreen } from '../screens/customer/CartScreen';
 import { DeliveryTimeScreen, ReviewScreen, SuccessScreen } from '../screens/customer/CheckoutScreens';
@@ -19,6 +19,7 @@ import { JobScreen, PartnerHomeScreen } from '../screens/partner/PartnerScreens'
 import { useCart } from '../store/cart';
 import { useSession } from '../store/session';
 import { colors, fonts } from '../theme';
+import { navigationRef } from './ref';
 import type { AdminStackParamList, AdminTabParamList, AuthStackParamList, CustomerStackParamList, CustomerTabParamList, PartnerStackParamList } from './types';
 
 
@@ -127,6 +128,8 @@ function AdminNavigator() {
       <AStack.Screen name="OrderReview" component={OrderReviewScreen} options={{ title: t('screens.orderDetail') }} />
       <AStack.Screen name="Customers" component={CustomersScreen} options={{ title: t('admin.customers') }} />
       <AStack.Screen name="Reports" component={ReportsScreen} options={{ title: t('admin.reports') }} />
+      <AStack.Screen name="Pincodes" component={PincodesScreen} options={{ title: t('admin.pincodes') }} />
+      <AStack.Screen name="PartnerAreas" component={PartnerAreasScreen} options={({ route }) => ({ title: route.params.name })} />
       <AStack.Screen name="StoreSettings" component={StoreSettingsScreen} options={{ title: t('admin.settings') }} />
       <AStack.Screen name="Language" component={LanguageScreen} options={{ title: t('profile.language') }} />
     </AStack.Navigator>
@@ -161,7 +164,7 @@ export function Navigation() {
 
   if (status === 'loading') return <View style={{ flex: 1, backgroundColor: colors.white }} />; // the animated splash covers this
   return (
-    <NavigationContainer linking={linking}>
+    <NavigationContainer ref={navigationRef} linking={linking}>
       {status === 'out' ? <AuthNavigator /> : role === 'admin' ? <AdminNavigator /> : role === 'delivery_partner' ? <PartnerNavigator /> : <CustomerGate />}
     </NavigationContainer>
   );

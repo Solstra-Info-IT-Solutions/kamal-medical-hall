@@ -1,4 +1,5 @@
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -6,13 +7,14 @@ import { Linking, Platform, RefreshControl, ScrollView, StyleSheet, Switch, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
 import { OrderCard } from '../../components/OrderCard';
-import { Enter } from '../../components/motion';
+import { Avatar } from '../../components/CallButton';
+import { CountUp, Enter, Tap, tick } from '../../components/motion';
 import { Button, Card, ErrorView, Icon, Loading, Screen } from '../../components/ui';
-import { confirmAsync } from '../../dialog';
+import { confirmAsync, showDialog } from '../../dialog';
 import { useLoad } from '../../hooks';
 import type { PartnerStackParamList } from '../../navigation/types';
 import { useSession } from '../../store/session';
-import { colors, spacing, type } from '../../theme';
+import { colors, radius, spacing, type } from '../../theme';
 import { formatDate, formatMoney } from '../../utils';
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList>;
@@ -20,36 +22,77 @@ type Nav = NativeStackNavigationProp<PartnerStackParamList>;
 export function PartnerHomeScreen() {
   const { t } = useTranslation();
   const nav = useNavigation<Nav>();
-  const logout = useSession((st) => st.logout);
-  const me = useLoad(() => endpoints.partner.me());
-  const jobs = useLoad(() => endpoints.partner.orders('active'));
-  const history = useLoad(() => endpoints.partner.orders('history'));
+  const { user, logout } = useSession();
+  const me = useLoad(() => endpoints.partner.me(), ['partner:update', 'order:update', 'notification']);
+  const jobs = useLoad(() => endpoints.partner.orders('active'), ['order:update', 'notification']);
+  const history = useLoad(() => endpoints.partner.orders('history'), ['order:update']);
   const [err, setErr] = useState('');
   const toggle = async (v: boolean) => {
     setErr('');
-    try { await endpoints.partner.setAvailable(v); await me.reload(); } catch (e) { setErr((e as Error).message); await me.reload(); }
+    try { await endpoints.partner.setAvailable(v); tick(); await me.reload(); } catch (e) { setErr((e as Error).message); tick('error'); await me.reload(); }
+  };
+  const signOut = async () => {
+    const ok = await showDialog({ title: t('profile.logout'), message: t('profile.logoutMsg'), icon: 'log-out', confirmLabel: t('profile.logout'), cancelLabel: t('common.cancel') });
+    if (ok) await logout();
   };
   if (me.loading && !me.data) return <Loading />;
   if (me.error && !me.data) return <ErrorView message={me.error} onRetry={me.reload} retryLabel={t('common.retry')} />;
   const refresh = () => { void me.reload(); void jobs.reload(); void history.reload(); };
+  const available = me.data!.isAvailable;
+  const active = jobs.data?.orders ?? [];
+  const cashToCollect = active.filter((o) => o.paymentMethod === 'cod').reduce((sum, o) => sum + (o.quotedAmount ?? 0), 0);
+  const hasJob = active.length > 0;
   return (
     <SafeAreaView style={s.fill} edges={['top']}>
-      <Text style={[type.h2, s.heading]}>{t('partner.title')}</Text>
-      <ScrollView contentContainerStyle={s.pad} refreshControl={<RefreshControl refreshing={jobs.loading} onRefresh={refresh} />}>
-        <Enter><Card style={s.avail}>
-          <View style={{ flex: 1 }}><Text style={[type.h3, { color: colors.text }]}>{me.data!.isAvailable ? t('partner.available') : t('partner.busy')}</Text><Text style={[type.small, { color: colors.secondary }]}>{t('partner.availableHelp')}</Text></View>
-          <Switch accessibilityLabel={t('partner.available')} value={me.data!.isAvailable} onValueChange={toggle} />
-        </Card></Enter>
-        {err ? <Text style={[type.small, { color: colors.red, marginTop: 6 }]}>{err}</Text> : null}
-        <Text style={[type.h3, s.sec]}>{t('partner.assigned')}</Text>
-        {jobs.data && !jobs.data.orders.length ? <Text style={[type.body, { color: colors.secondary }]}>{t('partner.noJobs')}</Text> : null}
-        {jobs.data?.orders.map((o, i) => <OrderCard key={o.id} order={o} index={i} onPress={() => nav.navigate('Job', { orderId: o.id })} subtitle={`${o.customerName ?? ''} · ${o.deliverySlot ?? ''}`} />)}
+      <ScrollView contentContainerStyle={s.pad} refreshControl={<RefreshControl refreshing={false} onRefresh={refresh} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
+        <Enter index={0}>
+          <View style={s.greet}>
+            <Avatar name={user?.name} size={48} />
+            <View style={{ flex: 1 }}><Text style={[type.small, { color: colors.secondary }]}>{t('partner.title')}</Text><Text style={[type.h2, { color: colors.text }]}>{t('home.greetingName', { name: (user?.name ?? '').split(' ')[0] })}</Text></View>
+          </View>
+        </Enter>
+
+        <Enter index={1}>
+          <LinearGradient colors={available ? [colors.white, colors.greenBg] : [colors.white, colors.amberBg]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.avail}>
+            <View style={[s.availIcon, { backgroundColor: available ? colors.green : colors.amber }]}><Icon name={available ? 'bicycle' : 'pause'} size={26} color={colors.white} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={[type.h3, { color: colors.text }]}>{available ? t('partner.available') : t('partner.busy')}</Text>
+              <Text style={[type.small, { color: colors.secondary }]}>{hasJob ? t('partner.finishFirst') : t('partner.availableHelp')}</Text>
+            </View>
+            <Switch accessibilityLabel={t('partner.available')} value={available} onValueChange={toggle} disabled={hasJob && !available} />
+          </LinearGradient>
+          {err ? <Text style={[type.small, { color: colors.red, marginTop: 6 }]}>{err}</Text> : null}
+        </Enter>
+
+        <Enter index={2}>
+          <View style={s.stats}>
+            <View style={s.stat}><CountUp value={active.length} style={[type.h2, { color: colors.text }]} /><Text style={[type.small, { color: colors.secondary }]}>{t('partner.assigned')}</Text></View>
+            <View style={s.stat}><CountUp value={history.data?.orders.length ?? 0} style={[type.h2, { color: colors.text }]} /><Text style={[type.small, { color: colors.secondary }]}>{t('partner.delivered')}</Text></View>
+            <View style={s.stat}><CountUp value={cashToCollect} prefix="₹" style={[type.h2, { color: colors.text }]} /><Text style={[type.small, { color: colors.secondary }]}>{t('partner.cashToCollect')}</Text></View>
+          </View>
+        </Enter>
+
+        <Enter index={3}><Text style={[type.h3, s.sec]}>{t('partner.assigned')}</Text></Enter>
+        {jobs.data && !active.length ? <Enter index={4}><Card style={s.empty}><Icon name="cube-outline" size={30} color={colors.muted} /><Text style={[type.body, { color: colors.secondary, flex: 1 }]}>{t('partner.noJobs')}</Text></Card></Enter> : null}
+        {active.map((o, i) => <OrderCard key={o.id} order={o} index={i + 4} onPress={() => nav.navigate('Job', { orderId: o.id })} subtitle={`${o.customerName ?? ''} · ${o.deliverySlot ?? ''}`} />)}
+
         {history.data?.orders.length ? <>
-          <Text style={[type.h3, s.sec]}>{t('partner.history')}</Text>
-          {history.data.orders.slice(0, 10).map((o) => <Text key={o.id} style={[type.body, { color: colors.secondary }]}>#{o.orderNumber} · {o.customerName}{o.paymentMethod === 'cod' && o.quotedAmount !== null ? ` · ${t('pay.cod')} ${formatMoney(o.quotedAmount)}` : ''}</Text>)}
+          <Enter index={6}><Text style={[type.h3, s.sec]}>{t('partner.history')}</Text></Enter>
+          {history.data.orders.slice(0, 8).map((o, i) => (
+            <Enter key={o.id} index={7 + i}>
+              <View style={s.histRow}>
+                <View style={s.histIcon}><Icon name="checkmark" size={16} color={colors.green} /></View>
+                <Text style={[type.body, { color: colors.text, flex: 1 }]}>#{o.orderNumber} · {o.customerName}</Text>
+                {o.paymentMethod === 'cod' && o.quotedAmount !== null ? <Text style={[type.smallMedium, { color: colors.secondary }]}>{formatMoney(o.quotedAmount)}</Text> : null}
+              </View>
+            </Enter>
+          ))}
         </> : null}
-        <Button title={t('profile.language')} variant="outline" icon="language" onPress={() => nav.navigate('Language')} style={{ marginTop: spacing.xl }} />
-        <Button title={t('profile.logout')} variant="ghost" onPress={() => void logout()} />
+
+        <Enter index={9}>
+          <Tap accessibilityRole="button" onPress={() => nav.navigate('Language')} scaleTo={0.98} style={s.menuRow}><View style={s.menuIcon}><Icon name="language-outline" size={22} color={colors.navy} /></View><Text style={[type.bodyMedium, { color: colors.text, flex: 1 }]}>{t('profile.language')}</Text><Icon name="chevron-forward" size={20} color={colors.muted} /></Tap>
+          <Tap accessibilityRole="button" onPress={signOut} scaleTo={0.98} style={s.menuRow}><View style={[s.menuIcon, { backgroundColor: colors.redBg }]}><Icon name="log-out-outline" size={22} color={colors.red} /></View><Text style={[type.bodyMedium, { color: colors.red, flex: 1 }]}>{t('profile.logout')}</Text></Tap>
+        </Enter>
       </ScrollView>
     </SafeAreaView>
   );
@@ -57,7 +100,7 @@ export function PartnerHomeScreen() {
 
 export function JobScreen({ navigation, route }: NativeStackScreenProps<PartnerStackParamList, 'Job'>) {
   const { t } = useTranslation();
-  const { data, error, loading, reload, setData } = useLoad(() => endpoints.order(route.params.orderId));
+  const { data, error, loading, reload, setData } = useLoad(() => endpoints.order(route.params.orderId), ['order:update']);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   if (loading && !data) return <Loading />;
@@ -101,9 +144,18 @@ const s = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.white },
   heading: { color: colors.text, textAlign: 'center', paddingVertical: spacing.md },
   pad: { padding: spacing.lg, paddingBottom: spacing.xxxl },
-  avail: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  avail: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.cardBorder },
+  stats: { flexDirection: 'row', gap: 10, marginTop: spacing.md },
   sec: { color: colors.text, marginTop: spacing.xl, marginBottom: 6 },
   job: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: spacing.md, backgroundColor: colors.white },
   actions: { flexDirection: 'row', gap: 12, marginTop: spacing.lg },
+  greet: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: spacing.lg },
+  availIcon: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
+  stat: { flex: 1, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.border },
+  empty: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.white },
+  histRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  histIcon: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.greenBg, alignItems: 'center', justifyContent: 'center' },
+  menuRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  menuIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
 });
 void Icon;
