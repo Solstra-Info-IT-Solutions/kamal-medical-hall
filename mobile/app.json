@@ -54,18 +54,18 @@
           "cameraPermission": "Allow Kamal Medical Hall to use the camera to photograph a prescription."
         }
       ],
-      "expo-document-picker",
+      "expo-document-picker"
     ],
-    "extra": {
-      "eas": {
-        "projectId": "989cfee8-496f-4e5b-a3b6-6fc0ac9f0dcc"
-      }
-    },
-    "owner": "influbeeentertainment",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "443a111a-ab10-436a-a01a-9af43492a1c5"
+      }
+    },
+    "owner": "solstra_info_it_solutions"
   }
 }
