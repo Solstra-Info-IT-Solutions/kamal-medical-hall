@@ -1,0 +1,71 @@
+{
+  "expo": {
+    "name": "Kamal Medical Hall",
+    "slug": "kamal-medical-hall",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "scheme": "kamalmedicalhall",
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.kamalmedicalhall.preview",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-asset",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#ffffff",
+          "image": "./assets/splash-icon.png"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Kamal Medical Hall to use your location to help fill a delivery address."
+        }
+      ],
+      "expo-secure-store",
+      "expo-font",
+      "expo-status-bar",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Kamal Medical Hall to access your photos to attach a prescription.",
+          "cameraPermission": "Allow Kamal Medical Hall to use the camera to photograph a prescription."
+        }
+      ],
+      "expo-document-picker",
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "989cfee8-496f-4e5b-a3b6-6fc0ac9f0dcc"
+      }
+    },
+    "owner": "influbeeentertainment",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    }
+  }
+}

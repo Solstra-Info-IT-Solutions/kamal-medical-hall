@@ -1,0 +1,83 @@
+{
+  "brand": { "name": "Kamal Medical Hall", "tagline": "Your trusted partner for health" },
+  "common": { "back": "Back", "cancel": "Cancel", "change": "Change", "delete": "Delete", "edit": "Edit", "error": "Error", "next": "Continue", "ok": "OK", "retry": "Try again" },
+  "tabs": { "home": "Home", "orders": "My orders", "cart": "Cart", "profile": "Profile" },
+  "screens": { "upload": "Upload prescription", "typeMedicines": "Type medicine names", "address": "Choose delivery address", "addressForm": "Delivery address", "time": "Choose delivery time", "review": "Review order", "orderDetail": "Order details", "payment": "Payment" },
+  "status": {
+    "requested": "Under review", "quoted": "Amount ready", "accepted": "Accepted", "awaiting_payment": "Awaiting payment",
+    "ready_to_dispatch": "Preparing", "out_for_delivery": "Out for delivery", "delivered": "Delivered", "rejected": "Rejected", "cancelled": "Cancelled"
+  },
+  "track": { "requested": "Request sent", "quoted": "Amount ready", "ready_to_dispatch": "Confirmed", "out_for_delivery": "On the way", "delivered": "Delivered" },
+  "auth": {
+    "start": "Get started", "loginTitle": "Log in with mobile number", "loginSubtitle": "We will verify you with an OTP",
+    "phoneLabel": "Mobile number", "invalidPhone": "Enter a valid 10-digit mobile number", "sendOtp": "Send OTP",
+    "sendFailed": "Could not send the OTP. Please try again.", "consent": "By continuing, you agree to our", "consentLink": "Terms and Privacy Policy",
+    "otpTitle": "Verify OTP", "otpSubtitle": "Enter the OTP sent to {{phone}}", "otpLabel": "6-digit OTP", "resendIn": "Resend OTP in {{time}}", "resend": "Resend OTP",
+    "verify": "Verify", "wrongOtp": "Incorrect OTP. Please try again.", "verifyFailed": "Could not verify. Please try again."
+  },
+  "signup": { "title": "Welcome!", "subtitle": "Tell us your name to get started", "name": "Full name", "email": "Email (optional)", "continue": "Continue" },
+  "validation": { "name": "Enter your full name", "email": "Enter a valid email address", "address": "Enter the house / street details", "pincode": "Enter a 6-digit pincode", "unsupportedPincode": "Sorry, we do not deliver to this pincode yet." },
+  "home": {
+    "location": "Mansarovar, Jaipur", "greeting": "Hello,", "greetingName": "Hello, {{name}}", "help": "How can we help you?", "notifications": "Notifications",
+    "uploadTitle": "Upload medicine photo", "uploadSubtitle": "Take a photo of a prescription or medicine",
+    "typeTitle": "Type medicine names", "typeSubtitle": "Type the names and place an order",
+    "activeOrders": "Ongoing orders", "pastOrders": "My past orders", "viewAll": "View all", "noPast": "No completed orders yet.",
+    "rxNotice": "Prescription medicines are checked by the pharmacy before fulfilment."
+  },
+  "upload": {
+    "cardTitle": "Upload photo", "cardSub": "Upload one or more photos / PDF", "add": "Add another file", "remove": "Remove {{name}}",
+    "hint1": "Upload clear and readable photos", "hint2": "JPG, PNG, PDF (max 5 MB each, up to {{max}} files)",
+    "notice": "The pharmacy checks your prescription before preparing the order.",
+    "camera": "Take a photo", "gallery": "Choose from gallery", "pdf": "Choose a PDF",
+    "limit": "You can add up to 3 files to one order.", "tooLarge": "{{name}} is larger than 5 MB.", "unsupported": "Choose a JPG or PNG image.",
+    "permission": "Please allow camera or photo access in your phone settings.", "pickFailed": "Could not open that file. Please try again.", "needOne": "Add at least one prescription file."
+  },
+  "medicines": {
+    "placeholder": "Type a medicine name…", "example": "(Example: Paracetamol, Crocin)", "listTitle": "Medicines you need", "addBtn": "Add medicine",
+    "addMore": "Add another medicine", "instruction": "Any special instructions (optional)", "decrease": "Decrease {{name}}", "increase": "Increase {{name}}",
+    "needOne": "Add at least one medicine.", "limit": "You can add up to 30 medicines in one order."
+  },
+  "cart": {
+    "title": "My cart ({{count}})", "emptyTitle": "Your cart is empty", "empty": "Upload a prescription or type medicine names to start an order.", "startOrder": "Start an order",
+    "prescription": "Prescription", "qty": "Quantity: {{count}}", "removeItem": "Remove {{name}}", "addMore": "Add more", "addMoreRx": "Add another photo or PDF", "addMoreMed": "Add another medicine",
+    "notePlaceholder": "Any special instructions (optional) — e.g. generic is fine", "chooseAddress": "Choose delivery address",
+    "pending": "The pharmacy will confirm the final amount after checking your order.", "freeDelivery": "Free delivery in our Jaipur service area.",
+    "switchToRxTitle": "Start a prescription order?", "switchToRxMsg": "This will remove the typed medicines from your cart. A prescription and typed medicines cannot be in one order.",
+    "switchToMedTitle": "Start a medicine-name order?", "switchToMedMsg": "This will remove the prescription files from your cart. A prescription and typed medicines cannot be in one order.", "switchOk": "Clear cart and continue"
+  },
+  "address": {
+    "addNew": "Add a new address", "areaNotice": "We deliver to selected pincodes in Jaipur.", "chooseTime": "Choose delivery time", "emptyTitle": "No saved addresses", "empty": "Add an address to place your order.",
+    "deleteTitle": "Delete address?", "deleteMsg": "This address will be removed.", "labels": { "home": "Home", "office": "Office", "other": "Other" },
+    "useGps": "Use my current location", "gpsBusy": "Finding location…", "gpsDenied": "Location permission was denied. You can type the address instead.", "gpsFailed": "Could not detect the address. Please type it.",
+    "recipient": "Recipient name", "phone": "Mobile number", "line1": "House no. / Street", "line2": "Area / Colony (optional)", "landmark": "Landmark (optional)", "pincode": "Pincode", "cityNote": "City: Jaipur, Rajasthan", "save": "Save"
+  },
+  "time": { "today": "Today", "tomorrow": "Tomorrow", "review": "Review order", "unavailable": "Not available", "storeClosed": "The store is currently closed for new orders." },
+  "review": { "items": "Items ({{count}})", "address": "Delivery address", "time": "Delivery time", "note": "Note", "noAddress": "No address selected", "send": "Send request", "info": "The pharmacy will check your order and send you the amount. You pay only after you accept it." },
+  "success": { "title": "Request sent!", "sub": "The store is checking your order. You will get the amount soon.", "orderNo": "Order no.", "copy": "Copy order number", "track": "Track order", "home": "Go home" },
+  "orders": { "title": "My orders", "emptyTitle": "No completed orders", "empty": "Your delivered orders will appear here. Ongoing orders are shown on the home screen." },
+  "order": {
+    "waitingReview": "The pharmacy is checking your order. We will notify you with the amount.", "quoteReady": "Your order amount", "validTill": "Valid until {{time}}", "amount": "Amount", "acceptPay": "Accept and choose payment", "completePayment": "Complete payment",
+    "items": "Items", "deliveryTo": "Delivery to", "deliveredBy": "Delivery by {{name}}", "callStore": "Call the store", "cancel": "Cancel order", "cancelTitle": "Cancel this order?",
+    "cancelReasonHelp": "Please tell us why you are cancelling.", "reasonPlaceholder": "Reason for cancelling", "reasonShort": "Please write at least 5 characters.", "confirmCancel": "Cancel order",
+    "cancelNote": "You can cancel only until the order goes out for delivery.", "rejected": "The pharmacy could not accept this order", "cancelled": "Order cancelled"
+  },
+  "pay": { "razorpay": "Pay online", "razorpaySub": "UPI, cards, net banking (Razorpay)", "cod": "Cash on delivery", "codSub": "Pay in cash when the order arrives", "payNow": "Pay {{amount}}", "confirmCod": "Confirm cash on delivery", "webUnsupported": "Online payment is available in the mobile app.", "cancelledByUser": "Payment was not completed. You can try again from the order details." },
+  "notifications": { "empty": "No notifications yet" },
+  "profile": { "edit": "Edit profile", "addresses": "Saved addresses", "language": "Language", "help": "Help and support", "legal": "Terms and privacy", "logout": "Log out", "logoutMsg": "Do you want to log out?", "phone": "Mobile number" },
+  "help": { "pending": "Store contact details will appear here.", "hours": "Store hours" },
+  "legal": { "title": "Terms and privacy", "pending": "The terms of use and privacy policy will be published here soon." },
+  "partner": {
+    "title": "Deliveries", "available": "Available", "busy": "Busy", "availableHelp": "Turn on to receive deliveries", "assigned": "Assigned orders", "noJobs": "No orders assigned right now.", "history": "Recent deliveries",
+    "call": "Call", "map": "Open map", "outForDelivery": "Out for delivery", "markDelivered": "Mark delivered", "collectCash": "Collect cash", "prepaid": "Already paid", "noCash": "No cash to collect.",
+    "collectTitle": "Cash collected?", "collectMsg": "Confirm that you collected {{amount}} from the customer.", "collected": "Yes, collected", "packed": "Packed by the store (prescription order)."
+  },
+  "admin": {
+    "dashboard": "Dashboard", "newRequests": "New requests", "awaiting": "Awaiting payment", "ready": "Ready to dispatch", "outForDelivery": "Out for delivery", "deliveredToday": "Delivered today", "salesToday": "Sales today", "openRequests": "Open new requests",
+    "allOrders": "All orders", "search": "Search order, name or phone", "all": "All", "noOrders": "No orders here", "rxFiles": "Prescription · {{count}} file(s)", "prescriptions": "Prescriptions", "partner": "Delivery partner",
+    "setQuote": "Set the amount", "requote": "Change the amount", "amountLabel": "Final amount (₹)", "sendQuote": "Send amount to customer", "rejectReason": "Reason to reject (customer will see this)", "reject": "Reject order",
+    "awaitingRazorpay": "Waiting for the customer's online payment. It is confirmed automatically.", "assign": "Assign a delivery partner", "noPartners": "No delivery partner is available right now.",
+    "cancelReason": "Reason to cancel (customer will see this)", "cancelOrder": "Cancel order", "cancelConfirm": "The customer will be notified.", "team": "Delivery team", "addPartner": "Add delivery partner", "active": "Active", "inactive": "Inactive", "codToday": "COD collected today",
+    "more": "More", "customers": "Customers", "reports": "Reports", "settings": "Store settings", "orderCount": "{{count}} orders", "lastDays": "Last {{count}} days", "paymentSplit": "Online vs cash", "perPartner": "Deliveries per partner", "dailySales": "Daily sales", "noData": "No data yet",
+    "storeOpen": "Accepting new orders", "opening": "Opening time", "closing": "Closing time", "storeAddress": "Store address"
+  }
+}
