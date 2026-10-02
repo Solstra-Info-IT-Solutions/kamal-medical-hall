@@ -17,6 +17,7 @@ import { NotificationsScreen, OrderDetailScreen, OrdersScreen, PaymentScreen } f
 import { TrackScreen } from '../screens/customer/TrackScreen';
 import { EditProfileScreen, HelpScreen, LanguageScreen, LegalScreen, ProfileScreen } from '../screens/customer/ProfileScreens';
 import { JobScreen, MyAttendanceScreen, PartnerHomeScreen, PartnerOrdersScreen } from '../screens/partner/PartnerScreens';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLayout } from '../layout';
 import { useCart } from '../store/cart';
 import { useSession } from '../store/session';
@@ -36,14 +37,26 @@ const headerOptions = {
   animationDuration: 280,
 };
 
-const tabOptions = {
+const tabBase = {
   headerShown: false,
   animation: 'fade' as const,
   tabBarActiveTintColor: colors.primary,
   tabBarInactiveTintColor: colors.secondary,
   tabBarLabelStyle: { fontFamily: fonts.medium, fontSize: 12 },
-  tabBarStyle: { height: 66, paddingTop: 6, paddingBottom: 8, borderTopColor: colors.border },
 };
+/**
+ * Tab bar that respects the device's safe areas: the gesture / 3-button navigation bar at the bottom and the curved
+ * or cut-out edges of edge-to-edge, foldable and landscape screens on the sides.
+ */
+function useTabOptions() {
+  const insets = useSafeAreaInsets();
+  const bottom = Math.max(insets.bottom, 8);
+  return {
+    ...tabBase,
+    sceneStyle: { paddingLeft: insets.left, paddingRight: insets.right },
+    tabBarStyle: { height: 58 + bottom, paddingTop: 6, paddingBottom: bottom, paddingLeft: insets.left, paddingRight: insets.right, borderTopColor: colors.border },
+  };
+}
 function TabIcon({ name, focusedName, color, focused }: { name: IconName; focusedName: IconName; color: string; focused: boolean }) {
   const sc = useSharedValue(1);
   const dot = useSharedValue(0);
@@ -74,6 +87,7 @@ const CTabs = createBottomTabNavigator<CustomerTabParamList>();
 function CustomerTabs() {
   const { t } = useTranslation();
   const count = useCart((s) => s.medicines.length + s.prescriptions.length);
+  const tabOptions = useTabOptions();
   return (
     <CTabs.Navigator screenOptions={tabOptions}>
       <CTabs.Screen name="Home" component={HomeScreen} options={{ title: t('tabs.home'), tabBarIcon: tabIcon('home-outline', 'home') }} />
@@ -113,7 +127,9 @@ const ATabs = createBottomTabNavigator<AdminTabParamList>();
 function AdminTabs() {
   const { t } = useTranslation();
   const { isDesktop } = useLayout();
-  const sidebar = isDesktop ? { tabBarPosition: 'left' as const, tabBarVariant: 'material' as const, tabBarLabelPosition: 'beside-icon' as const, tabBarStyle: { width: 230, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.white } } : null;
+  const tabOptions = useTabOptions();
+  const insets = useSafeAreaInsets();
+  const sidebar = isDesktop ? { tabBarPosition: 'left' as const, tabBarVariant: 'material' as const, tabBarLabelPosition: 'beside-icon' as const, tabBarStyle: { width: 230 + insets.left, paddingLeft: insets.left, paddingBottom: insets.bottom, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.white } } : null;
   return (
     <ATabs.Navigator screenOptions={{ ...tabOptions, ...(sidebar ?? {}) }}>
       <ATabs.Screen name="Dashboard" component={DashboardScreen} options={{ title: t('admin.dashboard'), tabBarIcon: tabIcon('grid-outline', 'grid') }} />
@@ -147,6 +163,7 @@ function AdminNavigator() {
 const PTabs = createBottomTabNavigator<PartnerTabParamList>();
 function PartnerTabs() {
   const { t } = useTranslation();
+  const tabOptions = useTabOptions();
   return (
     <PTabs.Navigator screenOptions={tabOptions}>
       <PTabs.Screen name="Home" component={PartnerHomeScreen} options={{ title: t('tabs.home'), tabBarIcon: tabIcon('home-outline', 'home') }} />

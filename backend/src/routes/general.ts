@@ -131,8 +131,10 @@ general.delete('/addresses/:id', authed, async (req, res) => {
 
 // ---- Uploads, notifications, devices ---------------------------------------
 general.post('/uploads/sign', authed, (req, res) => {
-  if (req.user!.role !== 'customer') throw new HttpError(403, 'forbidden', 'Not allowed');
-  res.json(signUpload(req.user!.id));
+  const { purpose } = parse(z.object({ purpose: z.enum(['prescription', 'bill']).default('prescription') }), req.body ?? {});
+  // Customers upload prescriptions; only the store admin uploads bills.
+  if (purpose === 'bill' ? req.user!.role !== 'admin' : req.user!.role !== 'customer') throw new HttpError(403, 'forbidden', 'Not allowed');
+  res.json(signUpload(req.user!.id, purpose));
 });
 
 general.get('/notifications', authed, async (req, res) => {

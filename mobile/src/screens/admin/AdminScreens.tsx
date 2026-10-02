@@ -1,6 +1,7 @@
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as DocumentPicker from 'expo-document-picker';
 import * as Location from 'expo-location';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +10,8 @@ import Animated, { FadeInDown, FadeOutLeft, LinearTransition } from 'react-nativ
 import QRCode from 'react-native-qrcode-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
+import { uploadPrescription } from '../../api/upload';
+import type { PrescriptionFile } from '../../store/cart';
 import type { Order, OrderSummary, Partner, PartnerState } from '../../api/types';
 import { Avatar, CallButton } from '../../components/CallButton';
 import { OrderCard } from '../../components/OrderCard';
@@ -24,6 +27,7 @@ import { formatDate, formatDateTime, formatMoney, statusTone } from '../../utils
 
 type Nav = NativeStackNavigationProp<AdminStackParamList>;
 const LIVE = ['order:update', 'notification'];
+const DASH_LIVE = ['order:update', 'notification', 'store:update'];
 const Header = ({ title, right }: { title: string; right?: React.ReactNode }) => <View style={s.headRow}><Text style={[type.h2, s.heading]}>{title}</Text>{right ? <View style={s.headRight}>{right}</View> : null}</View>;
 const STATE_TONE: Record<PartnerState, 'green' | 'red' | 'amber' | 'blue'> = { off: 'red', available: 'green', reserved: 'amber', busy: 'blue', returning: 'blue', break: 'amber' };
 const DUTY_TONE: Record<string, 'green' | 'red' | 'amber' | 'blue'> = { on_duty: 'green', on_break: 'amber', off_duty: 'red', leave: 'amber', absent: 'red' };
@@ -45,7 +49,8 @@ export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Das
   const nav = useNavigation<Nav>();
   const content = useContentStyle(true);
   const { tileColumns } = useLayout();
-  const stats = useLoad(() => endpoints.admin.dashboard(), LIVE);
+  const stats = useLoad(() => endpoints.admin.dashboard(), DASH_LIVE);
+  const [toggling, setToggling] = useState(false);
   const team = useLoad(() => endpoints.admin.partners(), ['partner:update', 'order:update']);
   const recent = useLoad(() => endpoints.admin.orders('requested'), LIVE);
   const data = stats.data;
@@ -59,6 +64,14 @@ export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Das
       </Card>
     </Enter>
   );
+  const setOpen = async (v: boolean) => {
+    if (!v) {
+      const ok = await showDialog({ title: t('admin.closeStoreTitle'), message: t('admin.closeStoreMsg'), icon: 'storefront', tone: 'danger', confirmLabel: t('admin.closeStore'), cancelLabel: t('common.cancel') });
+      if (!ok) return;
+    }
+    setToggling(true);
+    try { await endpoints.admin.setStoreOpen(v); tick('success'); await Promise.all([stats.reload(), team.reload()]); } catch (e) { await notice(t('common.error'), (e as Error).message, t('common.ok')); } finally { setToggling(false); }
+  };
   const available = team.data?.partners.filter((p) => p.isAvailable && p.active).length ?? 0;
   const totalPartners = team.data?.partners.filter((p) => p.active).length ?? 0;
   return (
@@ -66,6 +79,16 @@ export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Das
       <Header title={t('admin.dashboard')} />
       {stats.loading && !data ? <ListSkeleton /> : stats.error && !data ? <ErrorView message={stats.error} onRetry={stats.reload} retryLabel={t('common.retry')} /> : (
         <ScrollView contentContainerStyle={[s.pad, content]} refreshControl={<RefreshControl refreshing={false} onRefresh={() => { void stats.reload(); void team.reload(); void recent.reload(); }} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
+          <Enter index={0}>
+            <View style={[s.storeCard, data!.isOpen ? { backgroundColor: colors.greenBg } : { backgroundColor: colors.redBg }]}>
+              <View style={[s.tileIcon, { backgroundColor: colors.white, marginBottom: 0 }]}><Icon name="storefront" size={22} color={data!.isOpen ? colors.green : colors.red} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={[type.bodyMedium, { color: colors.text }]}>{data!.isOpen ? t('admin.shopIsOpen') : t('admin.shopIsClosed')}</Text>
+                <Text style={[type.small, { color: colors.secondary }]}>{data!.isOpen ? t('admin.shopOpenHelp') : t('admin.shopClosedHelp')}</Text>
+              </View>
+              <Switch accessibilityLabel={t('admin.storeOpen')} value={data!.isOpen} onValueChange={setOpen} disabled={toggling} />
+            </View>
+          </Enter>
           <ResponsiveGrid columns={tileColumns}>
             {tile('mail-unread', t('admin.newRequests'), data!.requested, false, 'amber', () => nav.navigate('Tabs', { screen: 'Requests' }))}
             {tile('hourglass', t('admin.awaiting'), data!.awaitingPayment)}
@@ -155,6 +178,7 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
   const { data, error, loading, reload, setData } = useLoad(() => endpoints.order(route.params.orderId), ['order:update']);
   const partners = useLoad(() => endpoints.admin.partners(), ['partner:update', 'order:update']);
   const [amount, setAmount] = useState('');
+  const [bill, setBill] = useState<{ uri: string; name: string; mimeType: PrescriptionFile['mimeType']; sizeBytes?: number } | null>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState('');
@@ -170,6 +194,32 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
   const quoteValue = Number(amount);
   const mapsQuery = encodeURIComponent([o.address.line1, o.address.line2, o.address.landmark, o.address.city, o.address.pincode].filter(Boolean).join(', '));
   const openMaps = () => { void Linking.openURL(Platform.OS === 'ios' ? `http://maps.apple.com/?q=${mapsQuery}` : `https://www.google.com/maps/search/?api=1&query=${mapsQuery}`); };
+
+  const pickBill = async () => {
+    setErr('');
+    try {
+      const res = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/jpeg', 'image/png'], copyToCacheDirectory: true });
+      if (res.canceled || !res.assets?.[0]) return;
+      const a = res.assets[0];
+      const mime = (a.mimeType ?? (a.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')) as PrescriptionFile['mimeType'];
+      if (!['application/pdf', 'image/jpeg', 'image/png'].includes(mime)) { setErr(t('admin.billType')); return; }
+      if ((a.size ?? 0) > 10 * 1024 * 1024) { setErr(t('admin.billTooBig')); return; }
+      setBill({ uri: a.uri, name: a.name, mimeType: mime, sizeBytes: a.size });
+      tick();
+    } catch { setErr(t('admin.billPickFailed')); }
+  };
+  const sendQuote = async () => {
+    if (!bill) { setErr(t('admin.billRequired')); tick('error'); return; }
+    setBusy('quote'); setErr('');
+    try {
+      const sig = await endpoints.signUpload('bill');
+      const up = await uploadPrescription({ id: 'bill', ...bill }, sig);
+      await endpoints.admin.quote(o.id, quoteValue, { publicId: up.publicId, mimeType: up.mimeType, sizeBytes: up.sizeBytes, name: bill.name });
+      tick('success');
+      await notice(t('admin.quoteSentTitle'), t('admin.quoteSentMsg', { order: o.orderNumber, amount: formatMoney(quoteValue) }), t('common.ok'));
+      nav.goBack();
+    } catch (e) { setErr((e as Error).message); tick('error'); } finally { setBusy(null); }
+  };
 
   const assign = async (p: Partner) => {
     const ok = await showDialog({ title: t('admin.assignConfirmTitle', { name: p.name }), message: t('admin.assignConfirmMsg', { order: o.orderNumber }), icon: 'bicycle', confirmLabel: t('admin.assignBtn'), cancelLabel: t('common.cancel') });
@@ -208,6 +258,7 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
             </Tap>))}</View>
           {o.note ? <Text style={[type.small, { color: colors.secondary, marginTop: 6 }]}>{t('review.note')}: {o.note}</Text> : null}
           {o.quotedAmount !== null ? <Text style={[type.bodyMedium, { color: colors.text, marginTop: spacing.md }]}>{t('order.amount')}: {formatMoney(o.quotedAmount)}{o.paymentMethod ? ` · ${t(`pay.${o.paymentMethod}`)} (${o.paymentStatus})` : ''}</Text> : null}
+          {o.bill?.url ? <Button title={t('admin.viewBill')} variant="outline" icon="document-text" small onPress={() => { void Linking.openURL(o.bill!.url!); }} style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }} /> : null}
           {o.rejectionReason || o.cancelReason ? <Text style={[type.body, { color: colors.red, marginTop: spacing.sm }]}>{o.rejectionReason ?? o.cancelReason}</Text> : null}
         </Card>
       </Enter>
@@ -238,7 +289,15 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
           <Card style={s.block}>
             <Text style={[type.h3, { color: colors.text, marginBottom: spacing.sm }]}>{o.status === 'quoted' ? t('admin.requote') : t('admin.setQuote')}</Text>
             <TextField label={t('admin.amountLabel')} value={amount} onChangeText={(v) => setAmount(v.replace(/[^\d.]/g, ''))} keyboardType="decimal-pad" placeholder="0" valid={quoteValue > 0} />
-            <Button title={t('admin.sendQuote')} icon="send" disabled={!(quoteValue > 0)} loading={busy === 'quote'} onPress={() => run('quote', () => endpoints.admin.quote(o.id, quoteValue))} />
+            <Text style={[type.smallMedium, { color: colors.text, marginBottom: 6 }]}>{t('admin.billLabel')} *</Text>
+            <Tap accessibilityRole="button" onPress={pickBill} scaleTo={0.98} style={[s.billPick, bill && { borderColor: colors.green, backgroundColor: colors.greenBg }]}>
+              <Icon name={bill ? 'document-attach' : 'cloud-upload-outline'} size={24} color={bill ? colors.green : colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={1}>{bill ? bill.name : t('admin.billAttach')}</Text>
+                <Text style={[type.small, { color: colors.secondary }]}>{bill ? t('admin.billChange') : t('admin.billHint')}</Text>
+              </View>
+            </Tap>
+            <Button title={t('admin.sendQuote')} icon="send" disabled={!(quoteValue > 0) || !bill} loading={busy === 'quote'} onPress={sendQuote} style={{ marginTop: spacing.md }} />
           </Card>
         </Enter>
       ) : null}
@@ -811,6 +870,8 @@ const s = StyleSheet.create({
   pinIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   me: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: spacing.md, marginBottom: spacing.sm },
   moreRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  storeCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.md },
+  billPick: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: radius.md, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.primary, backgroundColor: colors.card },
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: spacing.md },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 10, height: 10, borderRadius: 5 },

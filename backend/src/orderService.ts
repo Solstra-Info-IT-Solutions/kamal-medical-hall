@@ -2,7 +2,7 @@ import type pg from 'pg';
 import { pool, hasAfterCommit, type Queryable } from './db.js';
 import { emitOrder } from './realtime.js';
 import { conflict, notFound } from './http.js';
-import { signedPrescriptionUrl } from './services.js';
+import { signedBillUrl, signedPrescriptionUrl } from './services.js';
 import type { AuthUser } from './auth.js';
 
 export type OrderStatus = 'requested' | 'quoted' | 'accepted' | 'awaiting_payment' | 'ready_to_dispatch' | 'out_for_delivery' | 'delivered' | 'rejected' | 'cancelled';
@@ -27,6 +27,11 @@ export async function loadOrder(id: string, viewer: AuthUser, db: Queryable = po
     db.query('select status, reason, created_at from status_history where order_id = $1 order by created_at', [o.id]),
   ]);
   const staffView = viewer.role !== 'customer';
+  const store = (await db.query('select address, phone from store_settings where id = 1')).rows[0];
+  const deliveredAt = history.rows.filter((h) => h.status === 'delivered').at(-1)?.created_at ?? null;
+  const bill = o.bill_public_id && viewer.role !== 'delivery_partner'
+    ? { name: o.bill_name ?? `Bill-${o.order_number}`, mimeType: o.bill_mime, sizeBytes: o.bill_size, uploadedAt: o.bill_uploaded_at, url: signedBillUrl(o.bill_public_id, o.bill_mime, `Bill-${o.order_number}`) }
+    : null;
   // Delivery partners only see the customer's phone once they accepted the order, and only if the admin allows calling.
   let phoneVisible = viewer.role === 'admin';
   let canCallCustomer = viewer.role === 'admin';
@@ -45,7 +50,8 @@ export async function loadOrder(id: string, viewer: AuthUser, db: Queryable = po
     items: items.rows,
     // Partners never see prescriptions.
     prescriptions: viewer.role === 'delivery_partner' ? [] : rx.rows.map((r) => ({ id: r.id, mimeType: r.mime_type, sizeBytes: r.size_bytes, url: signedPrescriptionUrl(r.public_id, r.mime_type) })),
-    history: history.rows,
+    history: history.rows, deliveredAt, bill,
+    store: { name: 'Kamal Medical Hall', address: store?.address ?? null, phone: store?.phone ?? null },
     reviewedBy: staffView ? o.reviewed_by : undefined,
     customer: staffView ? { id: o.customer_id, name: o.customer_name, phone: phoneVisible ? o.customer_phone : null } : undefined,
     partner: o.partner_id && viewer.role !== 'customer' ? { id: o.partner_id, name: o.partner_name, phone: o.partner_phone } : o.partner_id && o.partner_accepted_at ? { id: o.partner_id, name: o.partner_name } : null,

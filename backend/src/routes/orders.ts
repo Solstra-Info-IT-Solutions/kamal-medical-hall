@@ -72,18 +72,23 @@ orders.post('/', authed, requireRole('customer'), async (req, res) => {
 });
 
 orders.get('/', authed, requireRole('customer'), async (req, res) => {
-  const { scope, limit, offset } = parse(z.object({
-    scope: z.enum(['completed', 'active']).default('completed'),
+  const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional();
+  const { scope, limit, offset, from, to } = parse(z.object({
+    scope: z.enum(['completed', 'cancelled', 'active']).default('completed'),
     limit: z.coerce.number().int().min(1).max(50).default(20),
     offset: z.coerce.number().int().min(0).default(0),
+    from: date, to: date,
   }), req.query);
-  const where = scope === 'completed' ? "status = 'delivered'" : "status not in ('delivered','rejected','cancelled')";
+  const where = scope === 'completed' ? "status = 'delivered'" : scope === 'cancelled' ? "status in ('cancelled','rejected')" : "status not in ('delivered','rejected','cancelled')";
   const { rows } = await pool.query(
     `select o.id, o.order_number, o.kind, o.status, o.quoted_amount, o.created_at, o.delivery_date,
             (select count(*) from prescriptions p where p.order_id = o.id) as file_count,
             (select string_agg(name || ' x' || quantity, ', ') from order_items i where i.order_id = o.id) as summary
-     from orders o where o.customer_id = $1 and ${where} order by o.created_at desc limit $2 offset $3`,
-    [req.user!.id, limit, offset],
+     from orders o where o.customer_id = $1 and ${where}
+       and ($4::date is null or (o.created_at at time zone 'Asia/Kolkata')::date >= $4::date)
+       and ($5::date is null or (o.created_at at time zone 'Asia/Kolkata')::date <= $5::date)
+     order by o.created_at desc limit $2 offset $3`,
+    [req.user!.id, limit, offset, from ?? null, to ?? null],
   );
   res.json({ orders: rows.map((r) => ({
     id: r.id, orderNumber: r.order_number, kind: r.kind, status: r.status, createdAt: r.created_at,

@@ -6,6 +6,7 @@ import { bootstrap, createServer } from '../src/server.js';
 import { pool } from '../src/db.js';
 import { closeRealtime } from '../src/realtime.js';
 
+const BILL = { publicId: 'bills/test/bill-1', mimeType: 'application/pdf', sizeBytes: 1000, name: 'bill.pdf' };
 const CUSTOMER = '9222222221';
 const TEST_PIN = '399999';
 let base = '';
@@ -76,7 +77,7 @@ describe('realtime, pincodes, coverage and account deletion', () => {
     const id = created.body.order.id;
     const custGetsQuote = waitFor(custSock, 'notification');
     const custOrderUpdate = waitFor(custSock, 'order:update');
-    await call('POST', `/admin/orders/${id}/quote`, admin.token, { amount: 100 });
+    await call('POST', `/admin/orders/${id}/quote`, admin.token, { amount: 100, bill: BILL });
     assert.equal((await custGetsQuote).type, 'quote_ready');
     assert.equal((await custOrderUpdate).status, 'quoted');
 

@@ -25,9 +25,9 @@ export const endpoints = {
   updateAddress: (id: string, b: AddressInput) => api<{ address: Address }>('PUT', `/addresses/${id}`, b),
   deleteAddress: (id: string) => api<void>('DELETE', `/addresses/${id}`),
 
-  signUpload: () => api<UploadSignature>('POST', '/uploads/sign'),
+  signUpload: (purpose: 'prescription' | 'bill' = 'prescription') => api<UploadSignature>('POST', '/uploads/sign', { purpose }),
   createOrder: (b: NewOrderInput) => api<{ order: Order }>('POST', '/orders', b, { timeoutMs: 30000 }),
-  orders: (scope: 'completed' | 'active', offset = 0) => api<{ orders: OrderSummary[]; hasMore: boolean }>('GET', `/orders?scope=${scope}&offset=${offset}`),
+  orders: (scope: 'completed' | 'cancelled' | 'active', offset = 0, range?: { from?: string; to?: string }) => api<{ orders: OrderSummary[]; hasMore: boolean }>('GET', `/orders?${new URLSearchParams({ scope, offset: String(offset), ...(range?.from ? { from: range.from } : {}), ...(range?.to ? { to: range.to } : {}) })}`),
   order: (id: string) => api<{ order: Order }>('GET', `/orders/${id}`),
   tracking: (id: string) => api<Tracking>('GET', `/orders/${id}/tracking`),
   cancelOrder: (id: string, reason: string) => api<{ order: Order }>('POST', `/orders/${id}/cancel`, { reason }),
@@ -39,9 +39,10 @@ export const endpoints = {
   registerDevice: (token: string, platform: 'android' | 'ios') => api<void>('POST', '/devices', { token, platform }),
 
   admin: {
-    dashboard: () => api<{ requested: number; awaitingPayment: number; readyToDispatch: number; outForDelivery: number; deliveredToday: number; salesToday: number }>('GET', '/admin/dashboard'),
+    dashboard: () => api<{ isOpen: boolean; requested: number; awaitingPayment: number; readyToDispatch: number; outForDelivery: number; deliveredToday: number; salesToday: number }>('GET', '/admin/dashboard'),
     orders: (status?: string, search?: string) => api<{ orders: OrderSummary[] }>('GET', `/admin/orders?${new URLSearchParams({ ...(status ? { status } : {}), ...(search ? { search } : {}) })}`),
-    quote: (id: string, amount: number) => api<{ order: Order }>('POST', `/admin/orders/${id}/quote`, { amount }),
+    quote: (id: string, amount: number, bill: { publicId: string; mimeType: string; sizeBytes?: number; name?: string }) => api<{ order: Order }>('POST', `/admin/orders/${id}/quote`, { amount, bill }),
+    setStoreOpen: (isOpen: boolean) => api<{ isOpen: boolean }>('PUT', '/admin/store-open', { isOpen }),
     reject: (id: string, reason: string) => api<{ order: Order }>('POST', `/admin/orders/${id}/reject`, { reason }),
     cancel: (id: string, reason: string) => api<{ order: Order }>('POST', `/admin/orders/${id}/cancel`, { reason }),
     assign: (id: string, partnerId: string) => api<{ order: Order }>('POST', `/admin/orders/${id}/assign`, { partnerId }),

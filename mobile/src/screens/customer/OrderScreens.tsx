@@ -17,24 +17,68 @@ import { useLoad } from '../../hooks';
 import type { CustomerStackParamList, CustomerTabParamList } from '../../navigation/types';
 import { useSession } from '../../store/session';
 import { colors, radius, spacing, type } from '../../theme';
-import { formatDate, formatDateTime, formatMoney, statusTone } from '../../utils';
+import { formatDate, formatDateTime, formatMoney, istDate, maskDmy, parseDmy, statusTone } from '../../utils';
 
 type Nav = NativeStackNavigationProp<CustomerStackParamList>;
 
 const ListSkeleton = () => <View style={{ gap: 14, padding: spacing.lg }}>{[0, 1, 2].map((i) => <Skeleton key={i} h={118} r={16} />)}</View>;
 
+type OrdersTab = 'completed' | 'cancelled';
+type Preset = 'all' | 'today' | '7d' | '30d' | 'custom';
+const PRESETS: Preset[] = ['all', 'today', '7d', '30d', 'custom'];
+
 export function OrdersScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Orders'>) {
   const { t } = useTranslation();
   const nav = useNavigation<Nav>();
   const content = useContentStyle(true);
-  const { data, error, loading, reload } = useLoad(() => endpoints.orders('completed'), ['order:update']);
+  const [tab, setTab] = useState<OrdersTab>('completed');
+  const [preset, setPreset] = useState<Preset>('all');
+  const [fromText, setFromText] = useState('');
+  const [toText, setToText] = useState('');
+  const from = fromText ? parseDmy(fromText) : null, to = toText ? parseDmy(toText) : null;
+  const customBad = preset === 'custom' && ((fromText.length === 10 && !from) || (toText.length === 10 && !to) || (from && to && from > to));
+  const range = preset === 'today' ? { from: istDate(), to: istDate() } : preset === '7d' ? { from: istDate(-6) } : preset === '30d' ? { from: istDate(-29) } : preset === 'custom' && !customBad ? { from: from ?? undefined, to: to ?? undefined } : undefined;
+  const key = `${tab}|${range?.from ?? ''}|${range?.to ?? ''}`;
+  const { data, error, loading, reload } = useLoad(() => endpoints.orders(tab, 0, range), ['order:update']);
+  useEffect(() => { void reload(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  const filtered = key !== 'completed||' && key !== 'cancelled||';
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.white }} edges={['top']}>
       <Enter><Text style={[type.h2, s.heading]}>{t('orders.title')}</Text></Enter>
-      {loading && !data ? <ListSkeleton /> : error && !data ? <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} /> : !data?.orders.length ? <Message icon="receipt-outline" title={t('orders.emptyTitle')} text={t('orders.empty')} /> :
+      <View style={[s.segWrap, content]}>
+        {(['completed', 'cancelled'] as const).map((k) => (
+          <Tap key={k} accessibilityRole="tab" accessibilityState={{ selected: tab === k }} onPress={() => setTab(k)} scaleTo={0.97} style={[s.seg, tab === k && s.segOn]}>
+            <Icon name={k === 'completed' ? 'checkmark-done' : 'close-circle'} size={18} color={tab === k ? colors.white : colors.navy} />
+            <Text style={[type.smallMedium, { color: tab === k ? colors.white : colors.navy }]}>{t(`orders.tab_${k}`)}</Text>
+          </Tap>
+        ))}
+      </View>
+      <View style={content}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
+          <View style={s.calIcon}><Icon name="calendar" size={18} color={colors.primary} /></View>
+          {PRESETS.map((p) => (
+            <Tap key={p} accessibilityRole="button" accessibilityState={{ selected: preset === p }} onPress={() => setPreset(p)} scaleTo={0.94} style={[s.chip, preset === p && s.chipOn]}>
+              <Text style={[type.smallMedium, { color: preset === p ? colors.white : colors.navy }]}>{t(`orders.filter_${p}`)}</Text>
+            </Tap>
+          ))}
+        </ScrollView>
+        {preset === 'custom' ? (
+          <View style={s.dateRow}>
+            <TextInput value={fromText} onChangeText={(v) => setFromText(maskDmy(v))} placeholder={t('orders.fromDate')} placeholderTextColor={colors.muted} keyboardType="number-pad" maxLength={10} accessibilityLabel={t('orders.fromDate')} style={[type.body, s.dateInput, (fromText.length === 10 && !from) && { borderColor: colors.red }]} />
+            <Icon name="arrow-forward" size={16} color={colors.muted} />
+            <TextInput value={toText} onChangeText={(v) => setToText(maskDmy(v))} placeholder={t('orders.toDate')} placeholderTextColor={colors.muted} keyboardType="number-pad" maxLength={10} accessibilityLabel={t('orders.toDate')} style={[type.body, s.dateInput, (toText.length === 10 && !to) && { borderColor: colors.red }]} />
+          </View>
+        ) : null}
+        {customBad ? <Text style={[type.small, { color: colors.red, paddingHorizontal: spacing.lg }]}>{t('orders.dateInvalid')}</Text> : null}
+      </View>
+      {loading && !data?.orders.length ? <ListSkeleton /> : error && !data ? <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} /> : !data?.orders.length ? (
+        <Message icon={tab === 'completed' ? 'receipt-outline' : 'close-circle-outline'} title={filtered ? t('orders.noMatchTitle') : t(`orders.empty_${tab}`)} text={filtered ? t('orders.noMatch') : t(`orders.emptyHelp_${tab}`)} />
+      ) : (
         <ScrollView contentContainerStyle={[{ padding: spacing.lg, paddingBottom: spacing.xxxl }, content]} refreshControl={<RefreshControl refreshing={loading && !!data} onRefresh={reload} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
           <ResponsiveGrid>{data.orders.map((o, i) => <OrderCard key={o.id} order={o} index={i} onPress={() => nav.navigate('OrderDetail', { orderId: o.id })} />)}</ResponsiveGrid>
-        </ScrollView>}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -145,6 +189,32 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
         </Enter>
 
         <Enter index={5}>
+          <Text style={[type.h3, s.sec]}>{t('order.store')}</Text>
+          <View style={s.infoRow}><Icon name="storefront" size={22} /><View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]}>{o.store.name}</Text>{o.store.address ? <Text style={[type.small, { color: colors.secondary }]}>{o.store.address}</Text> : null}</View></View>
+          {o.partner?.name ? <>
+            <Text style={[type.h3, s.sec]}>{t('order.deliveryPartner')}</Text>
+            <View style={s.infoRow}><Icon name="bicycle" size={22} /><View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]}>{o.partner.name}</Text></View></View>
+          </> : null}
+          {o.quotedAmount !== null ? <>
+            <Text style={[type.h3, s.sec]}>{t('order.payment')}</Text>
+            <View style={s.infoRow}><Icon name="card" size={22} /><View style={{ flex: 1 }}>
+              <Text style={[type.bodyMedium, { color: colors.text }]}>{formatMoney(o.quotedAmount)}{o.paymentMethod ? ` · ${t(`pay.${o.paymentMethod}`)}` : ''}</Text>
+              {o.paymentStatus ? <Text style={[type.small, { color: colors.secondary }]}>{t('order.paymentStatus', { status: o.paymentStatus.replace(/_/g, ' ') })}</Text> : null}
+            </View></View>
+          </> : null}
+          {o.bill ? <>
+            <Text style={[type.h3, s.sec]}>{t('order.bill')}</Text>
+            <View style={s.billCard}>
+              <Icon name="document-text" size={28} />
+              <View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={1}>{o.bill.name}</Text><Text style={[type.small, { color: colors.secondary }]}>{o.bill.mimeType === 'application/pdf' ? 'PDF' : 'Image'}{o.bill.uploadedAt ? ` · ${formatDateTime(o.bill.uploadedAt)}` : ''}</Text></View>
+              <Button small title={t('order.downloadBill')} icon="download" onPress={() => { if (o.bill?.url) void Linking.openURL(o.bill.url); }} disabled={!o.bill.url} />
+            </View>
+          </> : null}
+          {o.deliveredAt ? <Text style={[type.bodyMedium, { color: colors.green, marginTop: spacing.md }]}>{t('order.deliveredOn', { time: formatDateTime(o.deliveredAt) })}</Text> : null}
+          {o.history.length > 0 ? <>
+            <Text style={[type.h3, s.sec]}>{t('order.activity')}</Text>
+            {o.history.map((h, i) => <View key={i} style={s.actRow}><View style={s.actDot} /><View style={{ flex: 1 }}><Text style={[type.body, { color: colors.text }]}>{t(`status.${h.status}`)}</Text><Text style={[type.small, { color: colors.secondary }]}>{formatDateTime(h.created_at)}{h.reason ? ` · ${h.reason}` : ''}</Text></View></View>)}
+          </> : null}
           {storePhone ? <Button title={t('order.callStore')} variant="outline" icon="call" onPress={() => Linking.openURL(`tel:${storePhone}`)} style={{ marginTop: spacing.xl }} /> : null}
           {canCancel ? <Button title={t('order.cancel')} variant="danger" onPress={() => { setErr(''); setCancelOpen(true); }} style={{ marginTop: spacing.md }} /> : null}
           {o.status === 'ready_to_dispatch' || o.status === 'awaiting_payment' ? <Text style={[type.small, { color: colors.secondary, marginTop: spacing.sm }]}>{t('order.cancelNote')}</Text> : null}
@@ -262,6 +332,19 @@ export function NotificationsScreen() {
 }
 
 const s = StyleSheet.create({
+  segWrap: { flexDirection: 'row', gap: 10, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  seg: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
+  segOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  chips: { gap: 8, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, alignItems: 'center' },
+  calIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+  chip: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
+  chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  dateInput: { flex: 1, paddingVertical: 10, paddingHorizontal: 14, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, color: colors.text, textAlign: 'center' },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
+  billCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder },
+  actRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 5 },
+  actDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary, marginTop: 7 },
   heading: { color: colors.text, textAlign: 'center', paddingVertical: spacing.md },
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },

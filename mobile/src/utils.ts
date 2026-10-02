@@ -21,3 +21,20 @@ export const statusTone = (s: OrderStatus): 'green' | 'red' | 'amber' | 'blue' =
 
 export const ACTIVE_STATUSES: OrderStatus[] = ['requested', 'quoted', 'accepted', 'awaiting_payment', 'ready_to_dispatch', 'out_for_delivery'];
 export const callPhone = (phone: string) => `tel:${phone}`;
+
+/** Today's date in India as YYYY-MM-DD, optionally shifted by whole days. */
+export const istDate = (shiftDays = 0) => new Date(Date.now() + 5.5 * 3600000 + shiftDays * 86400000).toISOString().slice(0, 10);
+/** DD/MM/YYYY typed by a person -> YYYY-MM-DD, or null when it is not a real date. */
+export function parseDmy(text: string): string | null {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text.trim());
+  if (!m) return null;
+  const [, d, mo, y] = m;
+  const iso = `${y}-${mo}-${d}`;
+  const dt = new Date(`${iso}T00:00:00Z`);
+  return !Number.isNaN(dt.getTime()) && dt.toISOString().slice(0, 10) === iso ? iso : null;
+}
+/** Adds the slashes while the person types digits. */
+export const maskDmy = (text: string) => {
+  const d = text.replace(/\D/g, '').slice(0, 8);
+  return d.length > 4 ? `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}` : d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
+};

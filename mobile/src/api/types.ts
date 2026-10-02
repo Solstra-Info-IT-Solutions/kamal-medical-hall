@@ -28,6 +28,10 @@ export interface Order {
   items: { id: string; name: string; quantity: number }[];
   prescriptions: { id: string; mimeType: string; sizeBytes: number | null; url: string | null }[];
   history: { status: OrderStatus; reason: string | null; created_at: string }[];
+  deliveredAt: string | null;
+  /** The bill the store attached to the amount request (not shown to delivery partners). */
+  bill: { name: string; mimeType: string; sizeBytes: number | null; uploadedAt: string | null; url: string | null } | null;
+  store: { name: string; address: string | null; phone: string | null };
   customer?: { id: string; name: string | null; phone: string | null };
   /** Delivery partner has accepted the assignment (customers only see the partner after this). */
   partnerAccepted: boolean;

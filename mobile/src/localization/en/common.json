@@ -211,7 +211,23 @@
   "orders": {
     "title": "My orders",
     "emptyTitle": "No completed orders",
-    "empty": "Your delivered orders will appear here. Ongoing orders are shown on the home screen."
+    "empty": "Your delivered orders will appear here. Ongoing orders are shown on the home screen.",
+    "tab_completed": "Delivered",
+    "tab_cancelled": "Cancelled",
+    "filter_all": "All dates",
+    "filter_today": "Today",
+    "filter_7d": "Last 7 days",
+    "filter_30d": "Last 30 days",
+    "filter_custom": "Pick dates",
+    "fromDate": "From DD/MM/YYYY",
+    "toDate": "To DD/MM/YYYY",
+    "dateInvalid": "Enter real dates as DD/MM/YYYY, with the start before the end.",
+    "noMatchTitle": "No orders in this period",
+    "noMatch": "Try a different date range.",
+    "empty_completed": "No delivered orders yet",
+    "emptyHelp_completed": "Orders that reach you will show up here.",
+    "empty_cancelled": "No cancelled orders",
+    "emptyHelp_cancelled": "Orders you or the store cancel will show up here."
   },
   "order": {
     "waitingReview": "The pharmacy is checking your order. We will notify you with the amount.",
@@ -232,7 +248,15 @@
     "confirmCancel": "Cancel order",
     "cancelNote": "You can cancel only until the order goes out for delivery.",
     "rejected": "The pharmacy could not accept this order",
-    "cancelled": "Order cancelled"
+    "cancelled": "Order cancelled",
+    "store": "Store",
+    "deliveryPartner": "Delivery partner",
+    "payment": "Payment",
+    "paymentStatus": "Status: {{status}}",
+    "bill": "Bill",
+    "downloadBill": "Download",
+    "deliveredOn": "Delivered on {{time}}",
+    "activity": "Order activity"
   },
   "pay": {
     "razorpay": "Pay online",
@@ -547,7 +571,22 @@
     "termsUpdated": "Updated {{date}}",
     "closeStoreTitle": "Close the store?",
     "closeStore": "Close store",
-    "closeStoreMsg": "All customers and delivery partners will be notified. Partners who have not worked today are marked on paid leave, and new orders stop until you reopen."
+    "closeStoreMsg": "All customers and delivery partners will be notified. Partners who have not worked today are marked on paid leave, and new orders stop until you reopen.",
+    "shopIsOpen": "Shop is open",
+    "shopIsClosed": "Shop is closed",
+    "shopOpenHelp": "Customers can place orders.",
+    "shopClosedHelp": "New orders are paused. Switch on to reopen.",
+    "billLabel": "Bill",
+    "billAttach": "Attach the bill",
+    "billChange": "Tap to change the file",
+    "billHint": "PDF, JPG or PNG up to 10 MB",
+    "billType": "Please attach a PDF, JPG or PNG file.",
+    "billTooBig": "The bill must be 10 MB or smaller.",
+    "billPickFailed": "Could not open that file. Please try again.",
+    "billRequired": "Please attach the bill before sending the amount.",
+    "quoteSentTitle": "Amount request sent",
+    "quoteSentMsg": "{{order}}: {{amount}} and the bill have been sent to the customer.",
+    "viewBill": "View bill"
   },
   "steps": {
     "address": "Address",

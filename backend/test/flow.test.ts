@@ -5,6 +5,7 @@ import { bootstrap, createServer } from '../src/server.js';
 import { closeRealtime } from '../src/realtime.js';
 import { pool } from '../src/db.js';
 
+const BILL = { publicId: 'bills/test/bill-1', mimeType: 'application/pdf', sizeBytes: 1000, name: 'bill.pdf' };
 const CUSTOMER = '9111111111';
 const OTHER = '9111111112';
 const SHOP = { lat: 26.85, lng: 75.76 };
@@ -75,7 +76,7 @@ describe('order lifecycle with partner duty, acceptance and return-to-shop', () 
     assert.equal((await call('GET', '/admin/dashboard', cust.token)).status, 403);
 
     const admin = await login('9000000001');
-    assert.equal((await call('POST', `/admin/orders/${id}/quote`, admin.token, { amount: 240 })).body.order.status, 'quoted');
+    assert.equal((await call('POST', `/admin/orders/${id}/quote`, admin.token, { amount: 240, bill: BILL })).body.order.status, 'quoted');
     assert.equal((await call('POST', `/orders/${id}/accept-quote`, cust.token, { paymentMethod: 'cod' })).body.order.status, 'ready_to_dispatch');
 
     const partners = (await call('GET', '/admin/partners', admin.token)).body.partners;
@@ -156,7 +157,7 @@ describe('order lifecycle with partner duty, acceptance and return-to-shop', () 
     const addrs = await call('GET', '/addresses', cust.token);
     const id = await newOrder(cust.token, addrs.body.addresses[0].id, 'test-key-0002');
     const admin = await login('9000000001');
-    await call('POST', `/admin/orders/${id}/quote`, admin.token, { amount: 100 });
+    await call('POST', `/admin/orders/${id}/quote`, admin.token, { amount: 100, bill: BILL });
     await call('POST', `/orders/${id}/accept-quote`, cust.token, { paymentMethod: 'cod' });
     const partner = await login('9000000002');
     await call('POST', '/partner/duty', partner.token, { onDuty: true });
@@ -180,7 +181,7 @@ describe('order lifecycle with partner duty, acceptance and return-to-shop', () 
     const addrs = await call('GET', '/addresses', cust.token);
     const id = await newOrder(cust.token, addrs.body.addresses[0].id, 'test-key-0003');
     const admin = await login('9000000001');
-    await call('POST', `/admin/orders/${id}/quote`, admin.token, { amount: 90 });
+    await call('POST', `/admin/orders/${id}/quote`, admin.token, { amount: 90, bill: BILL });
     await call('POST', `/orders/${id}/accept-quote`, cust.token, { paymentMethod: 'cod' });
     const partner = await login('9000000002');
     const p = (await call('GET', '/admin/partners', admin.token)).body.partners.find((x: any) => x.phone === '9000000002');

@@ -50,7 +50,8 @@ adminRouter.get('/dashboard', async (_req, res) => {
            coalesce(sum(quoted_amount) filter (where status = 'delivered' and updated_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata'), 0) as sales_today
     from orders`);
   const r = rows[0];
-  res.json({ requested: +r.requested, awaitingPayment: +r.awaiting, readyToDispatch: +r.ready, outForDelivery: +r.out_for_delivery, deliveredToday: +r.delivered_today, salesToday: Number(r.sales_today) });
+  const open = (await pool.query('select is_open from store_settings where id = 1')).rows[0]?.is_open ?? true;
+  res.json({ isOpen: open, requested: +r.requested, awaitingPayment: +r.awaiting, readyToDispatch: +r.ready, outForDelivery: +r.out_for_delivery, deliveredToday: +r.delivered_today, salesToday: Number(r.sales_today) });
 });
 
 adminRouter.get('/orders', async (req, res) => {
@@ -68,11 +69,19 @@ adminRouter.get('/orders', async (req, res) => {
 });
 
 adminRouter.post('/orders/:id/quote', async (req, res) => {
-  const { amount } = parse(z.object({ amount: z.number().positive().max(500000) }), req.body);
+  // The bill is mandatory: the customer downloads it from the order.
+  const { amount, bill } = parse(z.object({
+    amount: z.number().positive().max(500000),
+    bill: z.object({ publicId: z.string().min(3).max(300), mimeType: z.string().min(3).max(100), sizeBytes: z.number().int().min(0).max(30_000_000).optional(), name: z.string().trim().max(120).optional() }, { error: 'Please attach the bill.' }),
+  }), req.body);
+  if (!bill.publicId.startsWith('bills/')) throw bad('Invalid bill file.', 'invalid_file');
   const order = await loadOrder(String(req.params.id), req.user!);
   const expires = new Date(Date.now() + config.quoteValidHours * 3600000);
   await tx(async (c) => {
-    await transition(c, order.id, ['requested', 'quoted'], 'quoted', req.user!.id, { quoted_amount: amount, quote_expires_at: expires, reviewed_by: req.user!.id });
+    await transition(c, order.id, ['requested', 'quoted'], 'quoted', req.user!.id, {
+      quoted_amount: amount, quote_expires_at: expires, reviewed_by: req.user!.id,
+      bill_public_id: bill.publicId, bill_mime: bill.mimeType, bill_name: bill.name ?? null, bill_size: bill.sizeBytes ?? null, bill_uploaded_at: new Date(),
+    });
     await notify(order.customer!.id, order.id, 'quote_ready', 'Your order amount is ready', `${order.orderNumber}: pay ₹${amount} (free delivery). Please review and accept.`, c);
   });
   res.json({ order: await loadOrder(order.id, req.user!) });
@@ -335,6 +344,19 @@ adminRouter.put('/settings', async (req, res) => {
   else if (before === false && s.isOpen) await reopenStore(c);
   });
   res.status(204).end();
+});
+
+/** Quick open / closed switch. Closing notifies customers and partners and gives partners paid leave. */
+adminRouter.put('/store-open', async (req, res) => {
+  const { isOpen } = parse(z.object({ isOpen: z.boolean() }), req.body);
+  await tx(async (c) => {
+    const before = (await c.query('select is_open from store_settings where id = 1 for update')).rows[0]?.is_open as boolean | undefined;
+    await c.query('update store_settings set is_open = $1 where id = 1', [isOpen]);
+    if (before && !isOpen) await closeStore(c);
+    else if (before === false && isOpen) await reopenStore(c);
+  });
+  emitAdmins('store:update', { isOpen });
+  res.json({ isOpen });
 });
 
 // ---- Terms & conditions (shown to customers in the app) ----
