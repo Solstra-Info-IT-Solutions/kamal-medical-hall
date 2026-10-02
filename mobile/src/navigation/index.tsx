@@ -7,7 +7,7 @@ import { Platform, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { Icon, type IconName } from '../components/ui';
 import { LoginScreen, OtpScreen, SignupScreen, WelcomeScreen } from '../screens/auth/AuthScreens';
-import { AllOrdersScreen, AttendanceScreen, CustomersScreen, DashboardScreen, MoreScreen, OrderReviewScreen, PartnerAreasScreen, PaymentDetailsScreen, PincodesScreen, ReportsScreen, RequestsScreen, StoreSettingsScreen, TeamScreen } from '../screens/admin/AdminScreens';
+import { AllOrdersScreen, AttendanceScreen, CustomersScreen, DashboardScreen, MoreScreen, OrderReviewScreen, PartnerAreasScreen, PaymentDetailsScreen, PincodesScreen, ReportsScreen, RequestsScreen, StoreSettingsScreen, TeamScreen, TermsScreen } from '../screens/admin/AdminScreens';
 import { AddressFormScreen, AddressesScreen } from '../screens/customer/AddressScreens';
 import { CartScreen } from '../screens/customer/CartScreen';
 import { DeliveryTimeScreen, ReviewScreen, SuccessScreen } from '../screens/customer/CheckoutScreens';
@@ -16,7 +16,7 @@ import { TypeMedicinesScreen, UploadScreen } from '../screens/customer/OrderInpu
 import { NotificationsScreen, OrderDetailScreen, OrdersScreen, PaymentScreen } from '../screens/customer/OrderScreens';
 import { TrackScreen } from '../screens/customer/TrackScreen';
 import { EditProfileScreen, HelpScreen, LanguageScreen, LegalScreen, ProfileScreen } from '../screens/customer/ProfileScreens';
-import { JobScreen, PartnerHomeScreen, PartnerOrdersScreen } from '../screens/partner/PartnerScreens';
+import { JobScreen, MyAttendanceScreen, PartnerHomeScreen, PartnerOrdersScreen } from '../screens/partner/PartnerScreens';
 import { useLayout } from '../layout';
 import { useCart } from '../store/cart';
 import { useSession } from '../store/session';
@@ -137,6 +137,7 @@ function AdminNavigator() {
       <AStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: t('admin.attendance') }} />
       <AStack.Screen name="Pincodes" component={PincodesScreen} options={{ title: t('admin.pincodes') }} />
       <AStack.Screen name="PartnerAreas" component={PartnerAreasScreen} options={({ route }) => ({ title: route.params.name })} />
+      <AStack.Screen name="Terms" component={TermsScreen} options={{ title: t('admin.terms') }} />
       <AStack.Screen name="StoreSettings" component={StoreSettingsScreen} options={{ title: t('admin.settings') }} />
       <AStack.Screen name="Language" component={LanguageScreen} options={{ title: t('profile.language') }} />
     </AStack.Navigator>
@@ -160,6 +161,7 @@ function PartnerNavigator() {
     <PStack.Navigator screenOptions={headerOptions}>
       <PStack.Screen name="Tabs" component={PartnerTabs} options={{ headerShown: false }} />
       <PStack.Screen name="Job" component={JobScreen} options={{ title: t('screens.orderDetail') }} />
+      <PStack.Screen name="MyAttendance" component={MyAttendanceScreen} options={{ title: t('partner.myAttendance') }} />
       <PStack.Screen name="Language" component={LanguageScreen} options={{ title: t('profile.language') }} />
     </PStack.Navigator>
   );

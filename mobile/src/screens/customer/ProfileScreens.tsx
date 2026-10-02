@@ -7,7 +7,8 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
 import { Enter, Tap } from '../../components/motion';
-import { Button, Card, Icon, Loading, Message, Screen, TextField, type IconName } from '../../components/ui';
+import { Button, Card, ErrorView, Icon, Loading, Message, Screen, TextField, type IconName } from '../../components/ui';
+import { formatDate } from '../../utils';
 import { ApiError } from '../../api/client';
 import { notice, showDialog } from '../../dialog';
 import { useLoad } from '../../hooks';
@@ -126,7 +127,16 @@ export function HelpScreen() {
 
 export function LegalScreen() {
   const { t } = useTranslation();
-  return <Message icon="document-text-outline" title={t('legal.title')} text={t('legal.pending')} />;
+  const { data, error, loading, reload } = useLoad(() => endpoints.terms());
+  if (loading && !data) return <Loading />;
+  if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
+  if (!data?.text) return <Message icon="document-text-outline" title={t('legal.title')} text={t('legal.pending')} />;
+  return (
+    <Screen>
+      <Enter><Text style={[type.body, { color: colors.text, lineHeight: 24 }]} selectable>{data.text}</Text></Enter>
+      {data.updatedAt ? <Text style={[type.small, { color: colors.muted, marginTop: spacing.lg }]}>{t('legal.updated', { date: formatDate(data.updatedAt) })}</Text> : null}
+    </Screen>
+  );
 }
 
 const s = StyleSheet.create({

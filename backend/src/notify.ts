@@ -11,6 +11,19 @@ export async function notify(userId: string, orderId: string | null, type: strin
   if (hasAfterCommit(db)) db.afterCommit(deliver); else deliver();
 }
 
+/** One notification to many people (store open/close announcements). */
+export async function notifyMany(userIds: string[], type: string, title: string, body: string, db: Queryable = pool) {
+  if (!userIds.length) return;
+  const { rows } = await db.query('insert into notifications (user_id, order_id, type, title, body) select u, null, $2, $3, $4 from unnest($1::uuid[]) as u returning id, user_id', [userIds, type, title, body]);
+  const deliver = () => {
+    for (const r of rows) {
+      emitUser(r.user_id, 'notification', { id: r.id, type, title, body, orderId: null });
+      void push(r.user_id, title, body, null).catch((e) => console.error('push failed', e));
+    }
+  };
+  if (hasAfterCommit(db)) db.afterCommit(deliver); else deliver();
+}
+
 export async function notifyAdmins(orderId: string | null, type: string, title: string, body: string, db: Queryable = pool) {
   const { rows } = await db.query("select id from users where role = 'admin'");
   for (const row of rows) await notify(row.id, orderId, type, title, body, db);

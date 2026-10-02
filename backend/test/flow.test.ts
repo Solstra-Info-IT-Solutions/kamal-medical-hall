@@ -198,7 +198,7 @@ describe('order lifecycle with partner duty, acceptance and return-to-shop', () 
     const att = (await call('GET', '/admin/attendance?days=7', admin.token)).body;
     assert.equal(att.dates.length, 7);
     assert.ok(att.summary.present >= 1);
-    assert.equal(att.history.find((h: any) => h.name === 'Staff One').days.at(-1), true);
+    assert.equal(att.history.find((h: any) => h.name === 'Staff One').days.at(-1), 'present');
     assert.equal((await call('POST', '/partner/duty', partner.token, { onDuty: false })).body.state, 'off');
     assert.equal((await call('GET', '/admin/partners', admin.token)).body.partners.find((x: any) => x.phone === '9000000002').onDuty, false);
   });

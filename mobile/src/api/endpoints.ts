@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { Address, AddressInput, AppNotification, Attendance, Order, OrderSummary, Partner, PartnerState, PaymentDetails, PaymentMethod, StoreConfig, StoreSettings, Tracking, User } from './types';
+import type { Address, AddressInput, AppNotification, Attendance, DutyStatus, Order, OrderSummary, Partner, PartnerAttendance, PartnerState, PaymentDetails, PaymentMethod, StoreConfig, StoreSettings, Terms, Tracking, User } from './types';
 
 export interface RazorpayIntent { orderId: string; amount: number; currency: string; keyId: string }
 export interface UploadSignature { cloudName: string; apiKey: string; signature: string; timestamp: number; folder: string; type: string }
@@ -12,6 +12,7 @@ export interface NewOrderInput {
 
 export const endpoints = {
   config: () => api<StoreConfig>('GET', '/config', undefined, { auth: false }),
+  terms: () => api<Terms>('GET', '/terms', undefined, { auth: false }),
   devLogin: (phone: string, otp: string) => api<{ token: string }>('POST', '/auth/dev-login', { phone, otp }, { auth: false }),
   session: (token: string) => api<{ user: User; needsProfile: boolean }>('POST', '/auth/session', undefined, { token }),
   me: () => api<{ user: User }>('GET', '/me'),
@@ -46,6 +47,8 @@ export const endpoints = {
     assign: (id: string, partnerId: string) => api<{ order: Order }>('POST', `/admin/orders/${id}/assign`, { partnerId }),
     unassign: (id: string) => api<{ order: Order }>('POST', `/admin/orders/${id}/unassign`),
     partners: () => api<{ partners: Partner[] }>('GET', '/admin/partners'),
+    terms: () => api<Terms>('GET', '/admin/terms'),
+    saveTerms: (text: string) => api<void>('PUT', '/admin/terms', { text }),
     attendance: (days = 7) => api<Attendance>('GET', `/admin/attendance?days=${days}`),
     addPartner: (name: string, phone: string) => api<{ id: string }>('POST', '/admin/partners', { name, phone }),
     updatePartner: (id: string, b: { active?: boolean; canCallCustomer?: boolean }) => api<void>('PATCH', `/admin/partners/${id}`, b),
@@ -64,8 +67,9 @@ export const endpoints = {
     savePaymentDetails: (b: PaymentDetails) => api<void>('PUT', '/admin/payment-details', b),
   },
   partner: {
-    me: () => api<{ state: PartnerState; isAvailable: boolean; onDuty: boolean; active: boolean; canCallCustomer: boolean; store: { lat: number; lng: number; geofenceM: number } | null }>('GET', '/partner/me'),
-    setDuty: (onDuty: boolean) => api<{ state: PartnerState; onDuty: boolean }>('POST', '/partner/duty', { onDuty }),
+    me: () => api<{ state: PartnerState; isAvailable: boolean; onDuty: boolean; dutyStatus: DutyStatus | 'absent'; paidLeave: boolean; storeOpen: boolean; active: boolean; canCallCustomer: boolean; store: { lat: number; lng: number; geofenceM: number } | null }>('GET', '/partner/me'),
+    setStatus: (status: DutyStatus) => api<{ state: PartnerState; onDuty: boolean; dutyStatus: DutyStatus | 'absent'; paidLeave: boolean }>('POST', '/partner/status', { status }),
+    attendance: (days = 14) => api<PartnerAttendance>('GET', `/partner/attendance?days=${days}`),
     orders: (scope: 'active' | 'delivered' | 'rejected') => api<{ orders: OrderSummary[] }>('GET', `/partner/orders?scope=${scope}`),
     accept: (id: string) => api<{ order: Order }>('POST', `/partner/orders/${id}/accept`),
     reject: (id: string, reason?: string) => api<{ ok: boolean }>('POST', `/partner/orders/${id}/reject`, { reason }),

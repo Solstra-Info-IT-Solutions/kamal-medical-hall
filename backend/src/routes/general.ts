@@ -23,6 +23,12 @@ general.get('/config', async (_req, res) => {
   });
 });
 
+/** Public terms & conditions text, edited by the store admin. */
+general.get('/terms', async (_req, res) => {
+  const { rows } = await pool.query('select terms_text, terms_updated_at from store_settings where id = 1');
+  res.json({ text: rows[0]?.terms_text ?? '', updatedAt: rows[0]?.terms_updated_at ?? null });
+});
+
 // Development only. The route does not exist when AUTH_MODE=firebase.
 if (config.authMode === 'dev') {
   general.post('/auth/dev-login', (req, res) => {

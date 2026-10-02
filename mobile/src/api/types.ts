@@ -43,18 +43,28 @@ export interface OrderSummary {
   partnerAccepted?: boolean; pincode?: string | null; rejectedReason?: string; respondedAt?: string;
 }
 export interface AppNotification { id: string; type: string; title: string; body: string; read: boolean; createdAt: string; orderId: string | null; orderNumber: string | null }
-export type PartnerState = 'off' | 'available' | 'reserved' | 'busy' | 'returning';
+export type PartnerState = 'off' | 'available' | 'reserved' | 'busy' | 'returning' | 'break';
+export type DutyStatus = 'on_duty' | 'off_duty' | 'on_break' | 'leave';
+export type DayStatus = 'present' | 'leave' | 'paid_leave' | 'absent';
 export interface Partner {
   id: string; name: string; phone: string; active: boolean; state: PartnerState; isAvailable: boolean; onDuty: boolean;
+  dutyStatus: DutyStatus | 'absent'; paidLeave: boolean; breakMinutes: number;
   canCallCustomer: boolean; checkedInAt: string | null; checkedOutAt: string | null; lastSeen: string | null;
   activeOrders: number; deliveredToday: number; codCollectedToday: number; pincodes: string[];
 }
 export interface Attendance {
   dates: string[];
-  today: { id: string; name: string; phone: string; state: PartnerState; present: boolean; checkedInAt: string | null; checkedOutAt: string | null }[];
-  summary: { total: number; present: number; available: number; busy: number; absent: number };
-  history: { id: string; name: string; days: boolean[] }[];
+  closedDays: string[];
+  today: { id: string; name: string; phone: string; state: PartnerState; dutyStatus: DutyStatus | 'absent'; paidLeave: boolean; present: boolean; notIn: boolean; checkedInAt: string | null; checkedOutAt: string | null; breakMinutes: number }[];
+  summary: { total: number; present: number; onDuty: number; onBreak: number; offDuty: number; onLeave: number; absent: number; available: number; busy: number };
+  history: { id: string; name: string; days: (DayStatus | null)[] }[];
 }
+export interface PartnerAttendance {
+  days: { day: string; status: DayStatus; checkedInAt: string | null; checkedOutAt: string | null; breakMinutes: number }[];
+  closedDays: string[];
+  summary: { present: number; leave: number; paidLeave: number; absent: number };
+}
+export interface Terms { text: string; updatedAt: string | null }
 export interface Tracking {
   orderId: string; orderNumber: string; status: OrderStatus;
   store: { lat: number; lng: number } | null; destination: { lat: number; lng: number } | null;

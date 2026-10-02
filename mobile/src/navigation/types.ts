@@ -32,9 +32,10 @@ export type AdminStackParamList = {
   Pincodes: undefined;
   PaymentDetails: undefined;
   Attendance: undefined;
+  Terms: undefined;
   PartnerAreas: { partnerId: string; name: string };
   Language: undefined;
 };
 
 export type PartnerTabParamList = { Home: undefined; Orders: undefined };
-export type PartnerStackParamList = { Tabs: NavigatorScreenParams<PartnerTabParamList> | undefined; Job: { orderId: string }; Language: undefined };
+export type PartnerStackParamList = { Tabs: NavigatorScreenParams<PartnerTabParamList> | undefined; Job: { orderId: string }; MyAttendance: undefined; Language: undefined };

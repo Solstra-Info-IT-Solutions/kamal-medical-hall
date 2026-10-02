@@ -6,6 +6,7 @@ import { pool, tx } from '../db.js';
 import { bad, bad as bad_, conflict, notFound, parse } from '../http.js';
 import { notify, notifyAdmins } from '../notify.js';
 import { CANCELLABLE, loadOrder, transition } from '../orderService.js';
+import { closeStore, reopenStore, setDutyStatus, type DutyStatus } from '../dutyService.js';
 import { distanceMeters, etaMinutes, releasePartner, setPartnerState, storeLocation, TODAY_IST } from '../partnerState.js';
 import { clearPincodeCache } from '../pincodes.js';
 import { emitAdmins, emitUser } from '../realtime.js';
@@ -32,7 +33,11 @@ const LIST_SQL = `
   from orders o join users c on c.id = o.customer_id left join users p on p.id = o.partner_id`;
 
 /** A partner who is flagged on duty but from an earlier day is treated as off duty. */
-const EFFECTIVE_STATE = `case when d.state in ('available','returning') and not (d.on_duty and d.on_duty_day = ${TODAY_IST}) then 'off' else d.state end`;
+const EFFECTIVE_STATE = `case when d.state in ('available','returning','break') and not (d.on_duty and d.on_duty_day = ${TODAY_IST}) then 'off' else d.state end`;
+
+/** What the partner has told us about today: on duty, off duty, on break, leave or absent. */
+const DUTY_STATUS = `case when a.status in ('leave','paid_leave') then 'leave' when a.status = 'absent' then 'absent'
+  when (${EFFECTIVE_STATE}) = 'break' then 'on_break' when d.on_duty and d.on_duty_day = ${TODAY_IST} then 'on_duty' else 'off_duty' end`;
 
 // ============================================================ Admin
 adminRouter.get('/dashboard', async (_req, res) => {
@@ -138,7 +143,7 @@ adminRouter.get('/partners', async (_req, res) => {
   const { rows } = await pool.query(`
     select u.id, u.name, u.phone, d.active, d.can_call_customer, ${EFFECTIVE_STATE} as state,
       (d.on_duty and d.on_duty_day = ${TODAY_IST}) as on_duty, d.last_seen, d.last_lat, d.last_lng,
-      a.checked_in_at, a.checked_out_at,
+      a.checked_in_at, a.checked_out_at, ${DUTY_STATUS} as duty_status, (a.status = 'paid_leave') as paid_leave, coalesce(a.break_minutes,0) as break_minutes,
       (select count(*) from orders o where o.partner_id = u.id and o.status in ('ready_to_dispatch','out_for_delivery')) as active_orders,
       (select count(*) from assignments x where x.partner_id = u.id and x.status = 'completed' and x.completed_at >= (${TODAY_IST})::timestamp at time zone 'Asia/Kolkata') as delivered_today,
       (select coalesce(array_agg(pp.pincode order by pp.pincode), '{}') from partner_pincodes pp where pp.partner_id = u.id) as pincodes,
@@ -149,7 +154,7 @@ adminRouter.get('/partners', async (_req, res) => {
     order by u.name`);
   res.json({ partners: rows.map((r) => ({
     id: r.id, name: r.name, phone: r.phone, active: r.active, state: r.state, isAvailable: r.state === 'available', onDuty: r.on_duty,
-    canCallCustomer: r.can_call_customer, checkedInAt: r.on_duty ? r.checked_in_at : r.checked_in_at ?? null, checkedOutAt: r.checked_out_at, lastSeen: r.last_seen,
+    dutyStatus: r.duty_status, paidLeave: r.paid_leave, breakMinutes: +r.break_minutes, canCallCustomer: r.can_call_customer, checkedInAt: r.on_duty ? r.checked_in_at : r.checked_in_at ?? null, checkedOutAt: r.checked_out_at, lastSeen: r.last_seen,
     activeOrders: +r.active_orders, deliveredToday: +r.delivered_today, codCollectedToday: Number(r.cod_today), pincodes: r.pincodes,
   })) });
 });
@@ -157,26 +162,37 @@ adminRouter.get('/partners', async (_req, res) => {
 /** Attendance for today plus a day-by-day strip for the last N days. */
 adminRouter.get('/attendance', async (req, res) => {
   const { days } = parse(z.object({ days: z.coerce.number().int().min(1).max(31).default(7) }), req.query);
-  const [partners, marks] = await Promise.all([
-    pool.query(`select u.id, u.name, u.phone, d.active, ${EFFECTIVE_STATE} as state, a.checked_in_at, a.checked_out_at
+  const [partners, marks, closed] = await Promise.all([
+    pool.query(`select u.id, u.name, u.phone, d.active, ${EFFECTIVE_STATE} as state, ${DUTY_STATUS} as duty_status, (a.status = 'paid_leave') as paid_leave,
+                  a.checked_in_at, a.checked_out_at, coalesce(a.break_minutes, 0) as break_minutes
                 from users u join delivery_partners d on d.user_id = u.id left join attendance a on a.partner_id = u.id and a.day = ${TODAY_IST}
                 where d.active order by u.name`),
-    pool.query(`select partner_id, to_char(day, 'YYYY-MM-DD') as day from attendance where day > ${TODAY_IST} - $1::int`, [days]),
+    pool.query(`select partner_id, to_char(day, 'YYYY-MM-DD') as day, status from attendance where day > ${TODAY_IST} - $1::int`, [days]),
+    pool.query("select to_char(day, 'YYYY-MM-DD') as day from store_closed_days"),
   ]);
   const dates = Array.from({ length: days }, (_, i) => new Date(Date.now() + 5.5 * 3600000 - (days - 1 - i) * 86400000).toISOString().slice(0, 10));
-  const present = new Map<string, Set<string>>();
-  for (const m of marks.rows) { if (!present.has(m.partner_id)) present.set(m.partner_id, new Set()); present.get(m.partner_id)!.add(m.day); }
-  const today = partners.rows.map((r) => ({ id: r.id, name: r.name, phone: r.phone, state: r.state, present: r.checked_in_at != null, checkedInAt: r.checked_in_at, checkedOutAt: r.checked_out_at }));
+  const marked = new Map<string, Map<string, string>>();
+  for (const m of marks.rows) { if (!marked.has(m.partner_id)) marked.set(m.partner_id, new Map()); marked.get(m.partner_id)!.set(m.day, m.status); }
+  const today = partners.rows.map((r) => ({
+    id: r.id, name: r.name, phone: r.phone, state: r.state, dutyStatus: r.duty_status as string, paidLeave: r.paid_leave === true,
+    present: r.checked_in_at != null, checkedInAt: r.checked_in_at, checkedOutAt: r.checked_out_at, breakMinutes: +r.break_minutes,
+    // Nobody has checked in or applied for leave: counted as absent for today.
+    notIn: r.duty_status === 'off_duty' && r.checked_in_at == null,
+  }));
+  const n = (f: (p: (typeof today)[number]) => boolean) => today.filter(f).length;
   res.json({
     dates,
+    closedDays: closed.rows.map((r) => r.day),
     today,
     summary: {
-      total: today.length, present: today.filter((p) => p.present).length,
-      available: today.filter((p) => p.state === 'available').length,
-      busy: today.filter((p) => ['reserved', 'busy', 'returning'].includes(p.state)).length,
-      absent: today.filter((p) => !p.present).length,
+      total: today.length, present: n((p) => p.present),
+      onDuty: n((p) => p.dutyStatus === 'on_duty'), onBreak: n((p) => p.dutyStatus === 'on_break'),
+      offDuty: n((p) => p.dutyStatus === 'off_duty' && p.present), onLeave: n((p) => p.dutyStatus === 'leave'),
+      absent: n((p) => p.notIn || p.dutyStatus === 'absent'),
+      available: n((p) => p.state === 'available'),
+      busy: n((p) => ['reserved', 'busy', 'returning'].includes(p.state)),
     },
-    history: partners.rows.map((r) => ({ id: r.id, name: r.name, days: dates.map((d) => present.get(r.id)?.has(d) ?? false) })),
+    history: partners.rows.map((r) => ({ id: r.id, name: r.name, days: dates.map((d) => marked.get(r.id)?.get(d) ?? null) })),
   });
 });
 
@@ -219,7 +235,7 @@ adminRouter.post('/partners/:id/state', async (req, res) => {
     if (['reserved', 'busy'].includes(p.rows[0].state)) throw conflict('This partner has an order in progress.', 'has_active_order');
     if (state === 'available' && !p.rows[0].active) throw conflict('This partner is inactive.', 'inactive');
     await c.query(`update delivery_partners set on_duty = $2, on_duty_day = case when $2 then ${TODAY_IST} else on_duty_day end where user_id = $1`, [req.params.id, state === 'available']);
-    if (state === 'available') await c.query(`insert into attendance (partner_id, day) values ($1, ${TODAY_IST}) on conflict (partner_id, day) do update set checked_out_at = null`, [req.params.id]);
+    if (state === 'available') await c.query(`insert into attendance (partner_id, day) values ($1, ${TODAY_IST}) on conflict (partner_id, day) do update set status = 'present', checked_in_at = coalesce(attendance.checked_in_at, now()), checked_out_at = null`, [req.params.id]);
     else await c.query(`update attendance set checked_out_at = now() where partner_id = $1 and day = ${TODAY_IST} and checked_out_at is null`, [req.params.id]);
     await setPartnerState(c, String(req.params.id), state);
   });
@@ -311,8 +327,24 @@ adminRouter.get('/settings', async (_req, res) => {
 });
 adminRouter.put('/settings', async (req, res) => {
   const s = parse(settingsSchema, req.body);
-  await pool.query('update store_settings set is_open=$1, opening_time=$2, closing_time=$3, address=$4, phone=$5, email=$6, latitude=$7, longitude=$8, geofence_m=coalesce($9, geofence_m) where id = 1',
+  await tx(async (c) => {
+  const before = (await c.query('select is_open from store_settings where id = 1 for update')).rows[0]?.is_open as boolean | undefined;
+  await c.query('update store_settings set is_open=$1, opening_time=$2, closing_time=$3, address=$4, phone=$5, email=$6, latitude=$7, longitude=$8, geofence_m=coalesce($9, geofence_m) where id = 1',
     [s.isOpen, s.openingTime, s.closingTime, s.address ?? null, s.phone ?? null, s.email ?? null, s.latitude ?? null, s.longitude ?? null, s.geofenceM ?? null]);
+  if (before && !s.isOpen) await closeStore(c);
+  else if (before === false && s.isOpen) await reopenStore(c);
+  });
+  res.status(204).end();
+});
+
+// ---- Terms & conditions (shown to customers in the app) ----
+adminRouter.get('/terms', async (_req, res) => {
+  const { rows } = await pool.query('select terms_text, terms_updated_at from store_settings where id = 1');
+  res.json({ text: rows[0].terms_text ?? '', updatedAt: rows[0].terms_updated_at });
+});
+adminRouter.put('/terms', async (req, res) => {
+  const { text } = parse(z.object({ text: z.string().max(30000) }), req.body);
+  await pool.query('update store_settings set terms_text = $1, terms_updated_at = now() where id = 1', [text.trim() || null]);
   res.status(204).end();
 });
 
@@ -350,31 +382,49 @@ async function partnerRow(id: string) {
 partnerRouter.get('/me', async (req, res) => {
   const d = await partnerRow(req.user!.id);
   const store = await storeLocation();
+  const att = await dutyReply(req.user!.id);
+  const open = (await pool.query('select is_open from store_settings where id = 1')).rows[0]?.is_open ?? true;
   res.json({
     state: d.eff_state, isAvailable: d.eff_state === 'available', onDuty: d.duty_today, active: d.active, canCallCustomer: d.can_call_customer,
+    dutyStatus: att.dutyStatus, paidLeave: att.paidLeave, storeOpen: open,
     store: store ? { lat: store.lat, lng: store.lng, geofenceM: store.geofenceM } : null,
   });
 });
 
-/** Check in / out for the day. Checking in makes the partner available; checking out is blocked during an order. */
+const dutyStatusSchema = z.object({ status: z.enum(['on_duty', 'off_duty', 'on_break', 'leave']) });
+async function dutyReply(userId: string) {
+  const { rows } = await pool.query(`select ${EFFECTIVE_STATE} as state, ${DUTY_STATUS} as duty_status, (a.status = 'paid_leave') as paid_leave
+    from delivery_partners d left join attendance a on a.partner_id = d.user_id and a.day = ${TODAY_IST} where d.user_id = $1`, [userId]);
+  return { state: rows[0].state, dutyStatus: rows[0].duty_status, paidLeave: rows[0].paid_leave === true, onDuty: rows[0].duty_status === 'on_duty' || rows[0].duty_status === 'on_break' };
+}
+
+/** The partner's own attendance: on duty, off duty, on break or leave. */
+partnerRouter.post('/status', async (req, res) => {
+  const { status } = parse(dutyStatusSchema, req.body);
+  await tx((c) => setDutyStatus(c, req.user!.id, status as DutyStatus, req.user!.name ?? null));
+  res.json(await dutyReply(req.user!.id));
+});
+
+/** Older builds: simple on/off duty switch. */
 partnerRouter.post('/duty', async (req, res) => {
   const { onDuty } = parse(z.object({ onDuty: z.boolean() }), req.body);
-  await tx(async (c) => {
-    const p = await c.query(`select d.active, ${EFFECTIVE_STATE} as state from delivery_partners d where d.user_id = $1 for update`, [req.user!.id]);
-    if (!p.rows[0]?.active) throw conflict('Your account is not active.', 'inactive');
-    if (onDuty) {
-      await c.query(`update delivery_partners set on_duty = true, on_duty_day = ${TODAY_IST} where user_id = $1`, [req.user!.id]);
-      await c.query(`insert into attendance (partner_id, day) values ($1, ${TODAY_IST}) on conflict (partner_id, day) do update set checked_out_at = null`, [req.user!.id]);
-      if (p.rows[0].state === 'off') await setPartnerState(c, req.user!.id, 'available');
-    } else {
-      if (['reserved', 'busy'].includes(p.rows[0].state)) throw conflict('Finish or hand back your current delivery first.', 'has_active_order');
-      await c.query('update delivery_partners set on_duty = false where user_id = $1', [req.user!.id]);
-      await c.query(`update attendance set checked_out_at = now() where partner_id = $1 and day = ${TODAY_IST} and checked_out_at is null`, [req.user!.id]);
-      await setPartnerState(c, req.user!.id, 'off');
-    }
+  await tx((c) => setDutyStatus(c, req.user!.id, onDuty ? 'on_duty' : 'off_duty', req.user!.name ?? null));
+  res.json(await dutyReply(req.user!.id));
+});
+
+/** My attendance for the last N days. */
+partnerRouter.get('/attendance', async (req, res) => {
+  const { days } = parse(z.object({ days: z.coerce.number().int().min(1).max(31).default(14) }), req.query);
+  const [rows, closed] = await Promise.all([
+    pool.query(`select to_char(day, 'YYYY-MM-DD') as day, status, checked_in_at, checked_out_at, break_minutes from attendance where partner_id = $1 and day > ${TODAY_IST} - $2::int order by day desc`, [req.user!.id, days]),
+    pool.query(`select to_char(day, 'YYYY-MM-DD') as day from store_closed_days where day > ${TODAY_IST} - $1::int`, [days]),
+  ]);
+  const summary = { present: 0, leave: 0, paidLeave: 0, absent: 0 };
+  for (const r of rows.rows) { if (r.status === 'present') summary.present++; else if (r.status === 'leave') summary.leave++; else if (r.status === 'paid_leave') summary.paidLeave++; else if (r.status === 'absent') summary.absent++; }
+  res.json({
+    days: rows.rows.map((r) => ({ day: r.day, status: r.status, checkedInAt: r.checked_in_at, checkedOutAt: r.checked_out_at, breakMinutes: r.break_minutes })),
+    closedDays: closed.rows.map((r) => r.day), summary,
   });
-  const d = await partnerRow(req.user!.id);
-  res.json({ state: d.eff_state, onDuty: d.duty_today });
 });
 
 // Legacy route used by older app builds: same as duty on/off.

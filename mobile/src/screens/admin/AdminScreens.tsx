@@ -25,8 +25,13 @@ import { formatDate, formatDateTime, formatMoney, statusTone } from '../../utils
 type Nav = NativeStackNavigationProp<AdminStackParamList>;
 const LIVE = ['order:update', 'notification'];
 const Header = ({ title, right }: { title: string; right?: React.ReactNode }) => <View style={s.headRow}><Text style={[type.h2, s.heading]}>{title}</Text>{right ? <View style={s.headRight}>{right}</View> : null}</View>;
-const STATE_TONE: Record<PartnerState, 'green' | 'red' | 'amber' | 'blue'> = { off: 'red', available: 'green', reserved: 'amber', busy: 'blue', returning: 'blue' };
-const statePill = (t: (k: string) => string, p: { state: PartnerState; active: boolean }) => <Pill text={!p.active ? t('admin.inactive') : t(`admin.st_${p.state}`)} tone={!p.active ? 'red' : STATE_TONE[p.state]} />;
+const STATE_TONE: Record<PartnerState, 'green' | 'red' | 'amber' | 'blue'> = { off: 'red', available: 'green', reserved: 'amber', busy: 'blue', returning: 'blue', break: 'amber' };
+const DUTY_TONE: Record<string, 'green' | 'red' | 'amber' | 'blue'> = { on_duty: 'green', on_break: 'amber', off_duty: 'red', leave: 'amber', absent: 'red' };
+const statePill = (t: (k: string) => string, p: { state: PartnerState; active: boolean; dutyStatus?: string; paidLeave?: boolean }) =>
+  !p.active ? <Pill text={t('admin.inactive')} tone="red" />
+  : p.dutyStatus === 'leave' ? <Pill text={t(p.paidLeave ? 'admin.ds_paid_leave' : 'admin.ds_leave')} tone={p.paidLeave ? 'blue' : 'amber'} />
+  : <Pill text={t(`admin.st_${p.state}`)} tone={STATE_TONE[p.state]} />;
+const dutyPill = (t: (k: string) => string, status: string, paid = false) => <Pill text={t(status === 'leave' && paid ? 'admin.ds_paid_leave' : `admin.ds_${status}`)} tone={status === 'leave' && paid ? 'blue' : DUTY_TONE[status] ?? 'red'} />;
 const clock = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '');
 const ListSkeleton = () => <View style={{ padding: spacing.lg, gap: 12 }}>{[0, 1, 2].map((i) => <Skeleton key={i} h={110} r={16} />)}</View>;
 
@@ -307,10 +312,10 @@ export function TeamScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Team'>) 
   const list = data?.partners ?? [];
   const count = (f: (p: Partner) => boolean) => list.filter((p) => p.active && f(p)).length;
   const summary: { label: string; value: number; tone: 'green' | 'blue' | 'amber' | 'red' }[] = [
-    { label: t('admin.present'), value: count((p) => p.state !== 'off'), tone: 'green' },
-    { label: t('admin.st_available'), value: count((p) => p.state === 'available'), tone: 'green' },
-    { label: t('admin.onTheRoad'), value: count((p) => ['reserved', 'busy', 'returning'].includes(p.state)), tone: 'blue' },
-    { label: t('admin.st_off'), value: count((p) => p.state === 'off'), tone: 'red' },
+    { label: t('admin.ds_on_duty'), value: count((p) => p.dutyStatus === 'on_duty'), tone: 'green' },
+    { label: t('admin.ds_on_break'), value: count((p) => p.dutyStatus === 'on_break'), tone: 'amber' },
+    { label: t('admin.ds_leave'), value: count((p) => p.dutyStatus === 'leave'), tone: 'blue' },
+    { label: t('admin.ds_off_duty'), value: count((p) => p.dutyStatus === 'off_duty'), tone: 'red' },
   ];
   return (
     <SafeAreaView style={s.fill} edges={['top']}>
@@ -324,7 +329,7 @@ export function TeamScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Team'>) 
                 <View style={s.attRow}>
                   {summary.map((x) => (
                     <View key={x.label} style={s.attCell}>
-                      <CountUp value={x.value} style={[type.h2, { color: x.tone === 'green' ? colors.green : x.tone === 'red' ? colors.red : colors.primary }]} />
+                      <CountUp value={x.value} style={[type.h2, { color: x.tone === 'green' ? colors.green : x.tone === 'red' ? colors.red : x.tone === 'amber' ? colors.amber : colors.primary }]} />
                       <Text style={[type.small, { color: colors.secondary, textAlign: 'center' }]} numberOfLines={2}>{x.label}</Text>
                     </View>
                   ))}
@@ -354,7 +359,7 @@ export function TeamScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Team'>) 
                       <Text style={[type.h3, { color: colors.text }]}>{p.name}</Text>
                       <Text style={[type.small, { color: colors.secondary }]}>+91 {p.phone}</Text>
                       <View style={s.pillRow}>{statePill(t, p)}</View>
-                      {p.checkedInAt && p.state !== 'off' ? <Text style={[type.small, { color: colors.secondary, marginTop: 4 }]}>{t('admin.checkedIn', { time: clock(p.checkedInAt) })}</Text> : null}
+                      {p.checkedInAt && p.dutyStatus !== 'off_duty' && p.dutyStatus !== 'leave' ? <Text style={[type.small, { color: colors.secondary, marginTop: 4 }]}>{t('admin.checkedIn', { time: clock(p.checkedInAt) })}</Text> : null}
                     </View>
                     <CallButton phone={p.phone} compact label={t('admin.callPartner')} />
                   </View>
@@ -389,6 +394,7 @@ export function TeamScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Team'>) 
 }
 
 // Attendance: today's roster and a 7-day strip.
+const DAY_COLOR: Record<string, string> = { present: colors.green, leave: colors.amber, paid_leave: colors.primary, absent: colors.red };
 export function AttendanceScreen() {
   const { t } = useTranslation();
   const { data, error, loading, reload } = useLoad(() => endpoints.admin.attendance(7), ['partner:update']);
@@ -396,26 +402,36 @@ export function AttendanceScreen() {
   if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
   const a = data!;
   const dayLetter = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' });
+  const tiles = [
+    { l: t('admin.ds_on_duty'), v: a.summary.onDuty, c: colors.green }, { l: t('admin.ds_on_break'), v: a.summary.onBreak, c: colors.amber },
+    { l: t('admin.ds_off_duty'), v: a.summary.offDuty, c: colors.secondary }, { l: t('admin.ds_leave'), v: a.summary.onLeave, c: colors.primary },
+    { l: t('admin.ds_absent'), v: a.summary.absent, c: colors.red },
+  ];
+  const sub = (p: (typeof a.today)[number]) => {
+    if (p.dutyStatus === 'leave') return p.paidLeave ? t('admin.storeClosedPaid') : t('admin.onLeaveToday');
+    if (p.present) return t('admin.checkedIn', { time: clock(p.checkedInAt) }) + (p.checkedOutAt ? ` · ${t('admin.checkedOut', { time: clock(p.checkedOutAt) })}` : '') + (p.breakMinutes ? ` · ${t('admin.breakMin', { count: p.breakMinutes })}` : '');
+    return t('admin.notCheckedIn');
+  };
   return (
     <Screen wide>
       <Enter><View style={s.attRow}>
-        {[{ l: t('admin.present'), v: a.summary.present, c: colors.green }, { l: t('admin.st_available'), v: a.summary.available, c: colors.green }, { l: t('admin.onTheRoad'), v: a.summary.busy, c: colors.primary }, { l: t('admin.st_off'), v: a.summary.absent, c: colors.red }].map((x) => (
-          <View key={x.l} style={s.attCell}><CountUp value={x.v} style={[type.h1, { color: x.c }]} /><Text style={[type.small, { color: colors.secondary, textAlign: 'center' }]}>{x.l}</Text></View>
-        ))}
+        {tiles.map((x) => <View key={x.l} style={s.attCell}><CountUp value={x.v} style={[type.h1, { color: x.c }]} /><Text style={[type.small, { color: colors.secondary, textAlign: 'center' }]} numberOfLines={2}>{x.l}</Text></View>)}
       </View></Enter>
       <Enter index={1}><Text style={[type.h3, s.sec]}>{t('admin.attendanceToday')}</Text></Enter>
-      {a.today.map((p, i) => (
-        <Enter key={p.id} index={i + 2}>
-          <View style={s.pinRow}>
-            <Avatar name={p.name} />
-            <View style={{ flex: 1 }}>
-              <Text style={[type.bodyMedium, { color: colors.text }]}>{p.name}</Text>
-              <Text style={[type.small, { color: colors.secondary }]}>{p.present ? t('admin.checkedIn', { time: clock(p.checkedInAt) }) + (p.checkedOutAt ? ` · ${t('admin.checkedOut', { time: clock(p.checkedOutAt) })}` : '') : t('admin.notCheckedIn')}</Text>
+      <ResponsiveGrid>
+        {a.today.map((p, i) => (
+          <Enter key={p.id} index={i + 2}>
+            <View style={s.pinRow}>
+              <Avatar name={p.name} />
+              <View style={{ flex: 1 }}>
+                <Text style={[type.bodyMedium, { color: colors.text }]}>{p.name}</Text>
+                <Text style={[type.small, { color: colors.secondary }]}>{sub(p)}</Text>
+              </View>
+              {p.notIn ? <Pill text={t('admin.ds_absent')} tone="red" /> : dutyPill(t, p.dutyStatus, p.paidLeave)}
             </View>
-            <Pill text={t(`admin.st_${p.state}`)} tone={STATE_TONE[p.state]} />
-          </View>
-        </Enter>
-      ))}
+          </Enter>
+        ))}
+      </ResponsiveGrid>
       <Enter index={9}><Text style={[type.h3, s.sec]}>{t('admin.last7')}</Text></Enter>
       <Enter index={10}>
         <Card style={s.block}>
@@ -423,11 +439,43 @@ export function AttendanceScreen() {
           {a.history.map((h) => (
             <View key={h.id} style={s.gridRow}>
               <Text style={[type.small, { flex: 1.4, color: colors.text }]} numberOfLines={1}>{h.name}</Text>
-              {h.days.map((on, i) => <View key={i} style={s.gridCell}><View style={[s.gridDot, on && s.gridDotOn]}>{on ? <Icon name="checkmark" size={12} color={colors.white} /> : null}</View></View>)}
+              {h.days.map((st, i) => {
+                const closed = a.closedDays.includes(a.dates[i]);
+                const color = st ? DAY_COLOR[st] : undefined;
+                return <View key={i} style={s.gridCell}><View style={[s.gridDot, color ? { backgroundColor: color } : null]}>{st === 'present' ? <Icon name="checkmark" size={12} color={colors.white} /> : st === 'absent' ? <Icon name="close" size={12} color={colors.white} /> : st ? <Icon name={closed ? 'storefront' : 'calendar'} size={11} color={colors.white} /> : null}</View></View>;
+              })}
             </View>
           ))}
+          <View style={s.legend}>
+            {[['present', 'admin.ds_on_duty'], ['leave', 'admin.ds_leave'], ['paid_leave', 'admin.ds_paid_leave'], ['absent', 'admin.ds_absent']].map(([k, label]) => (
+              <View key={k} style={s.legendItem}><View style={[s.legendDot, { backgroundColor: DAY_COLOR[k] }]} /><Text style={[type.small, { color: colors.secondary }]}>{t(label)}</Text></View>
+            ))}
+          </View>
         </Card>
       </Enter>
+    </Screen>
+  );
+}
+
+// Terms and conditions shown to customers in the app.
+export function TermsScreen({ navigation }: NativeStackScreenProps<AdminStackParamList, 'Terms'>) {
+  const { t } = useTranslation();
+  const { data, error, loading, reload } = useLoad(() => endpoints.admin.terms());
+  const [text, setText] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
+  useEffect(() => { if (data && text === null) setText(data.text); }, [data, text]);
+  if (loading && !data) return <ListSkeleton />;
+  if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
+  const save = async () => {
+    setBusy(true); setErr('');
+    try { await endpoints.admin.saveTerms(text ?? ''); tick('success'); await notice(t('admin.termsSaved'), t('admin.termsSavedMsg'), t('common.ok')); navigation.goBack(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <Screen footer={<Button title={t('address.save')} icon="checkmark" onPress={save} loading={busy} />}>
+      <Enter><Text style={[type.small, { color: colors.secondary, marginBottom: spacing.md }]}>{t('admin.termsHelp')}</Text></Enter>
+      <Enter index={1}><TextField label={t('admin.termsLabel')} value={text ?? ''} onChangeText={(v) => setText(v.slice(0, 30000))} multiline placeholder={t('admin.termsPlaceholder')} /></Enter>
+      <Text style={[type.small, { color: colors.muted }]}>{(text ?? '').length} / 30000{data?.updatedAt ? `  ·  ${t('admin.termsUpdated', { date: formatDate(data.updatedAt) })}` : ''}</Text>
+      {err ? <Text style={[type.small, { color: colors.red, marginTop: 8 }]}>{err}</Text> : null}
     </Screen>
   );
 }
@@ -556,6 +604,7 @@ export function MoreScreen(_p: BottomTabScreenProps<AdminTabParamList, 'More'>) 
         <Enter index={0}><View style={s.me}><Avatar name={user?.name} size={56} /><View><Text style={[type.h3, { color: colors.text }]}>{user?.name}</Text><Text style={[type.small, { color: colors.secondary }]}>+91 {user?.phone}</Text></View></View></Enter>
         {row('card-outline', t('admin.paymentDetails'), () => nav.navigate('PaymentDetails'))}
         {row('calendar-outline', t('admin.attendance'), () => nav.navigate('Attendance'))}
+        {row('document-text-outline', t('admin.terms'), () => nav.navigate('Terms'))}
         {row('location-outline', t('admin.pincodes'), () => nav.navigate('Pincodes'))}
         {row('people-outline', t('admin.customers'), () => nav.navigate('Customers'))}
         {row('bar-chart-outline', t('admin.reports'), () => nav.navigate('Reports'))}
@@ -638,6 +687,10 @@ export function StoreSettingsScreen({ navigation }: NativeStackScreenProps<Admin
   };
   const save = async () => {
     if (!locationOk) { setErr(t('admin.locationInvalid')); tick('error'); return; }
+    if (data?.isOpen && !f.isOpen) {
+      const ok = await showDialog({ title: t('admin.closeStoreTitle'), message: t('admin.closeStoreMsg'), icon: 'storefront', tone: 'danger', confirmLabel: t('admin.closeStore'), cancelLabel: t('common.cancel') });
+      if (!ok) return;
+    }
     setBusy(true); setErr('');
     try {
       await endpoints.admin.saveSettings({ isOpen: f.isOpen, openingTime: f.openingTime, closingTime: f.closingTime, address: f.address || null, phone: f.phone || null, email: f.email || null, latitude: lat, longitude: lng, geofenceM: Number(f.geofenceM) || 150 });
@@ -758,6 +811,9 @@ const s = StyleSheet.create({
   pinIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   me: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: spacing.md, marginBottom: spacing.sm },
   moreRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: spacing.md },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 10, height: 10, borderRadius: 5 },
   attendance: { padding: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.card, marginBottom: spacing.md },
   attHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm },
   attRow: { flexDirection: 'row', gap: 8 },

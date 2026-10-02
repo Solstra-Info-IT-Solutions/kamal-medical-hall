@@ -4,11 +4,11 @@ import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-n
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Linking, Platform, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Linking, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
-import type { Order, OrderSummary, PartnerState } from '../../api/types';
+import type { DutyStatus, Order, OrderSummary, PartnerState } from '../../api/types';
 import { Avatar, CallButton } from '../../components/CallButton';
 import { OrderCard } from '../../components/OrderCard';
 import { PaymentSheet, type PaymentInfo } from '../../components/PaymentSheet';
@@ -32,7 +32,17 @@ const STATE_UI: Record<PartnerState, { icon: IconName; fg: string; bg: [string, 
   reserved: { icon: 'notifications', fg: colors.amber, bg: [colors.white, colors.amberBg], title: 'partner.stReserved', help: 'partner.stReservedHelp' },
   busy: { icon: 'bicycle', fg: colors.primary, bg: [colors.white, colors.card], title: 'partner.stBusy', help: 'partner.stBusyHelp' },
   returning: { icon: 'storefront', fg: colors.primary, bg: [colors.white, colors.card], title: 'partner.stReturning', help: 'partner.stReturningHelp' },
+  break: { icon: 'cafe', fg: colors.amber, bg: [colors.white, colors.amberBg], title: 'partner.stBreak', help: 'partner.stBreakHelp' },
 };
+const LEAVE_UI = { icon: 'calendar' as IconName, fg: colors.amber, bg: [colors.white, colors.amberBg] as [string, string], title: 'partner.stLeave', help: 'partner.stLeaveHelp' };
+const PAID_LEAVE_UI = { ...LEAVE_UI, icon: 'storefront' as IconName, title: 'partner.stPaidLeave', help: 'partner.stPaidLeaveHelp' };
+
+const DUTY_OPTIONS: { key: DutyStatus; icon: IconName; label: string }[] = [
+  { key: 'on_duty', icon: 'checkmark-circle', label: 'partner.optOnDuty' },
+  { key: 'on_break', icon: 'cafe', label: 'partner.optOnBreak' },
+  { key: 'off_duty', icon: 'moon', label: 'partner.optOffDuty' },
+  { key: 'leave', icon: 'calendar', label: 'partner.optLeave' },
+];
 
 const ListSkeleton = () => <View style={{ padding: spacing.lg, gap: 12 }}>{[0, 1, 2].map((i) => <Skeleton key={i} h={110} r={16} />)}</View>;
 
@@ -52,18 +62,23 @@ export function PartnerHomeScreen(_p: BottomTabScreenProps<PartnerTabParamList, 
 
   if (me.loading && !me.data) return <ListSkeleton />;
   if (me.error && !me.data) return <ErrorView message={me.error} onRetry={me.reload} retryLabel={t('common.retry')} />;
-  const ui = STATE_UI[state];
+  const dutyStatus = me.data!.dutyStatus;
+  const paidLeave = me.data!.paidLeave;
+  const ui = paidLeave ? PAID_LEAVE_UI : dutyStatus === 'leave' ? LEAVE_UI : STATE_UI[state];
   const all = jobs.data?.orders ?? [];
   const pending = all.filter((o) => !o.partnerAccepted && o.status === 'ready_to_dispatch');
   const active = all.filter((o) => !pending.includes(o));
   const cash = active.filter((o) => o.paymentMethod === 'cod').reduce((sum, o) => sum + (o.quotedAmount ?? 0), 0);
-  const onDuty = me.data!.onDuty;
   const toShop = me.data!.store && coords ? distanceMeters(coords, me.data!.store) : null;
   const refresh = () => { void me.reload(); void jobs.reload(); void delivered.reload(); };
 
-  const toggle = async (v: boolean) => {
+  const choose = async (status: DutyStatus) => {
     setErr('');
-    try { await endpoints.partner.setDuty(v); tick('success'); await me.reload(); } catch (e) { setErr((e as Error).message); tick('error'); await me.reload(); }
+    if (status === 'leave') {
+      const ok = await showDialog({ title: t('partner.leaveTitle'), message: t('partner.leaveMsg'), icon: 'calendar', confirmLabel: t('partner.optLeave'), cancelLabel: t('common.cancel') });
+      if (!ok) return;
+    }
+    try { await endpoints.partner.setStatus(status); tick('success'); await me.reload(); } catch (e) { setErr((e as Error).message); tick('error'); await me.reload(); }
   };
   const accept = async (o: OrderSummary) => {
     setBusy(o.id);
@@ -101,9 +116,25 @@ export function PartnerHomeScreen(_p: BottomTabScreenProps<PartnerTabParamList, 
               <Text style={[type.small, { color: colors.secondary }]}>{t(ui.help)}</Text>
             </View>
           </LinearGradient>
-          <View style={s.dutyRow}>
-            <View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]}>{onDuty ? t('partner.onDuty') : t('partner.startDuty')}</Text><Text style={[type.small, { color: colors.secondary }]}>{onDuty ? t('partner.onDutyHelp') : t('partner.startDutyHelp')}</Text></View>
-            <Switch accessibilityLabel={t('partner.onDuty')} value={onDuty} onValueChange={toggle} disabled={state === 'reserved' || state === 'busy'} />
+          {me.data!.storeOpen === false ? <View style={s.closedBanner}><Icon name="storefront" size={18} color={colors.amber} /><Text style={[type.small, { color: colors.text, flex: 1 }]}>{t('partner.storeClosedBanner')}</Text></View> : null}
+          <View style={s.dutyCard}>
+            <View style={s.dutyHead}>
+              <Text style={[type.bodyMedium, { color: colors.text, flex: 1 }]}>{t('partner.attendanceToday')}</Text>
+              <Tap accessibilityRole="button" onPress={() => nav.navigate('MyAttendance')} haptic={false}><Text style={[type.smallMedium, { color: colors.primary }]}>{t('partner.myAttendance')}</Text></Tap>
+            </View>
+            <View style={s.optRow}>
+              {DUTY_OPTIONS.map((o) => {
+                const on = !paidLeave && dutyStatus === o.key;
+                const locked = paidLeave || state === 'reserved' || state === 'busy';
+                return (
+                  <Tap key={o.key} accessibilityRole="button" accessibilityState={{ selected: on, disabled: locked }} onPress={() => { if (!on && !locked) void choose(o.key); }} scaleTo={0.95} style={[s.opt, on && s.optOn, locked && !on && { opacity: 0.45 }]}>
+                    <Icon name={o.icon} size={18} color={on ? colors.white : colors.navy} />
+                    <Text style={[type.smallMedium, { color: on ? colors.white : colors.navy }]} numberOfLines={1}>{t(o.label)}</Text>
+                  </Tap>
+                );
+              })}
+            </View>
+            <Text style={[type.small, { color: colors.secondary, marginTop: 8 }]}>{state === 'reserved' || state === 'busy' ? t('partner.dutyLocked') : t('partner.absentNote')}</Text>
           </View>
           {err ? <Animated.Text entering={FadeInDown.duration(220)} style={[type.small, { color: colors.red, marginTop: 6 }]}>{err}</Animated.Text> : null}
         </Enter>
@@ -329,14 +360,57 @@ export function JobScreen({ navigation, route }: NativeStackScreenProps<PartnerS
   );
 }
 
+// ---------------------------------------------------------------- My attendance
+const DAY_TONE: Record<string, 'green' | 'amber' | 'red' | 'blue'> = { present: 'green', leave: 'amber', paid_leave: 'blue', absent: 'red' };
+export function MyAttendanceScreen() {
+  const { t } = useTranslation();
+  const { data, error, loading, reload } = useLoad(() => endpoints.partner.attendance(14), ['partner:update', 'notification']);
+  if (loading && !data) return <ListSkeleton />;
+  if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
+  const a = data!;
+  const clock = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '');
+  const tiles = [
+    { l: t('partner.dayPresent'), v: a.summary.present, c: colors.green },
+    { l: t('partner.dayLeave'), v: a.summary.leave, c: colors.amber },
+    { l: t('partner.dayPaidLeave'), v: a.summary.paidLeave, c: colors.primary },
+    { l: t('partner.dayAbsent'), v: a.summary.absent, c: colors.red },
+  ];
+  return (
+    <Screen wide>
+      <Enter><View style={s.stats}>{tiles.map((x) => <View key={x.l} style={s.stat}><CountUp value={x.v} style={[type.h2, { color: x.c }]} /><Text style={[type.small, { color: colors.secondary, textAlign: 'center' }]} numberOfLines={2}>{x.l}</Text></View>)}</View></Enter>
+      <Enter index={1}><Text style={[type.small, { color: colors.secondary, marginVertical: spacing.md }]}>{t('partner.last14')}</Text></Enter>
+      {!a.days.length ? <View style={{ height: 240 }}><Message icon="calendar-outline" title={t('partner.noAttendance')} /></View> : a.days.map((d, i) => (
+        <Enter key={d.day} index={i + 2}>
+          <View style={s.attRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[type.bodyMedium, { color: colors.text }]}>{formatDate(d.day)}</Text>
+              <Text style={[type.small, { color: colors.secondary }]}>
+                {d.checkedInAt ? `${clock(d.checkedInAt)}${d.checkedOutAt ? ` – ${clock(d.checkedOutAt)}` : ''}` : d.status === 'paid_leave' ? t('partner.storeWasClosed') : d.status === 'absent' ? t('partner.noCheckIn') : ''}
+                {d.breakMinutes > 0 ? `  ·  ${t('partner.breakMin', { count: d.breakMinutes })}` : ''}
+              </Text>
+            </View>
+            <Pill text={t(`partner.day_${d.status}`)} tone={DAY_TONE[d.status]} />
+          </View>
+        </Enter>
+      ))}
+    </Screen>
+  );
+}
+
 const s = StyleSheet.create({
+  attRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, marginBottom: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white },
   fill: { flex: 1, backgroundColor: colors.white },
   heading: { color: colors.text, textAlign: 'center', paddingVertical: spacing.md },
   pad: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   greet: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: spacing.lg },
   status: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.cardBorder },
   statusIcon: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
-  dutyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
+  closedBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.amberBg },
+  dutyCard: { marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.white },
+  dutyHead: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
+  optRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  opt: { flexGrow: 1, flexBasis: '45%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, paddingHorizontal: 10, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
+  optOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   returning: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: spacing.md, backgroundColor: colors.white },
   stats: { flexDirection: 'row', gap: 10, marginTop: spacing.md },
   stat: { flex: 1, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.border },
