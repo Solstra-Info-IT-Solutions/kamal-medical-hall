@@ -14,21 +14,25 @@ export type AddressInput = Omit<Address, 'id' | 'city'>;
 
 export interface DeliveryDay { date: string; slots: { id: string; label: string; available: boolean }[] }
 export interface StoreConfig {
-  store: { isOpen: boolean; openingTime: string; closingTime: string; address: string | null; phone: string | null; email: string | null };
+  store: { isOpen: boolean; openingTime: string; closingTime: string; address: string | null; phone: string | null; email: string | null; latitude: number | null; longitude: number | null };
   deliveryDays: DeliveryDay[];
   authMode: 'dev' | 'firebase';
 }
 
 export interface Order {
   id: string; orderNumber: string; kind: OrderKind; status: OrderStatus; note: string | null;
-  address: { recipientName: string; phone: string; line1: string; line2?: string; landmark?: string; pincode: string; city: string; latitude?: number; longitude?: number };
+  address: { recipientName: string; phone: string | null; line1: string; line2?: string; landmark?: string; pincode: string; city: string; latitude?: number; longitude?: number };
   deliveryDate: string; deliverySlot: string; quotedAmount: number | null; quoteExpiresAt: string | null;
   paymentMethod: PaymentMethod | null; paymentStatus: string | null; rejectionReason: string | null; cancelReason: string | null;
   createdAt: string;
   items: { id: string; name: string; quantity: number }[];
   prescriptions: { id: string; mimeType: string; sizeBytes: number | null; url: string | null }[];
   history: { status: OrderStatus; reason: string | null; created_at: string }[];
-  customer?: { id: string; name: string | null; phone: string };
+  customer?: { id: string; name: string | null; phone: string | null };
+  /** Delivery partner has accepted the assignment (customers only see the partner after this). */
+  partnerAccepted: boolean;
+  /** Delivery partners: whether the store lets them see/call the customer's number. */
+  canCallCustomer: boolean;
   partner: { id: string; name: string | null; phone?: string } | null;
 }
 export interface OrderSummary {
@@ -36,6 +40,30 @@ export interface OrderSummary {
   fileCount: number; summary: string | null;
   paymentMethod?: PaymentMethod | null; paymentStatus?: string | null; customerName?: string; customerPhone?: string;
   deliverySlot?: string; deliveryDate?: string; partnerName?: string | null;
+  partnerAccepted?: boolean; pincode?: string | null; rejectedReason?: string; respondedAt?: string;
 }
 export interface AppNotification { id: string; type: string; title: string; body: string; read: boolean; createdAt: string; orderId: string | null; orderNumber: string | null }
-export interface Partner { id: string; name: string; phone: string; isAvailable: boolean; active: boolean; activeOrders: number; codCollectedToday: number; pincodes: string[] }
+export type PartnerState = 'off' | 'available' | 'reserved' | 'busy' | 'returning';
+export interface Partner {
+  id: string; name: string; phone: string; active: boolean; state: PartnerState; isAvailable: boolean; onDuty: boolean;
+  canCallCustomer: boolean; checkedInAt: string | null; checkedOutAt: string | null; lastSeen: string | null;
+  activeOrders: number; deliveredToday: number; codCollectedToday: number; pincodes: string[];
+}
+export interface Attendance {
+  dates: string[];
+  today: { id: string; name: string; phone: string; state: PartnerState; present: boolean; checkedInAt: string | null; checkedOutAt: string | null }[];
+  summary: { total: number; present: number; available: number; busy: number; absent: number };
+  history: { id: string; name: string; days: boolean[] }[];
+}
+export interface Tracking {
+  orderId: string; orderNumber: string; status: OrderStatus;
+  store: { lat: number; lng: number } | null; destination: { lat: number; lng: number } | null;
+  partner: { name: string | null } | null; rider: { lat: number; lng: number; updatedAt: string } | null; etaMinutes: number | null;
+}
+export interface PaymentDetails {
+  upiId: string | null; upiName: string | null; bankName: string | null; bankAccountName: string | null; bankAccountNumber: string | null; bankIfsc: string | null;
+}
+export interface StoreSettings {
+  isOpen: boolean; openingTime: string; closingTime: string; address: string | null; phone: string | null; email: string | null;
+  latitude: number | null; longitude: number | null; geofenceM: number;
+}

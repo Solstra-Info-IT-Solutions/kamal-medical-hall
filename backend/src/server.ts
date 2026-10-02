@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import { config } from './config.js';
 import { pool } from './db.js';
 import { errorHandler } from './http.js';
+import { sweepDuty } from './partnerState.js';
 import { attachRealtime } from './realtime.js';
 import { general } from './routes/general.js';
 import { orders, razorpayWebhook } from './routes/orders.js';
@@ -44,12 +45,14 @@ export async function bootstrap() {
   if (config.authMode === 'dev') {
     for (const [phone, name] of [['9000000002', 'Staff One'], ['9000000003', 'Staff Two']]) {
       const u = await pool.query("insert into users (phone, role, name) values ($1,'delivery_partner',$2) on conflict (phone) do update set role = 'delivery_partner' returning id", [phone, name]);
-      await pool.query('insert into delivery_partners (user_id, is_available) values ($1, true) on conflict do nothing', [u.rows[0].id]);
+      await pool.query('insert into delivery_partners (user_id) values ($1) on conflict do nothing', [u.rows[0].id]);
     }
   }
 }
 
 if (process.argv[1]?.endsWith('server.ts') || process.argv[1]?.endsWith('server.js')) {
   await bootstrap();
+  await sweepDuty().catch((e) => console.error('duty sweep failed', e));
+  setInterval(() => { void sweepDuty().catch((e) => console.error('duty sweep failed', e)); }, 10 * 60 * 1000).unref();
   createServer().listen(config.port, () => console.log(`API listening on :${config.port} (auth: ${config.authMode})`));
 }

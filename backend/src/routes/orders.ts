@@ -6,7 +6,8 @@ import { config } from '../config.js';
 import { pool, tx } from '../db.js';
 import { HttpError, bad, conflict, notFound, parse } from '../http.js';
 import { notify, notifyAdmins } from '../notify.js';
-import { emitPartner } from '../realtime.js';
+import { fillOrderCoordinates } from '../geocode.js';
+import { distanceMeters, etaMinutes, releasePartner, storeLocation } from '../partnerState.js';
 import { CANCELLABLE, loadOrder, transition } from '../orderService.js';
 import { isServiceable } from '../pincodes.js';
 import { isSlotBookable, SLOTS } from '../slots.js';
@@ -66,6 +67,7 @@ orders.post('/', authed, requireRole('customer'), async (req, res) => {
     await notifyAdmins(id, 'order_requested', 'New order request', `${ins.rows[0].order_number} from ${user.name ?? user.phone}`, c);
     return { id, replay: false };
   });
+  if (!created.replay) void fillOrderCoordinates(created.id, snapshot).catch(() => undefined); // best-effort map pin for live tracking
   res.status(created.replay ? 200 : 201).json({ order: await loadOrder(created.id, user) });
 });
 
@@ -97,15 +99,16 @@ orders.post('/:id/cancel', authed, requireRole('customer'), async (req, res) => 
   const { reason } = parse(z.object({ reason: z.string().trim().min(5).max(300) }), req.body);
   const order = await loadOrder(String(req.params.id), req.user!);
   await tx(async (c) => {
-    const row = await transition(c, order.id, CANCELLABLE, 'cancelled', req.user!.id, { cancel_reason: reason, cancelled_by: req.user!.id, partner_id: null }, reason);
-    if (order.partner?.id) {
-      await c.query('update delivery_partners set is_available = true where user_id = $1', [order.partner.id]);
-      c.afterCommit(() => emitPartner(order.partner!.id, true));
-    }
+    const prev = await c.query('select partner_id from orders where id = $1', [order.id]);
+    const row = await transition(c, order.id, CANCELLABLE, 'cancelled', req.user!.id, { cancel_reason: reason, cancelled_by: req.user!.id, partner_id: null, partner_accepted_at: null }, reason);
+    row.prevPartner = prev.rows[0]?.partner_id;
+    const partnerId = row.prevPartner as string | undefined;
+    await c.query("update assignments set status = 'cancelled', responded_at = coalesce(responded_at, now()) where order_id = $1 and status in ('pending','accepted')", [order.id]);
+    if (partnerId) await releasePartner(c, partnerId);
     const paid = row.payment_status === 'paid';
     await notifyAdmins(order.id, 'order_cancelled', 'Order cancelled by customer',
       `${order.orderNumber}: ${reason}${paid ? ' (online payment was already received; handle manually)' : ''}`, c);
-    if (order.partner?.id) await notify(order.partner.id, order.id, 'order_cancelled', 'Delivery cancelled', `${order.orderNumber} was cancelled`, c);
+    if (partnerId) await notify(partnerId, order.id, 'order_cancelled', 'Delivery cancelled', `${order.orderNumber} was cancelled`, c);
   });
   res.json({ order: await loadOrder(order.id, req.user!) });
 });
@@ -178,4 +181,22 @@ razorpayWebhook.post('/', express.raw({ type: '*/*', limit: '1mb' }), async (req
     await tx((c) => markPaid(c, entity.order_id, entity.id, null));
   }
   res.json({ ok: true });
+});
+
+/** Live tracking data for the customer's map: shop, destination, rider position and a rough ETA. */
+orders.get('/:id/tracking', authed, requireRole('customer'), async (req, res) => {
+  const order = await loadOrder(String(req.params.id), req.user!);
+  const raw = await pool.query('select o.partner_id, o.partner_accepted_at, d.last_lat, d.last_lng, d.last_seen from orders o left join delivery_partners d on d.user_id = o.partner_id where o.id = $1', [order.id]);
+  const r = raw.rows[0];
+  const store = await storeLocation();
+  const dest = order.address.latitude != null && order.address.longitude != null ? { lat: order.address.latitude, lng: order.address.longitude } : null;
+  const live = order.status === 'out_for_delivery' && r?.last_lat != null;
+  const rider = live ? { lat: r.last_lat as number, lng: r.last_lng as number, updatedAt: r.last_seen as string } : null;
+  const from = rider ?? store;
+  res.json({
+    orderId: order.id, orderNumber: order.orderNumber, status: order.status,
+    store: store ? { lat: store.lat, lng: store.lng } : null, destination: dest,
+    partner: order.partner ? { name: order.partner.name } : null, rider,
+    etaMinutes: dest && from && ['ready_to_dispatch', 'out_for_delivery'].includes(order.status) ? etaMinutes(distanceMeters(from, dest)) : null,
+  });
 });

@@ -34,7 +34,7 @@ export function WelcomeScreen({ navigation }: NativeStackScreenProps<AuthStackPa
         <Float style={[s.deco, { left: 56, bottom: 28 }]} amplitude={8} duration={2500} delay={600} rotate={-8}><MaterialCommunityIcons name="plus-thick" size={30} color={colors.green} /></Float>
         <Float style={[s.deco, { right: 52, bottom: 20 }]} amplitude={10} duration={2900} delay={200} rotate={12}><MaterialCommunityIcons name="leaf" size={34} color="#B7E4C4" /></Float>
       </View>
-      <Animated.View entering={FadeInUp.delay(600).duration(600).springify().damping(15)} style={{ padding: spacing.lg }}>
+      <Animated.View entering={FadeInUp.delay(600).duration(600).springify().damping(15)} style={{ padding: spacing.lg, width: '100%', maxWidth: 460, alignSelf: 'center' }}>
         <Button title={t('auth.start')} icon="arrow-forward" onPress={() => navigation.navigate('Login')} />
       </Animated.View>
     </SafeAreaView>
@@ -238,7 +238,7 @@ const s = StyleSheet.create({
   art: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   artCore: { width: 128, height: 128, borderRadius: 64, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center', boxShadow: '0px 10px 28px rgba(11,95,219,0.20)' },
   deco: { position: 'absolute' },
-  authBody: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  authBody: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, width: '100%', maxWidth: 460, alignSelf: 'center' },
   authLogo: { width: 190, height: 190, alignSelf: 'center', marginBottom: spacing.sm },
   phoneBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: radius.md, paddingHorizontal: spacing.md, minHeight: 56 },
   phoneInput: { flex: 1, fontFamily: fonts.medium, fontSize: 17, color: colors.text, paddingVertical: 10, outlineStyle: 'none' } as object,

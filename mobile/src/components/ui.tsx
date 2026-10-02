@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { HeaderHeightContext } from '@react-navigation/elements';
 import { useNavigation } from '@react-navigation/native';
-import { forwardRef, useContext, useEffect, useState, type ReactNode } from 'react';
+import { Children, forwardRef, useContext, useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
 import Animated, { FadeIn, FadeInDown, interpolate, interpolateColor, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useContentStyle, useLayout } from '../layout';
 import { colors, radius, spacing, type } from '../theme';
 import { Float, Ripples, Tap, useShake } from './motion';
 
@@ -15,18 +16,34 @@ export const Icon = ({ name, size = 24, color = colors.primary }: { name: IconNa
  * Standard screen: scrolls, avoids the keyboard (so inputs and the sticky footer button are never hidden)
  * and animates its footer in.
  */
-export function Screen({ children, scroll = true, footer, padded = true, style }: { children: ReactNode; scroll?: boolean; footer?: ReactNode; padded?: boolean; style?: StyleProp<ViewStyle> }) {
+export function Screen({ children, scroll = true, footer, padded = true, style, wide = false }: { children: ReactNode; scroll?: boolean; footer?: ReactNode; padded?: boolean; style?: StyleProp<ViewStyle>; wide?: boolean }) {
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
+  const { gutter } = useLayout();
+  const column = useContentStyle(wide);
+  const pad = padded ? { paddingHorizontal: gutter, paddingTop: spacing.md, paddingBottom: spacing.xxl } : null;
   const body = scroll
-    ? <ScrollView style={s.flex} contentContainerStyle={[padded && s.pad, style]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets showsVerticalScrollIndicator={false}>{children}</ScrollView>
-    : <View style={[s.flex, padded && s.pad, style]}>{children}</View>;
+    ? <ScrollView style={s.flex} contentContainerStyle={[pad, column, style]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} automaticallyAdjustKeyboardInsets showsVerticalScrollIndicator={false}>{children}</ScrollView>
+    : <View style={[s.flex, pad, column, style]}>{children}</View>;
   return (
     <SafeAreaView style={s.screen} edges={['bottom', 'left', 'right']}>
       <KeyboardAvoidingView style={s.flex} behavior="padding" keyboardVerticalOffset={headerHeight}>
         {body}
-        {footer ? <Animated.View entering={FadeInDown.delay(150).duration(420)} style={s.footer}>{footer}</Animated.View> : null}
+        {footer ? <Animated.View entering={FadeInDown.delay(150).duration(420)} style={s.footer}><View style={[column, { paddingHorizontal: gutter }]}>{footer}</View></Animated.View> : null}
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+/** Lays children out in 1 / 2 / 3 columns depending on the screen width (cards stay readable on tablets and desktops). */
+export function ResponsiveGrid({ children, columns, gap = 12 }: { children: ReactNode; columns?: number; gap?: number }) {
+  const { columns: auto } = useLayout();
+  const cols = columns ?? auto;
+  const items = Children.toArray(children);
+  if (cols <= 1) return <>{items}</>;
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -gap / 2 }}>
+      {items.map((child, i) => <View key={i} style={{ width: `${100 / cols}%`, paddingHorizontal: gap / 2 }}>{child}</View>)}
+    </View>
   );
 }
 
@@ -147,7 +164,7 @@ const s = StyleSheet.create({
   flex: { flex: 1 },
   screen: { flex: 1, backgroundColor: colors.background },
   pad: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xxl },
-  footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md, backgroundColor: colors.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  footer: { paddingTop: spacing.sm, paddingBottom: spacing.md, backgroundColor: colors.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   back: { padding: 4, marginLeft: 4 },
   btn: { minHeight: 54, borderRadius: radius.md },
   btnInner: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing.lg },

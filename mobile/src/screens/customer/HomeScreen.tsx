@@ -11,7 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
 import { OrderCard } from '../../components/OrderCard';
 import { Enter, Float, Skeleton, Tap } from '../../components/motion';
-import { Icon, type IconName } from '../../components/ui';
+import { Icon, ResponsiveGrid, type IconName } from '../../components/ui';
+import { useContentStyle } from '../../layout';
 import { useLoad } from '../../hooks';
 import type { CustomerStackParamList, CustomerTabParamList } from '../../navigation/types';
 import { useSession } from '../../store/session';
@@ -53,6 +54,7 @@ function ActionCard({ icon, title, sub, onPress, tone }: { icon: IconName | 'pil
 export function HomeScreen(_props: BottomTabScreenProps<CustomerTabParamList, 'Home'>) {
   const { t } = useTranslation();
   const nav = useNavigation<NativeStackNavigationProp<CustomerStackParamList>>();
+  const content = useContentStyle(true);
   const user = useSession((st) => st.user);
   const completed = useLoad(() => endpoints.orders('completed'), ['order:update']);
   const active = useLoad(() => endpoints.orders('active'), ['order:update']);
@@ -63,7 +65,7 @@ export function HomeScreen(_props: BottomTabScreenProps<CustomerTabParamList, 'H
 
   return (
     <SafeAreaView style={s.fill} edges={['top']}>
-      <ScrollView contentContainerStyle={s.body} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[s.body, content]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
         <Enter index={0}>
           <View style={s.top}>
             <View style={s.loc}><Icon name="location-sharp" size={22} color={colors.navy} /><Text style={[type.bodyMedium, { color: colors.navy }]}>{t('home.location')}</Text></View>
@@ -75,13 +77,15 @@ export function HomeScreen(_props: BottomTabScreenProps<CustomerTabParamList, 'H
           <Text style={[type.body, { color: colors.secondary, marginBottom: spacing.lg }]}>{t('home.help')}</Text>
         </Enter>
 
-        <Enter index={2}><ActionCard icon="camera" tone="blue" title={t('home.uploadTitle')} sub={t('home.uploadSubtitle')} onPress={() => nav.navigate('Upload')} /></Enter>
-        <Enter index={3}><ActionCard icon="pill" tone="green" title={t('home.typeTitle')} sub={t('home.typeSubtitle')} onPress={() => nav.navigate('TypeMedicines')} /></Enter>
+        <ResponsiveGrid columns={undefined} gap={12}>
+          <Enter index={2}><ActionCard icon="camera" tone="blue" title={t('home.uploadTitle')} sub={t('home.uploadSubtitle')} onPress={() => nav.navigate('Upload')} /></Enter>
+          <Enter index={3}><ActionCard icon="pill" tone="green" title={t('home.typeTitle')} sub={t('home.typeSubtitle')} onPress={() => nav.navigate('TypeMedicines')} /></Enter>
+        </ResponsiveGrid>
 
         {first ? <View style={{ gap: 12, marginTop: spacing.xl }}><Skeleton h={22} w="45%" /><Skeleton h={104} r={16} /><Skeleton h={104} r={16} /></View> : <>
           {(active.data?.orders.length ?? 0) > 0 ? <>
             <Enter index={4}><Text style={[type.h3, s.section]}>{t('home.activeOrders')}</Text></Enter>
-            {active.data!.orders.map((o, i) => <OrderCard key={o.id} order={o} index={i + 5} onPress={() => nav.navigate('OrderDetail', { orderId: o.id })} />)}
+            <ResponsiveGrid>{active.data!.orders.map((o, i) => <OrderCard key={o.id} order={o} index={i + 5} onPress={() => (o.status === 'out_for_delivery' ? nav.navigate('Track', { orderId: o.id }) : nav.navigate('OrderDetail', { orderId: o.id }))} />)}</ResponsiveGrid>
           </> : null}
 
           <Enter index={5}>
@@ -92,7 +96,7 @@ export function HomeScreen(_props: BottomTabScreenProps<CustomerTabParamList, 'H
           </Enter>
           {completed.error ? <Text style={[type.small, { color: colors.red }]}>{completed.error}</Text> : null}
           {completed.data && completed.data.orders.length === 0 ? <Text style={[type.small, { color: colors.secondary }]}>{t('home.noPast')}</Text> : null}
-          {completed.data?.orders.slice(0, 3).map((o, i) => <OrderCard key={o.id} order={o} index={i + 6} onPress={() => nav.navigate('OrderDetail', { orderId: o.id })} />)}
+          <ResponsiveGrid>{completed.data?.orders.slice(0, 4).map((o, i) => <OrderCard key={o.id} order={o} index={i + 6} onPress={() => nav.navigate('OrderDetail', { orderId: o.id })} />)}</ResponsiveGrid>
         </>}
 
         <Enter index={7}>

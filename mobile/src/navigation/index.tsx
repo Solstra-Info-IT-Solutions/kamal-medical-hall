@@ -3,24 +3,26 @@ import { NavigationContainer, type LinkingOptions } from '@react-navigation/nati
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { Icon, type IconName } from '../components/ui';
 import { LoginScreen, OtpScreen, SignupScreen, WelcomeScreen } from '../screens/auth/AuthScreens';
-import { AllOrdersScreen, CustomersScreen, DashboardScreen, MoreScreen, OrderReviewScreen, PartnerAreasScreen, PincodesScreen, ReportsScreen, RequestsScreen, StoreSettingsScreen, TeamScreen } from '../screens/admin/AdminScreens';
+import { AllOrdersScreen, AttendanceScreen, CustomersScreen, DashboardScreen, MoreScreen, OrderReviewScreen, PartnerAreasScreen, PaymentDetailsScreen, PincodesScreen, ReportsScreen, RequestsScreen, StoreSettingsScreen, TeamScreen } from '../screens/admin/AdminScreens';
 import { AddressFormScreen, AddressesScreen } from '../screens/customer/AddressScreens';
 import { CartScreen } from '../screens/customer/CartScreen';
 import { DeliveryTimeScreen, ReviewScreen, SuccessScreen } from '../screens/customer/CheckoutScreens';
 import { HomeScreen } from '../screens/customer/HomeScreen';
 import { TypeMedicinesScreen, UploadScreen } from '../screens/customer/OrderInputScreens';
 import { NotificationsScreen, OrderDetailScreen, OrdersScreen, PaymentScreen } from '../screens/customer/OrderScreens';
+import { TrackScreen } from '../screens/customer/TrackScreen';
 import { EditProfileScreen, HelpScreen, LanguageScreen, LegalScreen, ProfileScreen } from '../screens/customer/ProfileScreens';
-import { JobScreen, PartnerHomeScreen } from '../screens/partner/PartnerScreens';
+import { JobScreen, PartnerHomeScreen, PartnerOrdersScreen } from '../screens/partner/PartnerScreens';
+import { useLayout } from '../layout';
 import { useCart } from '../store/cart';
 import { useSession } from '../store/session';
 import { colors, fonts } from '../theme';
 import { navigationRef } from './ref';
-import type { AdminStackParamList, AdminTabParamList, AuthStackParamList, CustomerStackParamList, CustomerTabParamList, PartnerStackParamList } from './types';
+import type { AdminStackParamList, AdminTabParamList, AuthStackParamList, CustomerStackParamList, CustomerTabParamList, PartnerStackParamList, PartnerTabParamList } from './types';
 
 
 const headerOptions = {
@@ -96,6 +98,7 @@ function CustomerNavigator() {
       <CStack.Screen name="Review" component={ReviewScreen} options={{ title: t('screens.review') }} />
       <CStack.Screen name="Success" component={SuccessScreen} options={{ headerShown: false, gestureEnabled: false, animation: 'fade_from_bottom', animationDuration: 420 }} />
       <CStack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: t('screens.orderDetail') }} />
+      <CStack.Screen name="Track" component={TrackScreen} options={{ title: t('screens.track'), animation: 'fade_from_bottom' }} />
       <CStack.Screen name="Payment" component={PaymentScreen} options={{ title: t('screens.payment'), animation: 'fade_from_bottom' }} />
       <CStack.Screen name="Notifications" component={NotificationsScreen} options={{ title: t('home.notifications') }} />
       <CStack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: t('profile.edit') }} />
@@ -109,8 +112,10 @@ function CustomerNavigator() {
 const ATabs = createBottomTabNavigator<AdminTabParamList>();
 function AdminTabs() {
   const { t } = useTranslation();
+  const { isDesktop } = useLayout();
+  const sidebar = isDesktop ? { tabBarPosition: 'left' as const, tabBarVariant: 'material' as const, tabBarLabelPosition: 'beside-icon' as const, tabBarStyle: { width: 230, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.white } } : null;
   return (
-    <ATabs.Navigator screenOptions={tabOptions}>
+    <ATabs.Navigator screenOptions={{ ...tabOptions, ...(sidebar ?? {}) }}>
       <ATabs.Screen name="Dashboard" component={DashboardScreen} options={{ title: t('admin.dashboard'), tabBarIcon: tabIcon('grid-outline', 'grid') }} />
       <ATabs.Screen name="Requests" component={RequestsScreen} options={{ title: t('admin.newRequests'), tabBarIcon: tabIcon('mail-unread-outline', 'mail-unread') }} />
       <ATabs.Screen name="Orders" component={AllOrdersScreen} options={{ title: t('tabs.orders'), tabBarIcon: tabIcon('document-text-outline', 'document-text') }} />
@@ -128,6 +133,8 @@ function AdminNavigator() {
       <AStack.Screen name="OrderReview" component={OrderReviewScreen} options={{ title: t('screens.orderDetail') }} />
       <AStack.Screen name="Customers" component={CustomersScreen} options={{ title: t('admin.customers') }} />
       <AStack.Screen name="Reports" component={ReportsScreen} options={{ title: t('admin.reports') }} />
+      <AStack.Screen name="PaymentDetails" component={PaymentDetailsScreen} options={{ title: t('admin.paymentDetails') }} />
+      <AStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: t('admin.attendance') }} />
       <AStack.Screen name="Pincodes" component={PincodesScreen} options={{ title: t('admin.pincodes') }} />
       <AStack.Screen name="PartnerAreas" component={PartnerAreasScreen} options={({ route }) => ({ title: route.params.name })} />
       <AStack.Screen name="StoreSettings" component={StoreSettingsScreen} options={{ title: t('admin.settings') }} />
@@ -136,12 +143,22 @@ function AdminNavigator() {
   );
 }
 
+const PTabs = createBottomTabNavigator<PartnerTabParamList>();
+function PartnerTabs() {
+  const { t } = useTranslation();
+  return (
+    <PTabs.Navigator screenOptions={tabOptions}>
+      <PTabs.Screen name="Home" component={PartnerHomeScreen} options={{ title: t('tabs.home'), tabBarIcon: tabIcon('home-outline', 'home') }} />
+      <PTabs.Screen name="Orders" component={PartnerOrdersScreen} options={{ title: t('tabs.orders'), tabBarIcon: tabIcon('document-text-outline', 'document-text') }} />
+    </PTabs.Navigator>
+  );
+}
 const PStack = createNativeStackNavigator<PartnerStackParamList>();
 function PartnerNavigator() {
   const { t } = useTranslation();
   return (
     <PStack.Navigator screenOptions={headerOptions}>
-      <PStack.Screen name="Home" component={PartnerHomeScreen} options={{ headerShown: false }} />
+      <PStack.Screen name="Tabs" component={PartnerTabs} options={{ headerShown: false }} />
       <PStack.Screen name="Job" component={JobScreen} options={{ title: t('screens.orderDetail') }} />
       <PStack.Screen name="Language" component={LanguageScreen} options={{ title: t('profile.language') }} />
     </PStack.Navigator>
@@ -164,7 +181,7 @@ export function Navigation() {
 
   if (status === 'loading') return <View style={{ flex: 1, backgroundColor: colors.white }} />; // the animated splash covers this
   return (
-    <NavigationContainer ref={navigationRef} linking={linking}>
+    <NavigationContainer ref={navigationRef} linking={Platform.OS === 'web' ? undefined : linking}>
       {status === 'out' ? <AuthNavigator /> : role === 'admin' ? <AdminNavigator /> : role === 'delivery_partner' ? <PartnerNavigator /> : <CustomerGate />}
     </NavigationContainer>
   );

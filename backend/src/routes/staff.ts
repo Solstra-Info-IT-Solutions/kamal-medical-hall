@@ -5,9 +5,10 @@ import { config } from '../config.js';
 import { pool, tx } from '../db.js';
 import { bad, bad as bad_, conflict, notFound, parse } from '../http.js';
 import { notify, notifyAdmins } from '../notify.js';
-import { clearPincodeCache } from '../pincodes.js';
-import { emitAdmins, emitPartner } from '../realtime.js';
 import { CANCELLABLE, loadOrder, transition } from '../orderService.js';
+import { distanceMeters, etaMinutes, releasePartner, setPartnerState, storeLocation, TODAY_IST } from '../partnerState.js';
+import { clearPincodeCache } from '../pincodes.js';
+import { emitAdmins, emitUser } from '../realtime.js';
 
 export const adminRouter = Router();
 export const partnerRouter = Router();
@@ -21,6 +22,8 @@ const listRow = (r: Record<string, any>) => ({
   paymentMethod: r.payment_method, paymentStatus: r.payment_status,
   customerName: r.customer_name, customerPhone: r.customer_phone, deliverySlot: r.delivery_slot, deliveryDate: r.delivery_date,
   partnerName: r.partner_name ?? null, fileCount: Number(r.file_count ?? 0), summary: r.summary ?? null,
+  partnerAccepted: Boolean(r.partner_accepted_at), pincode: r.address_snapshot?.pincode ?? null,
+  rejectedReason: r.assignment_reason ?? undefined, respondedAt: r.assignment_at ?? undefined,
 });
 const LIST_SQL = `
   select o.*, c.name as customer_name, c.phone as customer_phone, p.name as partner_name,
@@ -28,7 +31,10 @@ const LIST_SQL = `
          (select string_agg(name || ' x' || quantity, ', ') from order_items i where i.order_id = o.id) as summary
   from orders o join users c on c.id = o.customer_id left join users p on p.id = o.partner_id`;
 
-// ---- Admin -----------------------------------------------------------------
+/** A partner who is flagged on duty but from an earlier day is treated as off duty. */
+const EFFECTIVE_STATE = `case when d.state in ('available','returning') and not (d.on_duty and d.on_duty_day = ${TODAY_IST}) then 'off' else d.state end`;
+
+// ============================================================ Admin
 adminRouter.get('/dashboard', async (_req, res) => {
   const { rows } = await pool.query(`
     select count(*) filter (where status = 'requested') as requested,
@@ -81,42 +87,97 @@ adminRouter.post('/orders/:id/cancel', async (req, res) => {
   const { reason } = parse(z.object({ reason: z.string().trim().min(3).max(300) }), req.body);
   const order = await loadOrder(String(req.params.id), req.user!);
   await tx(async (c) => {
-    await transition(c, order.id, CANCELLABLE, 'cancelled', req.user!.id, { cancel_reason: reason, cancelled_by: req.user!.id, partner_id: null }, reason);
-    if (order.partner?.id) {
-      await c.query('update delivery_partners set is_available = true where user_id = $1', [order.partner.id]);
-      c.afterCommit(() => emitPartner(order.partner!.id, true));
-      await notify(order.partner.id, order.id, 'order_cancelled', 'Delivery cancelled', `${order.orderNumber} was cancelled by the store`, c);
+    const prev = await c.query('select partner_id from orders where id = $1', [order.id]);
+    await transition(c, order.id, CANCELLABLE, 'cancelled', req.user!.id, { cancel_reason: reason, cancelled_by: req.user!.id, partner_id: null, partner_accepted_at: null }, reason);
+    const partnerId = prev.rows[0]?.partner_id as string | undefined;
+    await c.query("update assignments set status = 'cancelled', responded_at = coalesce(responded_at, now()) where order_id = $1 and status in ('pending','accepted')", [order.id]);
+    if (partnerId) {
+      await releasePartner(c, partnerId);
+      await notify(partnerId, order.id, 'order_cancelled', 'Delivery cancelled', `${order.orderNumber} was cancelled by the store`, c);
     }
     await notify(order.customer!.id, order.id, 'order_cancelled', 'Order cancelled by the store', `${order.orderNumber}: ${reason}`, c);
   });
   res.json({ order: await loadOrder(order.id, req.user!) });
 });
 
+/** Sends the order to an available, present partner who covers the pincode. They must accept before the customer is told. */
 adminRouter.post('/orders/:id/assign', async (req, res) => {
   const { partnerId } = parse(z.object({ partnerId: z.string().uuid() }), req.body);
   const order = await loadOrder(String(req.params.id), req.user!);
+  if (order.partner) throw conflict('This order already has a delivery partner. Unassign first.', 'already_assigned');
   await tx(async (c) => {
     const cover = await c.query('select pincode from partner_pincodes where partner_id = $1', [partnerId]);
     if (cover.rows.length && !cover.rows.some((r) => r.pincode === order.address.pincode)) throw conflict('That delivery partner does not cover this pincode.', 'out_of_coverage');
-    const p = await c.query('update delivery_partners set is_available = false where user_id = $1 and is_available and active returning user_id', [partnerId]);
-    if (!p.rows[0]) throw conflict('That delivery partner is not available.', 'partner_unavailable');
-    c.afterCommit(() => emitPartner(partnerId, false));
-    await transition(c, order.id, ['ready_to_dispatch'], 'ready_to_dispatch', req.user!.id, { partner_id: partnerId }, 'Partner assigned');
-    await notify(partnerId, order.id, 'assigned', 'New delivery assigned', `${order.orderNumber} to ${order.address.line1}`, c);
-    await notify(order.customer!.id, order.id, 'partner_assigned', 'Delivery partner assigned', `${order.orderNumber} will be delivered by our staff.`, c);
+    const p = await c.query(`update delivery_partners d set state = 'reserved', is_available = false
+      where d.user_id = $1 and d.active and d.on_duty and d.on_duty_day = ${TODAY_IST} and d.state = 'available' returning d.user_id`, [partnerId]);
+    if (!p.rows[0]) throw conflict('That delivery partner is not available right now (absent, busy or inactive).', 'partner_unavailable');
+    await setPartnerState(c, partnerId, 'reserved');
+    await c.query("insert into assignments (order_id, partner_id) values ($1, $2)", [order.id, partnerId]);
+    await transition(c, order.id, ['ready_to_dispatch'], 'ready_to_dispatch', req.user!.id, { partner_id: partnerId, partner_accepted_at: null }, 'Partner assigned');
+    await notify(partnerId, order.id, 'assigned', 'New delivery request', `${order.orderNumber} to ${order.address.line1}. Please accept or reject.`, c);
+  });
+  res.json({ order: await loadOrder(order.id, req.user!) });
+});
+
+/** Takes the order back from a partner who has not started the ride (e.g. no response). */
+adminRouter.post('/orders/:id/unassign', async (req, res) => {
+  const order = await loadOrder(String(req.params.id), req.user!);
+  await tx(async (c) => {
+    const prev = await c.query('select partner_id from orders where id = $1 for update', [order.id]);
+    const partnerId = prev.rows[0]?.partner_id as string | null;
+    if (!partnerId) throw conflict('No delivery partner is assigned.', 'not_assigned');
+    await transition(c, order.id, ['ready_to_dispatch'], 'ready_to_dispatch', req.user!.id, { partner_id: null, partner_accepted_at: null }, 'Partner unassigned');
+    await c.query("update assignments set status = 'cancelled', responded_at = coalesce(responded_at, now()) where order_id = $1 and status in ('pending','accepted')", [order.id]);
+    await releasePartner(c, partnerId);
+    await notify(partnerId, order.id, 'unassigned', 'Delivery removed', `${order.orderNumber} was taken back by the store`, c);
   });
   res.json({ order: await loadOrder(order.id, req.user!) });
 });
 
 adminRouter.get('/partners', async (_req, res) => {
   const { rows } = await pool.query(`
-    select u.id, u.name, u.phone, d.is_available, d.active,
+    select u.id, u.name, u.phone, d.active, d.can_call_customer, ${EFFECTIVE_STATE} as state,
+      (d.on_duty and d.on_duty_day = ${TODAY_IST}) as on_duty, d.last_seen, d.last_lat, d.last_lng,
+      a.checked_in_at, a.checked_out_at,
       (select count(*) from orders o where o.partner_id = u.id and o.status in ('ready_to_dispatch','out_for_delivery')) as active_orders,
+      (select count(*) from assignments x where x.partner_id = u.id and x.status = 'completed' and x.completed_at >= (${TODAY_IST})::timestamp at time zone 'Asia/Kolkata') as delivered_today,
       (select coalesce(array_agg(pp.pincode order by pp.pincode), '{}') from partner_pincodes pp where pp.partner_id = u.id) as pincodes,
       (select coalesce(sum(o.quoted_amount),0) from orders o join payments p on p.order_id = o.id
         where o.partner_id = u.id and p.status = 'cod_collected' and o.updated_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as cod_today
-    from users u join delivery_partners d on d.user_id = u.id order by u.name`);
-  res.json({ partners: rows.map((r) => ({ id: r.id, name: r.name, phone: r.phone, isAvailable: r.is_available, active: r.active, activeOrders: +r.active_orders, codCollectedToday: Number(r.cod_today), pincodes: r.pincodes })) });
+    from users u join delivery_partners d on d.user_id = u.id
+    left join attendance a on a.partner_id = u.id and a.day = ${TODAY_IST}
+    order by u.name`);
+  res.json({ partners: rows.map((r) => ({
+    id: r.id, name: r.name, phone: r.phone, active: r.active, state: r.state, isAvailable: r.state === 'available', onDuty: r.on_duty,
+    canCallCustomer: r.can_call_customer, checkedInAt: r.on_duty ? r.checked_in_at : r.checked_in_at ?? null, checkedOutAt: r.checked_out_at, lastSeen: r.last_seen,
+    activeOrders: +r.active_orders, deliveredToday: +r.delivered_today, codCollectedToday: Number(r.cod_today), pincodes: r.pincodes,
+  })) });
+});
+
+/** Attendance for today plus a day-by-day strip for the last N days. */
+adminRouter.get('/attendance', async (req, res) => {
+  const { days } = parse(z.object({ days: z.coerce.number().int().min(1).max(31).default(7) }), req.query);
+  const [partners, marks] = await Promise.all([
+    pool.query(`select u.id, u.name, u.phone, d.active, ${EFFECTIVE_STATE} as state, a.checked_in_at, a.checked_out_at
+                from users u join delivery_partners d on d.user_id = u.id left join attendance a on a.partner_id = u.id and a.day = ${TODAY_IST}
+                where d.active order by u.name`),
+    pool.query(`select partner_id, to_char(day, 'YYYY-MM-DD') as day from attendance where day > ${TODAY_IST} - $1::int`, [days]),
+  ]);
+  const dates = Array.from({ length: days }, (_, i) => new Date(Date.now() + 5.5 * 3600000 - (days - 1 - i) * 86400000).toISOString().slice(0, 10));
+  const present = new Map<string, Set<string>>();
+  for (const m of marks.rows) { if (!present.has(m.partner_id)) present.set(m.partner_id, new Set()); present.get(m.partner_id)!.add(m.day); }
+  const today = partners.rows.map((r) => ({ id: r.id, name: r.name, phone: r.phone, state: r.state, present: r.checked_in_at != null, checkedInAt: r.checked_in_at, checkedOutAt: r.checked_out_at }));
+  res.json({
+    dates,
+    today,
+    summary: {
+      total: today.length, present: today.filter((p) => p.present).length,
+      available: today.filter((p) => p.state === 'available').length,
+      busy: today.filter((p) => ['reserved', 'busy', 'returning'].includes(p.state)).length,
+      absent: today.filter((p) => !p.present).length,
+    },
+    history: partners.rows.map((r) => ({ id: r.id, name: r.name, days: dates.map((d) => present.get(r.id)?.has(d) ?? false) })),
+  });
 });
 
 adminRouter.post('/partners', async (req, res) => {
@@ -133,9 +194,35 @@ adminRouter.post('/partners', async (req, res) => {
 });
 
 adminRouter.patch('/partners/:id', async (req, res) => {
-  const { active } = parse(z.object({ active: z.boolean() }), req.body);
-  const { rowCount } = await pool.query('update delivery_partners set active = $2, is_available = case when $2 then is_available else false end where user_id = $1', [req.params.id, active]);
+  const b = parse(z.object({ active: z.boolean().optional(), canCallCustomer: z.boolean().optional() }), req.body);
+  if (b.active === undefined && b.canCallCustomer === undefined) throw bad('Nothing to change.');
+  const { rowCount } = await pool.query(
+    `update delivery_partners set
+       active = coalesce($2, active),
+       can_call_customer = coalesce($3, can_call_customer),
+       state = case when $2 = false and state in ('available','returning') then 'off' else state end,
+       is_available = case when $2 = false then false else is_available end,
+       on_duty = case when $2 = false then false else on_duty end
+     where user_id = $1`, [req.params.id, b.active ?? null, b.canCallCustomer ?? null]);
   if (!rowCount) throw notFound('Partner not found');
+  emitAdmins('partner:update', { partnerId: req.params.id });
+  emitUser(String(req.params.id), 'partner:update', { partnerId: req.params.id });
+  res.status(204).end();
+});
+
+/** Admin override, e.g. a partner forgot to check in, or their phone cannot report a location when they return. */
+adminRouter.post('/partners/:id/state', async (req, res) => {
+  const { state } = parse(z.object({ state: z.enum(['available', 'off']) }), req.body);
+  await tx(async (c) => {
+    const p = await c.query('select state, active from delivery_partners where user_id = $1 for update', [req.params.id]);
+    if (!p.rows[0]) throw notFound('Partner not found');
+    if (['reserved', 'busy'].includes(p.rows[0].state)) throw conflict('This partner has an order in progress.', 'has_active_order');
+    if (state === 'available' && !p.rows[0].active) throw conflict('This partner is inactive.', 'inactive');
+    await c.query(`update delivery_partners set on_duty = $2, on_duty_day = case when $2 then ${TODAY_IST} else on_duty_day end where user_id = $1`, [req.params.id, state === 'available']);
+    if (state === 'available') await c.query(`insert into attendance (partner_id, day) values ($1, ${TODAY_IST}) on conflict (partner_id, day) do update set checked_out_at = null`, [req.params.id]);
+    else await c.query(`update attendance set checked_out_at = now() where partner_id = $1 and day = ${TODAY_IST} and checked_out_at is null`, [req.params.id]);
+    await setPartnerState(c, String(req.params.id), state);
+  });
   res.status(204).end();
 });
 
@@ -214,68 +301,227 @@ adminRouter.get('/reports', async (req, res) => {
 const settingsSchema = z.object({
   isOpen: z.boolean(), openingTime: z.string().regex(/^\d{2}:\d{2}$/), closingTime: z.string().regex(/^\d{2}:\d{2}$/),
   address: z.string().trim().max(300).nullable().optional(), phone: z.string().trim().max(20).nullable().optional(), email: z.string().trim().max(120).nullable().optional(),
+  latitude: z.number().min(-90).max(90).nullable().optional(), longitude: z.number().min(-180).max(180).nullable().optional(),
+  geofenceM: z.number().int().min(30).max(2000).optional(),
 });
 adminRouter.get('/settings', async (_req, res) => {
   const { rows } = await pool.query('select * from store_settings where id = 1');
   const s = rows[0];
-  res.json({ isOpen: s.is_open, openingTime: s.opening_time, closingTime: s.closing_time, address: s.address, phone: s.phone, email: s.email });
+  res.json({ isOpen: s.is_open, openingTime: s.opening_time, closingTime: s.closing_time, address: s.address, phone: s.phone, email: s.email, latitude: s.latitude, longitude: s.longitude, geofenceM: s.geofence_m });
 });
 adminRouter.put('/settings', async (req, res) => {
   const s = parse(settingsSchema, req.body);
-  await pool.query('update store_settings set is_open=$1, opening_time=$2, closing_time=$3, address=$4, phone=$5, email=$6 where id = 1',
-    [s.isOpen, s.openingTime, s.closingTime, s.address ?? null, s.phone ?? null, s.email ?? null]);
+  await pool.query('update store_settings set is_open=$1, opening_time=$2, closing_time=$3, address=$4, phone=$5, email=$6, latitude=$7, longitude=$8, geofence_m=coalesce($9, geofence_m) where id = 1',
+    [s.isOpen, s.openingTime, s.closingTime, s.address ?? null, s.phone ?? null, s.email ?? null, s.latitude ?? null, s.longitude ?? null, s.geofenceM ?? null]);
   res.status(204).end();
 });
 
-// ---- Delivery partner --------------------------------------------------------
-partnerRouter.get('/me', async (req, res) => {
-  const { rows } = await pool.query('select is_available, active from delivery_partners where user_id = $1', [req.user!.id]);
-  if (!rows[0]) throw notFound('Partner profile not found');
-  res.json({ isAvailable: rows[0].is_available, active: rows[0].active });
+// ---- Store payment details (shown by the delivery partner on cash-on-delivery orders) ----
+const paymentSchema = z.object({
+  upiId: z.string().trim().max(80).regex(/^[\w.\-]{2,}@[\w.\-]{2,}$/, 'Enter a valid UPI ID, e.g. shop@upi').nullable().optional().or(z.literal('')),
+  upiName: z.string().trim().max(80).nullable().optional(),
+  bankName: z.string().trim().max(80).nullable().optional(),
+  bankAccountName: z.string().trim().max(80).nullable().optional(),
+  bankAccountNumber: z.string().trim().regex(/^\d{6,20}$/, 'Account number must be 6–20 digits').nullable().optional().or(z.literal('')),
+  bankIfsc: z.string().trim().toUpperCase().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'Enter a valid IFSC, e.g. SBIN0001234').nullable().optional().or(z.literal('')),
+});
+const paymentView = (s: Record<string, any>) => ({
+  upiId: s.upi_id, upiName: s.upi_name, bankName: s.bank_name, bankAccountName: s.bank_account_name, bankAccountNumber: s.bank_account_number, bankIfsc: s.bank_ifsc,
+});
+adminRouter.get('/payment-details', async (_req, res) => {
+  const { rows } = await pool.query('select * from store_settings where id = 1');
+  res.json(paymentView(rows[0]));
+});
+adminRouter.put('/payment-details', async (req, res) => {
+  const p = parse(paymentSchema, req.body);
+  const v = (x: string | null | undefined) => (x ? x : null);
+  await pool.query('update store_settings set upi_id=$1, upi_name=$2, bank_name=$3, bank_account_name=$4, bank_account_number=$5, bank_ifsc=$6 where id = 1',
+    [v(p.upiId), v(p.upiName), v(p.bankName), v(p.bankAccountName), v(p.bankAccountNumber), v(p.bankIfsc)]);
+  res.status(204).end();
 });
 
+// ============================================================ Delivery partner
+async function partnerRow(id: string) {
+  const { rows } = await pool.query(`select d.*, ${EFFECTIVE_STATE} as eff_state, (d.on_duty and d.on_duty_day = ${TODAY_IST}) as duty_today from delivery_partners d where d.user_id = $1`, [id]);
+  if (!rows[0]) throw notFound('Partner profile not found');
+  return rows[0];
+}
+
+partnerRouter.get('/me', async (req, res) => {
+  const d = await partnerRow(req.user!.id);
+  const store = await storeLocation();
+  res.json({
+    state: d.eff_state, isAvailable: d.eff_state === 'available', onDuty: d.duty_today, active: d.active, canCallCustomer: d.can_call_customer,
+    store: store ? { lat: store.lat, lng: store.lng, geofenceM: store.geofenceM } : null,
+  });
+});
+
+/** Check in / out for the day. Checking in makes the partner available; checking out is blocked during an order. */
+partnerRouter.post('/duty', async (req, res) => {
+  const { onDuty } = parse(z.object({ onDuty: z.boolean() }), req.body);
+  await tx(async (c) => {
+    const p = await c.query(`select d.active, ${EFFECTIVE_STATE} as state from delivery_partners d where d.user_id = $1 for update`, [req.user!.id]);
+    if (!p.rows[0]?.active) throw conflict('Your account is not active.', 'inactive');
+    if (onDuty) {
+      await c.query(`update delivery_partners set on_duty = true, on_duty_day = ${TODAY_IST} where user_id = $1`, [req.user!.id]);
+      await c.query(`insert into attendance (partner_id, day) values ($1, ${TODAY_IST}) on conflict (partner_id, day) do update set checked_out_at = null`, [req.user!.id]);
+      if (p.rows[0].state === 'off') await setPartnerState(c, req.user!.id, 'available');
+    } else {
+      if (['reserved', 'busy'].includes(p.rows[0].state)) throw conflict('Finish or hand back your current delivery first.', 'has_active_order');
+      await c.query('update delivery_partners set on_duty = false where user_id = $1', [req.user!.id]);
+      await c.query(`update attendance set checked_out_at = now() where partner_id = $1 and day = ${TODAY_IST} and checked_out_at is null`, [req.user!.id]);
+      await setPartnerState(c, req.user!.id, 'off');
+    }
+  });
+  const d = await partnerRow(req.user!.id);
+  res.json({ state: d.eff_state, onDuty: d.duty_today });
+});
+
+// Legacy route used by older app builds: same as duty on/off.
 partnerRouter.put('/availability', async (req, res) => {
   const { available } = parse(z.object({ available: z.boolean() }), req.body);
-  if (available) {
-    const busy = await pool.query("select 1 from orders where partner_id = $1 and status in ('ready_to_dispatch','out_for_delivery')", [req.user!.id]);
-    if (busy.rows[0]) throw conflict('Finish your current delivery first.', 'has_active_order');
-  }
-  const { rowCount } = await pool.query('update delivery_partners set is_available = $2 where user_id = $1 and active', [req.user!.id, available]);
-  if (!rowCount) throw conflict('Your account is not active.', 'inactive');
-  emitPartner(req.user!.id, available);
+  req.body = { onDuty: available };
+  const d0 = await partnerRow(req.user!.id);
+  if (available === d0.duty_today) return res.json({ isAvailable: d0.eff_state === 'available' });
+  await tx(async (c) => {
+    if (!available && ['reserved', 'busy'].includes(d0.eff_state)) throw conflict('Finish your current delivery first.', 'has_active_order');
+    await c.query(`update delivery_partners set on_duty = $2, on_duty_day = ${TODAY_IST} where user_id = $1`, [req.user!.id, available]);
+    await setPartnerState(c, req.user!.id, available ? 'available' : 'off');
+  });
   res.json({ isAvailable: available });
 });
 
 partnerRouter.get('/orders', async (req, res) => {
-  const { scope } = parse(z.object({ scope: z.enum(['active', 'history']).default('active') }), req.query);
+  const { scope } = parse(z.object({ scope: z.enum(['active', 'delivered', 'rejected', 'history']).default('active') }), req.query);
+  if (scope === 'active') {
+    const { rows } = await pool.query(`${LIST_SQL} where o.partner_id = $1 and o.status in ('ready_to_dispatch','out_for_delivery') order by o.updated_at desc limit 50`, [req.user!.id]);
+    return res.json({ orders: rows.map(listRow) });
+  }
+  const status = scope === 'rejected' ? 'rejected' : 'completed';
   const { rows } = await pool.query(
-    `${LIST_SQL} where o.partner_id = $1 and ${scope === 'active' ? "o.status in ('ready_to_dispatch','out_for_delivery')" : "o.status = 'delivered'"} order by o.updated_at desc limit 50`,
-    [req.user!.id]);
-  res.json({ orders: rows.map(listRow) });
+    `select o.*, c.name as customer_name, c.phone as customer_phone, null::text as partner_name, a.reason as assignment_reason,
+            coalesce(a.completed_at, a.responded_at) as assignment_at,
+            (select count(*) from prescriptions x where x.order_id = o.id) as file_count,
+            (select string_agg(name || ' x' || quantity, ', ') from order_items i where i.order_id = o.id) as summary
+     from assignments a join orders o on o.id = a.order_id join users c on c.id = o.customer_id
+     where a.partner_id = $1 and a.status = $2 order by coalesce(a.completed_at, a.responded_at) desc limit 100`, [req.user!.id, status]);
+  // Partners do not get customer phone numbers in lists.
+  res.json({ orders: rows.map((r) => ({ ...listRow(r), customerPhone: undefined })) });
+});
+
+partnerRouter.post('/orders/:id/accept', async (req, res) => {
+  const order = await loadOrder(String(req.params.id), req.user!);
+  await tx(async (c) => {
+    const a = await c.query("update assignments set status = 'accepted', responded_at = now() where order_id = $1 and partner_id = $2 and status = 'pending' returning id", [order.id, req.user!.id]);
+    if (!a.rows[0]) throw conflict('This delivery is no longer waiting for your response.', 'invalid_state');
+    await transition(c, order.id, ['ready_to_dispatch'], 'ready_to_dispatch', req.user!.id, { partner_accepted_at: new Date() }, 'Partner accepted');
+    await notify(order.customer!.id, order.id, 'partner_assigned', 'Delivery partner confirmed', `${order.orderNumber} will be delivered by our staff.`, c);
+    await notifyAdmins(order.id, 'partner_accepted', 'Delivery accepted', `${req.user!.name ?? 'A delivery partner'} accepted ${order.orderNumber}`, c);
+  });
+  res.json({ order: await loadOrder(order.id, req.user!) });
+});
+
+partnerRouter.post('/orders/:id/reject', async (req, res) => {
+  const { reason } = parse(z.object({ reason: z.string().trim().max(200).optional() }), req.body ?? {});
+  const order = await loadOrder(String(req.params.id), req.user!);
+  await tx(async (c) => {
+    const a = await c.query("update assignments set status = 'rejected', reason = $3, responded_at = now() where order_id = $1 and partner_id = $2 and status in ('pending','accepted') returning id", [order.id, req.user!.id, reason ?? null]);
+    if (!a.rows[0]) throw conflict('This delivery can no longer be rejected.', 'invalid_state');
+    await transition(c, order.id, ['ready_to_dispatch'], 'ready_to_dispatch', req.user!.id, { partner_id: null, partner_accepted_at: null }, `Rejected by partner${reason ? `: ${reason}` : ''}`);
+    await releasePartner(c, req.user!.id);
+    await notifyAdmins(order.id, 'partner_rejected', 'Delivery rejected', `${req.user!.name ?? 'A delivery partner'} rejected ${order.orderNumber}${reason ? `: ${reason}` : ''}. Please assign someone else.`, c);
+  });
+  res.json({ ok: true });
 });
 
 partnerRouter.post('/orders/:id/out-for-delivery', async (req, res) => {
   const order = await loadOrder(String(req.params.id), req.user!);
+  if (!order.partnerAccepted) throw conflict('Accept the delivery first.', 'not_accepted');
   await tx(async (c) => {
     await transition(c, order.id, ['ready_to_dispatch'], 'out_for_delivery', req.user!.id);
-    await notify(order.customer!.id, order.id, 'out_for_delivery', 'Your order is out for delivery', `${order.orderNumber} is on its way.`, c);
+    await setPartnerState(c, req.user!.id, 'busy');
+    await notify(order.customer!.id, order.id, 'out_for_delivery', 'Your order is out for delivery', `${order.orderNumber} is on its way. Track it live in the app.`, c);
     await notifyAdmins(order.id, 'out_for_delivery', 'Out for delivery', `${order.orderNumber} left the store`, c);
   });
   res.json({ order: await loadOrder(order.id, req.user!) });
 });
 
+/** Store payment details for the partner to show the customer on a COD order. */
+partnerRouter.get('/orders/:id/payment-details', async (req, res) => {
+  const order = await loadOrder(String(req.params.id), req.user!);
+  if (order.paymentMethod !== 'cod') throw conflict('This order is already paid online.', 'not_cod');
+  const { rows } = await pool.query('select * from store_settings where id = 1');
+  const s = rows[0];
+  const amount = order.quotedAmount ?? 0;
+  const upiUri = s.upi_id ? `upi://pay?pa=${encodeURIComponent(s.upi_id)}&pn=${encodeURIComponent(s.upi_name ?? 'Kamal Medical Hall')}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(order.orderNumber)}` : null;
+  res.json({ ...paymentView(s), amount, orderNumber: order.orderNumber, upiUri, configured: Boolean(s.upi_id || s.bank_account_number) });
+});
+
+/**
+ * Completing a delivery is mandatory and, for cash-on-delivery, requires recording how the customer paid.
+ * The partner then rides back; they become available again automatically once they reach the shop.
+ */
 partnerRouter.post('/orders/:id/delivered', async (req, res) => {
-  const { cashCollected } = parse(z.object({ cashCollected: z.boolean().default(false) }), req.body ?? {});
+  const b = parse(z.object({ collectedVia: z.enum(['cash', 'upi', 'bank']).optional(), reference: z.string().trim().max(60).optional() }), req.body ?? {});
   const order = await loadOrder(String(req.params.id), req.user!);
   const cod = order.paymentMethod === 'cod';
-  if (cod && !cashCollected) throw bad('Confirm that the cash was collected.', 'cash_required');
+  if (cod && !b.collectedVia) throw bad('Record how the customer paid before completing the delivery.', 'payment_required');
+  const store = await storeLocation();
   await tx(async (c) => {
     await transition(c, order.id, ['out_for_delivery'], 'delivered', req.user!.id, cod ? { payment_status: 'cod_collected' } : {});
-    if (cod) await c.query("update payments set status = 'cod_collected', collected_by = $2 where order_id = $1 and method = 'cod'", [order.id, req.user!.id]);
-    await c.query('update delivery_partners set is_available = true where user_id = $1', [req.user!.id]);
-    c.afterCommit(() => emitPartner(req.user!.id, true));
+    if (cod) await c.query("update payments set status = 'cod_collected', collected_by = $2, collected_via = $3, collection_ref = $4, collected_at = now() where order_id = $1 and method = 'cod'", [order.id, req.user!.id, b.collectedVia, b.reference ?? null]);
+    await c.query("update assignments set status = 'completed', completed_at = now() where order_id = $1 and partner_id = $2 and status = 'accepted'", [order.id, req.user!.id]);
+    // With a known shop location the partner rides back and is freed on arrival; without one they are freed immediately.
+    if (store) await setPartnerState(c, req.user!.id, 'returning'); else await releasePartner(c, req.user!.id);
     await notify(order.customer!.id, order.id, 'delivered', 'Order delivered', `${order.orderNumber} has been delivered. Thank you!`, c);
-    await notifyAdmins(order.id, 'delivered', 'Order delivered', `${order.orderNumber} delivered${cod ? ' (cash collected)' : ''}`, c);
+    await notifyAdmins(order.id, 'delivered', 'Order delivered', `${order.orderNumber} delivered${cod ? ` (paid by ${b.collectedVia})` : ''}`, c);
   });
   res.json({ order: await loadOrder(order.id, req.user!) });
+});
+
+/**
+ * The partner app reports its position while a delivery or the ride back is in progress.
+ * - during a delivery the customer's map follows the rider;
+ * - on the ride back, reaching the shop (admin-set location) makes the partner available automatically.
+ */
+partnerRouter.post('/location', async (req, res) => {
+  const { lat, lng } = parse(z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }), req.body);
+  const { rows } = await pool.query('update delivery_partners set last_lat = $2, last_lng = $3, last_seen = now() where user_id = $1 returning state', [req.user!.id, lat, lng]);
+  const state = rows[0]?.state as string | undefined;
+  if (state === 'busy') {
+    const o = await pool.query("select id, customer_id, address_snapshot from orders where partner_id = $1 and status = 'out_for_delivery' limit 1", [req.user!.id]);
+    const order = o.rows[0];
+    if (order) {
+      const snap = order.address_snapshot;
+      const eta = snap?.latitude != null ? etaMinutes(distanceMeters({ lat, lng }, { lat: snap.latitude, lng: snap.longitude })) : null;
+      const payload = { orderId: order.id, lat, lng, etaMinutes: eta, at: new Date().toISOString() };
+      emitUser(order.customer_id, 'partner:location', payload);
+      emitAdmins('partner:location', { ...payload, partnerId: req.user!.id });
+    }
+  }
+  let arrived = false;
+  if (state === 'returning') {
+    const store = await storeLocation();
+    if (store && distanceMeters({ lat, lng }, store) <= store.geofenceM) {
+      await tx(async (c) => {
+        await releasePartner(c, req.user!.id);
+        await notify(req.user!.id, null, 'back_at_shop', 'Back at the shop', 'You are available for the next delivery.', c);
+      });
+      arrived = true;
+    }
+  }
+  res.json({ state: arrived ? 'available' : state, arrived });
+});
+
+/** Manual "I'm back" for when no shop location is set; otherwise the partner must actually be at the shop. */
+partnerRouter.post('/arrived', async (req, res) => {
+  const d = await partnerRow(req.user!.id);
+  if (d.eff_state !== 'returning') return res.json({ state: d.eff_state });
+  const store = await storeLocation();
+  if (store) {
+    const near = d.last_lat != null && distanceMeters({ lat: d.last_lat, lng: d.last_lng }, store) <= store.geofenceM * 2;
+    if (!near) throw conflict('You do not seem to be at the shop yet. You become available automatically when you arrive.', 'not_at_shop');
+  }
+  await tx(async (c) => { await releasePartner(c, req.user!.id); });
+  res.json({ state: 'available' });
 });

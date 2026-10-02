@@ -13,6 +13,7 @@ export type CustomerStackParamList = {
   Review: undefined;
   Success: { orderId: string; orderNumber: string };
   OrderDetail: { orderId: string };
+  Track: { orderId: string };
   Payment: { orderId: string };
   Notifications: undefined;
   EditProfile: undefined;
@@ -29,8 +30,11 @@ export type AdminStackParamList = {
   Reports: undefined;
   StoreSettings: undefined;
   Pincodes: undefined;
+  PaymentDetails: undefined;
+  Attendance: undefined;
   PartnerAreas: { partnerId: string; name: string };
   Language: undefined;
 };
 
-export type PartnerStackParamList = { Home: undefined; Job: { orderId: string }; Language: undefined };
+export type PartnerTabParamList = { Home: undefined; Orders: undefined };
+export type PartnerStackParamList = { Tabs: NavigatorScreenParams<PartnerTabParamList> | undefined; Job: { orderId: string }; Language: undefined };

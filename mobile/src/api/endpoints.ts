@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { Address, AddressInput, AppNotification, Order, OrderSummary, Partner, PaymentMethod, StoreConfig, User } from './types';
+import type { Address, AddressInput, AppNotification, Attendance, Order, OrderSummary, Partner, PartnerState, PaymentDetails, PaymentMethod, StoreConfig, StoreSettings, Tracking, User } from './types';
 
 export interface RazorpayIntent { orderId: string; amount: number; currency: string; keyId: string }
 export interface UploadSignature { cloudName: string; apiKey: string; signature: string; timestamp: number; folder: string; type: string }
@@ -28,6 +28,7 @@ export const endpoints = {
   createOrder: (b: NewOrderInput) => api<{ order: Order }>('POST', '/orders', b, { timeoutMs: 30000 }),
   orders: (scope: 'completed' | 'active', offset = 0) => api<{ orders: OrderSummary[]; hasMore: boolean }>('GET', `/orders?scope=${scope}&offset=${offset}`),
   order: (id: string) => api<{ order: Order }>('GET', `/orders/${id}`),
+  tracking: (id: string) => api<Tracking>('GET', `/orders/${id}/tracking`),
   cancelOrder: (id: string, reason: string) => api<{ order: Order }>('POST', `/orders/${id}/cancel`, { reason }),
   acceptQuote: (id: string, paymentMethod: PaymentMethod) => api<{ order: Order; razorpay: RazorpayIntent | null }>('POST', `/orders/${id}/accept-quote`, { paymentMethod }),
   verifyPayment: (id: string, b: { razorpayOrderId: string; razorpayPaymentId: string; razorpaySignature: string }) => api<{ order: Order }>('POST', `/orders/${id}/payment/verify`, b),
@@ -43,9 +44,13 @@ export const endpoints = {
     reject: (id: string, reason: string) => api<{ order: Order }>('POST', `/admin/orders/${id}/reject`, { reason }),
     cancel: (id: string, reason: string) => api<{ order: Order }>('POST', `/admin/orders/${id}/cancel`, { reason }),
     assign: (id: string, partnerId: string) => api<{ order: Order }>('POST', `/admin/orders/${id}/assign`, { partnerId }),
+    unassign: (id: string) => api<{ order: Order }>('POST', `/admin/orders/${id}/unassign`),
     partners: () => api<{ partners: Partner[] }>('GET', '/admin/partners'),
+    attendance: (days = 7) => api<Attendance>('GET', `/admin/attendance?days=${days}`),
     addPartner: (name: string, phone: string) => api<{ id: string }>('POST', '/admin/partners', { name, phone }),
+    updatePartner: (id: string, b: { active?: boolean; canCallCustomer?: boolean }) => api<void>('PATCH', `/admin/partners/${id}`, b),
     setPartnerActive: (id: string, active: boolean) => api<void>('PATCH', `/admin/partners/${id}`, { active }),
+    setPartnerState: (id: string, state: 'available' | 'off') => api<void>('POST', `/admin/partners/${id}/state`, { state }),
     pincodes: () => api<{ pincodes: { pincode: string; area: string | null; active: boolean }[] }>('GET', '/admin/pincodes'),
     addPincodes: (pincodes: string[], area?: string) => api<{ added: number }>('POST', '/admin/pincodes', { pincodes, area }),
     setPincodeActive: (pincode: string, active: boolean) => api<void>('PATCH', `/admin/pincodes/${pincode}`, { active }),
@@ -53,14 +58,21 @@ export const endpoints = {
     setPartnerPincodes: (id: string, pincodes: string[]) => api<void>('PUT', `/admin/partners/${id}/pincodes`, { pincodes }),
     customers: (search?: string) => api<{ customers: { id: string; name: string | null; phone: string; joinedAt: string; orderCount: number }[] }>('GET', `/admin/customers${search ? `?search=${encodeURIComponent(search)}` : ''}`),
     reports: (days = 30) => api<{ days: number; daily: { day: string; orders: number; sales: number }[]; paymentSplit: { method: string | null; orders: number; sales: number }[]; perPartner: { name: string; orders: number }[] }>('GET', `/admin/reports?days=${days}`),
-    settings: () => api<{ isOpen: boolean; openingTime: string; closingTime: string; address: string | null; phone: string | null; email: string | null }>('GET', '/admin/settings'),
-    saveSettings: (b: { isOpen: boolean; openingTime: string; closingTime: string; address: string | null; phone: string | null; email: string | null }) => api<void>('PUT', '/admin/settings', b),
+    settings: () => api<StoreSettings>('GET', '/admin/settings'),
+    saveSettings: (b: Partial<StoreSettings> & Pick<StoreSettings, 'isOpen' | 'openingTime' | 'closingTime'>) => api<void>('PUT', '/admin/settings', b),
+    paymentDetails: () => api<PaymentDetails>('GET', '/admin/payment-details'),
+    savePaymentDetails: (b: PaymentDetails) => api<void>('PUT', '/admin/payment-details', b),
   },
   partner: {
-    me: () => api<{ isAvailable: boolean; active: boolean }>('GET', '/partner/me'),
-    setAvailable: (available: boolean) => api<{ isAvailable: boolean }>('PUT', '/partner/availability', { available }),
-    orders: (scope: 'active' | 'history') => api<{ orders: OrderSummary[] }>('GET', `/partner/orders?scope=${scope}`),
+    me: () => api<{ state: PartnerState; isAvailable: boolean; onDuty: boolean; active: boolean; canCallCustomer: boolean; store: { lat: number; lng: number; geofenceM: number } | null }>('GET', '/partner/me'),
+    setDuty: (onDuty: boolean) => api<{ state: PartnerState; onDuty: boolean }>('POST', '/partner/duty', { onDuty }),
+    orders: (scope: 'active' | 'delivered' | 'rejected') => api<{ orders: OrderSummary[] }>('GET', `/partner/orders?scope=${scope}`),
+    accept: (id: string) => api<{ order: Order }>('POST', `/partner/orders/${id}/accept`),
+    reject: (id: string, reason?: string) => api<{ ok: boolean }>('POST', `/partner/orders/${id}/reject`, { reason }),
     outForDelivery: (id: string) => api<{ order: Order }>('POST', `/partner/orders/${id}/out-for-delivery`),
-    delivered: (id: string, cashCollected: boolean) => api<{ order: Order }>('POST', `/partner/orders/${id}/delivered`, { cashCollected }),
+    delivered: (id: string, b: { collectedVia?: 'cash' | 'upi' | 'bank'; reference?: string }) => api<{ order: Order }>('POST', `/partner/orders/${id}/delivered`, b),
+    paymentDetails: (id: string) => api<PaymentDetails & { amount: number; orderNumber: string; upiUri: string | null; configured: boolean }>('GET', `/partner/orders/${id}/payment-details`),
+    location: (lat: number, lng: number) => api<{ state: PartnerState; arrived: boolean }>('POST', '/partner/location', { lat, lng }, { timeoutMs: 10000 }),
+    arrived: () => api<{ state: PartnerState }>('POST', '/partner/arrived'),
   },
 };

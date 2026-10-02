@@ -14,10 +14,10 @@ general.get('/health', (_req, res) => { res.json({ ok: true }); });
 
 /** Public store/delivery configuration. Slots are computed server-side in Asia/Kolkata time. */
 general.get('/config', async (_req, res) => {
-  const { rows } = await pool.query('select is_open, opening_time, closing_time, address, phone, email from store_settings where id = 1');
+  const { rows } = await pool.query('select is_open, opening_time, closing_time, address, phone, email, latitude, longitude from store_settings where id = 1');
   const s = rows[0];
   res.json({
-    store: { isOpen: s.is_open, openingTime: s.opening_time, closingTime: s.closing_time, address: s.address, phone: s.phone, email: s.email },
+    store: { isOpen: s.is_open, openingTime: s.opening_time, closingTime: s.closing_time, address: s.address, phone: s.phone, email: s.email, latitude: s.latitude, longitude: s.longitude },
     deliveryDays: listDeliveryDays(),
     authMode: config.authMode,
   });

@@ -27,9 +27,18 @@ export async function loadOrder(id: string, viewer: AuthUser, db: Queryable = po
     db.query('select status, reason, created_at from status_history where order_id = $1 order by created_at', [o.id]),
   ]);
   const staffView = viewer.role !== 'customer';
+  // Delivery partners only see the customer's phone once they accepted the order, and only if the admin allows calling.
+  let phoneVisible = viewer.role === 'admin';
+  let canCallCustomer = viewer.role === 'admin';
+  if (viewer.role === 'delivery_partner') {
+    const d = await db.query('select can_call_customer from delivery_partners where user_id = $1', [viewer.id]);
+    canCallCustomer = Boolean(d.rows[0]?.can_call_customer);
+    phoneVisible = canCallCustomer && Boolean(o.partner_accepted_at);
+  }
+  const address = phoneVisible || viewer.role === 'customer' ? o.address_snapshot : { ...o.address_snapshot, phone: null };
   return {
     id: o.id, orderNumber: o.order_number, kind: o.kind, status: o.status, note: o.note,
-    address: o.address_snapshot, deliveryDate: o.delivery_date instanceof Date ? o.delivery_date.toISOString().slice(0, 10) : o.delivery_date,
+    address, partnerAccepted: Boolean(o.partner_accepted_at), canCallCustomer, deliveryDate: o.delivery_date instanceof Date ? o.delivery_date.toISOString().slice(0, 10) : o.delivery_date,
     deliverySlot: o.delivery_slot, quotedAmount: o.quoted_amount === null ? null : Number(o.quoted_amount),
     quoteExpiresAt: o.quote_expires_at, paymentMethod: o.payment_method, paymentStatus: o.payment_status,
     rejectionReason: o.rejection_reason, cancelReason: o.cancel_reason, createdAt: o.created_at,
@@ -38,8 +47,8 @@ export async function loadOrder(id: string, viewer: AuthUser, db: Queryable = po
     prescriptions: viewer.role === 'delivery_partner' ? [] : rx.rows.map((r) => ({ id: r.id, mimeType: r.mime_type, sizeBytes: r.size_bytes, url: signedPrescriptionUrl(r.public_id, r.mime_type) })),
     history: history.rows,
     reviewedBy: staffView ? o.reviewed_by : undefined,
-    customer: staffView ? { id: o.customer_id, name: o.customer_name, phone: o.customer_phone } : undefined,
-    partner: o.partner_id && viewer.role !== 'customer' ? { id: o.partner_id, name: o.partner_name, phone: o.partner_phone } : o.partner_id ? { id: o.partner_id, name: o.partner_name } : null,
+    customer: staffView ? { id: o.customer_id, name: o.customer_name, phone: phoneVisible ? o.customer_phone : null } : undefined,
+    partner: o.partner_id && viewer.role !== 'customer' ? { id: o.partner_id, name: o.partner_name, phone: o.partner_phone } : o.partner_id && o.partner_accepted_at ? { id: o.partner_id, name: o.partner_name } : null,
   };
 }
 

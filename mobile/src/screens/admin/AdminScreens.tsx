@@ -1,19 +1,22 @@
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as Location from 'expo-location';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Image, Linking, Platform, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown, FadeOutLeft, LinearTransition } from 'react-native-reanimated';
+import QRCode from 'react-native-qrcode-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
-import type { Order, OrderSummary, Partner } from '../../api/types';
+import type { Order, OrderSummary, Partner, PartnerState } from '../../api/types';
 import { Avatar, CallButton } from '../../components/CallButton';
 import { OrderCard } from '../../components/OrderCard';
 import { CountUp, Enter, Skeleton, Tap, tick } from '../../components/motion';
-import { Button, Card, ErrorView, Icon, Message, Pill, Screen, TextField, type IconName } from '../../components/ui';
+import { Button, Card, ErrorView, Icon, Message, Pill, ResponsiveGrid, Screen, TextField, type IconName } from '../../components/ui';
 import { notice, showDialog } from '../../dialog';
 import { useLoad } from '../../hooks';
+import { useContentStyle, useLayout } from '../../layout';
 import type { AdminStackParamList, AdminTabParamList } from '../../navigation/types';
 import { useSession } from '../../store/session';
 import { colors, radius, spacing, type } from '../../theme';
@@ -22,6 +25,9 @@ import { formatDate, formatDateTime, formatMoney, statusTone } from '../../utils
 type Nav = NativeStackNavigationProp<AdminStackParamList>;
 const LIVE = ['order:update', 'notification'];
 const Header = ({ title, right }: { title: string; right?: React.ReactNode }) => <View style={s.headRow}><Text style={[type.h2, s.heading]}>{title}</Text>{right ? <View style={s.headRight}>{right}</View> : null}</View>;
+const STATE_TONE: Record<PartnerState, 'green' | 'red' | 'amber' | 'blue'> = { off: 'red', available: 'green', reserved: 'amber', busy: 'blue', returning: 'blue' };
+const statePill = (t: (k: string) => string, p: { state: PartnerState; active: boolean }) => <Pill text={!p.active ? t('admin.inactive') : t(`admin.st_${p.state}`)} tone={!p.active ? 'red' : STATE_TONE[p.state]} />;
+const clock = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '');
 const ListSkeleton = () => <View style={{ padding: spacing.lg, gap: 12 }}>{[0, 1, 2].map((i) => <Skeleton key={i} h={110} r={16} />)}</View>;
 
 function OrderRow({ o, onPress, index = 0 }: { o: OrderSummary; onPress: () => void; index?: number }) {
@@ -32,13 +38,15 @@ function OrderRow({ o, onPress, index = 0 }: { o: OrderSummary; onPress: () => v
 export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Dashboard'>) {
   const { t } = useTranslation();
   const nav = useNavigation<Nav>();
+  const content = useContentStyle(true);
+  const { tileColumns } = useLayout();
   const stats = useLoad(() => endpoints.admin.dashboard(), LIVE);
   const team = useLoad(() => endpoints.admin.partners(), ['partner:update', 'order:update']);
   const recent = useLoad(() => endpoints.admin.orders('requested'), LIVE);
   const data = stats.data;
   let tileIndex = 1;
   const tile = (icon: IconName, label: string, value: number, money = false, tone: 'blue' | 'green' | 'amber' = 'blue', onPress?: () => void) => (
-    <Enter index={tileIndex++} style={s.tile}>
+    <Enter index={tileIndex++}>
       <Card onPress={onPress} style={s.tileCard}>
         <View style={[s.tileIcon, tone === 'green' && { backgroundColor: colors.greenBg }, tone === 'amber' && { backgroundColor: colors.amberBg }]}><Icon name={icon} size={22} color={tone === 'green' ? colors.green : tone === 'amber' ? colors.amber : colors.primary} /></View>
         <CountUp value={value} prefix={money ? '₹' : ''} style={[type.h1, { color: colors.text }]} />
@@ -52,15 +60,15 @@ export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Das
     <SafeAreaView style={s.fill} edges={['top']}>
       <Header title={t('admin.dashboard')} />
       {stats.loading && !data ? <ListSkeleton /> : stats.error && !data ? <ErrorView message={stats.error} onRetry={stats.reload} retryLabel={t('common.retry')} /> : (
-        <ScrollView contentContainerStyle={s.pad} refreshControl={<RefreshControl refreshing={false} onRefresh={() => { void stats.reload(); void team.reload(); void recent.reload(); }} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
-          <View style={s.grid}>
+        <ScrollView contentContainerStyle={[s.pad, content]} refreshControl={<RefreshControl refreshing={false} onRefresh={() => { void stats.reload(); void team.reload(); void recent.reload(); }} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
+          <ResponsiveGrid columns={tileColumns}>
             {tile('mail-unread', t('admin.newRequests'), data!.requested, false, 'amber', () => nav.navigate('Tabs', { screen: 'Requests' }))}
             {tile('hourglass', t('admin.awaiting'), data!.awaitingPayment)}
             {tile('cube', t('admin.ready'), data!.readyToDispatch, false, 'blue', () => nav.navigate('Tabs', { screen: 'Orders' }))}
             {tile('bicycle', t('admin.outForDelivery'), data!.outForDelivery)}
             {tile('checkmark-done', t('admin.deliveredToday'), data!.deliveredToday, false, 'green')}
             {tile('cash', t('admin.salesToday'), data!.salesToday, true, 'green')}
-          </View>
+          </ResponsiveGrid>
 
           <Enter index={8}>
             <Card onPress={() => nav.navigate('Tabs', { screen: 'Team' })} style={s.teamCard}>
@@ -75,7 +83,7 @@ export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Das
 
           <Enter index={9}><Text style={[type.h3, s.sec]}>{t('admin.recentRequests')}</Text></Enter>
           {recent.data && !recent.data.orders.length ? <Text style={[type.small, { color: colors.secondary }]}>{t('admin.noRequests')}</Text> : null}
-          {recent.data?.orders.slice(0, 3).map((o, i) => <OrderRow key={o.id} o={o} index={i + 10} onPress={() => nav.navigate('OrderReview', { orderId: o.id })} />)}
+          <ResponsiveGrid>{recent.data?.orders.slice(0, 4).map((o, i) => <OrderRow key={o.id} o={o} index={i + 10} onPress={() => nav.navigate('OrderReview', { orderId: o.id })} />)}</ResponsiveGrid>
         </ScrollView>)}
     </SafeAreaView>
   );
@@ -87,6 +95,7 @@ function OrderList({ status, title, search }: { status?: string; title: string; 
   const [q, setQ] = useState('');
   const [term, setTerm] = useState('');
   const [filter, setFilter] = useState<string | undefined>(status);
+  const content = useContentStyle(true);
   useEffect(() => { const id = setTimeout(() => setTerm(q.trim()), 400); return () => clearTimeout(id); }, [q]);
   const { data, error, loading, reload } = useLoad(() => endpoints.admin.orders(filter, term || undefined), LIVE);
   useEffect(() => { void reload(); }, [filter, term, reload]);
@@ -100,8 +109,8 @@ function OrderList({ status, title, search }: { status?: string; title: string; 
           {filters.map((f) => <Tap key={f ?? 'all'} accessibilityRole="button" onPress={() => setFilter(f)} scaleTo={0.93} style={[s.chip, filter === f && s.chipOn]}><Text style={[type.smallMedium, { color: filter === f ? colors.white : colors.navy }]}>{f ? t(`status.${f.split(',')[0]}`) : t('admin.all')}</Text></Tap>)}
         </ScrollView></> : null}
       {loading && !data ? <ListSkeleton /> : error && !data ? <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} /> : !data?.orders.length ? <Message icon="file-tray-outline" title={t('admin.noOrders')} /> : (
-        <ScrollView contentContainerStyle={s.pad} refreshControl={<RefreshControl refreshing={false} onRefresh={reload} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
-          {data.orders.map((o, i) => <OrderRow key={o.id} o={o} index={i} onPress={() => nav.navigate('OrderReview', { orderId: o.id })} />)}
+        <ScrollView contentContainerStyle={[s.pad, content]} refreshControl={<RefreshControl refreshing={false} onRefresh={reload} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
+          <ResponsiveGrid>{data.orders.map((o, i) => <OrderRow key={o.id} o={o} index={i} onPress={() => nav.navigate('OrderReview', { orderId: o.id })} />)}</ResponsiveGrid>
         </ScrollView>)}
     </SafeAreaView>
   );
@@ -113,8 +122,8 @@ export const AllOrdersScreen = () => { const { t } = useTranslation(); return <O
 function PartnerRow({ p, pincode, busy, canAssign, onAssign }: { p: Partner; pincode: string; busy: boolean; canAssign: boolean; onAssign: () => void }) {
   const { t } = useTranslation();
   const covers = p.pincodes.length === 0 || p.pincodes.includes(pincode);
-  const ready = p.active && p.isAvailable && covers;
-  const reason = !p.active ? t('admin.inactive') : !p.isAvailable ? t('admin.partnerBusyReason') : !covers ? t('admin.notCoveredReason', { pincode }) : null;
+  const ready = p.active && p.state === 'available' && covers;
+  const reason = !p.active ? t('admin.inactive') : p.state === 'off' ? t('admin.reasonAbsent') : p.state !== 'available' ? t('admin.partnerBusyReason') : !covers ? t('admin.notCoveredReason', { pincode }) : null;
   return (
     <View style={[s.partnerRow, ready && s.partnerReady]}>
       <Avatar name={p.name} />
@@ -122,7 +131,7 @@ function PartnerRow({ p, pincode, busy, canAssign, onAssign }: { p: Partner; pin
         <Text style={[type.bodyMedium, { color: colors.text }]}>{p.name}</Text>
         <Text style={[type.small, { color: colors.secondary }]}>{p.phone}{p.activeOrders ? ` · ${t('admin.activeOrders', { count: p.activeOrders })}` : ''}</Text>
         <View style={s.pillRow}>
-          <Pill text={!p.active ? t('admin.inactive') : p.isAvailable ? t('partner.available') : t('partner.busy')} tone={!p.active ? 'red' : p.isAvailable ? 'green' : 'amber'} />
+          {statePill(t, p)}
           <Pill text={p.pincodes.length === 0 ? t('admin.coversAll') : covers ? t('admin.covers', { pincode }) : t('admin.notCovered')} tone={covers ? 'blue' : 'red'} />
         </View>
       </View>
@@ -203,9 +212,18 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
           <Card style={s.block}>
             <View style={s.personRow}>
               <Avatar name={o.partner.name} size={48} />
-              <View style={{ flex: 1 }}><Text style={[type.small, { color: colors.secondary }]}>{t('admin.partner')}</Text><Text style={[type.h3, { color: colors.text }]}>{o.partner.name}</Text><Text style={[type.small, { color: colors.secondary }]}>+91 {o.partner.phone}</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={[type.small, { color: colors.secondary }]}>{t('admin.partner')}</Text>
+                <Text style={[type.h3, { color: colors.text }]}>{o.partner.name}</Text>
+                <Text style={[type.small, { color: colors.secondary }]}>+91 {o.partner.phone}</Text>
+              </View>
               <CallButton phone={o.partner.phone} compact label={t('admin.callPartner')} />
             </View>
+            <View style={[s.pillRow, { marginTop: spacing.md }]}>
+              <Pill text={o.status === 'out_for_delivery' ? t('admin.st_busy') : o.partnerAccepted ? t('admin.accepted') : t('admin.waitingResponse')} tone={o.status === 'out_for_delivery' ? 'blue' : o.partnerAccepted ? 'green' : 'amber'} />
+            </View>
+            {o.status === 'ready_to_dispatch' ? <Button title={t('admin.unassign')} variant="outline" icon="swap-horizontal" loading={busy === 'unassign'} style={{ marginTop: spacing.md }}
+              onPress={async () => { const ok = await showDialog({ title: t('admin.unassignTitle', { name: o.partner!.name }), message: t('admin.unassignMsg'), icon: 'swap-horizontal', confirmLabel: t('admin.unassign'), cancelLabel: t('common.cancel') }); if (ok) await run('unassign', () => endpoints.admin.unassign(o.id)); }} /> : null}
           </Card>
         </Enter>
       ) : null}
@@ -261,6 +279,7 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
 export function TeamScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Team'>) {
   const { t } = useTranslation();
   const nav = useNavigation<Nav>();
+  const content = useContentStyle(true);
   const { data, error, loading, reload } = useLoad(() => endpoints.admin.partners(), ['partner:update', 'order:update']);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
@@ -277,13 +296,42 @@ export function TeamScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Team'>) 
       const ok = await showDialog({ title: t('admin.deactivateTitle', { name: p.name }), message: t('admin.deactivateMsg'), icon: 'person-remove', tone: 'danger', confirmLabel: t('admin.deactivate'), cancelLabel: t('common.cancel') });
       if (!ok) return;
     }
-    try { await endpoints.admin.setPartnerActive(p.id, v); await reload(); } catch (e) { await notice(t('common.error'), (e as Error).message, t('common.ok')); }
+    try { await endpoints.admin.updatePartner(p.id, { active: v }); await reload(); } catch (e) { await notice(t('common.error'), (e as Error).message, t('common.ok')); }
   };
+  const toggleCall = async (p: Partner, v: boolean) => {
+    try { await endpoints.admin.updatePartner(p.id, { canCallCustomer: v }); tick(); await reload(); } catch (e) { await notice(t('common.error'), (e as Error).message, t('common.ok')); }
+  };
+  const override = async (p: Partner, state: 'available' | 'off') => {
+    try { await endpoints.admin.setPartnerState(p.id, state); tick('success'); await reload(); } catch (e) { await notice(t('common.error'), (e as Error).message, t('common.ok')); }
+  };
+  const list = data?.partners ?? [];
+  const count = (f: (p: Partner) => boolean) => list.filter((p) => p.active && f(p)).length;
+  const summary: { label: string; value: number; tone: 'green' | 'blue' | 'amber' | 'red' }[] = [
+    { label: t('admin.present'), value: count((p) => p.state !== 'off'), tone: 'green' },
+    { label: t('admin.st_available'), value: count((p) => p.state === 'available'), tone: 'green' },
+    { label: t('admin.onTheRoad'), value: count((p) => ['reserved', 'busy', 'returning'].includes(p.state)), tone: 'blue' },
+    { label: t('admin.st_off'), value: count((p) => p.state === 'off'), tone: 'red' },
+  ];
   return (
     <SafeAreaView style={s.fill} edges={['top']}>
       <Header title={t('admin.team')} right={<Tap accessibilityRole="button" accessibilityLabel={t('admin.addPartner')} onPress={() => setOpen((v) => !v)} style={s.addBtn}><Icon name={open ? 'close' : 'person-add'} size={20} color={colors.white} /></Tap>} />
       {loading && !data ? <ListSkeleton /> : error && !data ? <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} /> : (
-        <Screen>
+        <ScrollView contentContainerStyle={[s.pad, content]} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={false} onRefresh={reload} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
+          <Enter index={0}>
+            <Tap accessibilityRole="button" onPress={() => nav.navigate('Attendance')} scaleTo={0.98}>
+              <View style={s.attendance}>
+                <View style={s.attHead}><Icon name="calendar" size={20} /><Text style={[type.bodyMedium, { color: colors.text, flex: 1 }]}>{t('admin.attendanceToday')}</Text><Text style={[type.smallMedium, { color: colors.primary }]}>{t('admin.viewHistory')}</Text></View>
+                <View style={s.attRow}>
+                  {summary.map((x) => (
+                    <View key={x.label} style={s.attCell}>
+                      <CountUp value={x.value} style={[type.h2, { color: x.tone === 'green' ? colors.green : x.tone === 'red' ? colors.red : colors.primary }]} />
+                      <Text style={[type.small, { color: colors.secondary, textAlign: 'center' }]} numberOfLines={2}>{x.label}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </Tap>
+          </Enter>
           {open ? (
             <Animated.View entering={FadeInDown.duration(300)} exiting={FadeOutLeft.duration(200)}>
               <Card style={s.block}>
@@ -295,34 +343,92 @@ export function TeamScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Team'>) 
               </Card>
             </Animated.View>
           ) : null}
-          {!data!.partners.length && !open ? <View style={{ height: 320 }}><Message icon="people-outline" title={t('admin.noPartners')} text={t('admin.noPartnersHelp')} actionLabel={t('admin.addPartner')} onAction={() => setOpen(true)} /></View> : null}
-          {data!.partners.map((p, i) => (
-            <Enter key={p.id} index={i}>
-              <Card style={s.block}>
-                <View style={s.personRow}>
-                  <Avatar name={p.name} size={48} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[type.h3, { color: colors.text }]}>{p.name}</Text>
-                    <Text style={[type.small, { color: colors.secondary }]}>+91 {p.phone}</Text>
-                    <View style={s.pillRow}><Pill text={!p.active ? t('admin.inactive') : p.isAvailable ? t('partner.available') : t('partner.busy')} tone={!p.active ? 'red' : p.isAvailable ? 'green' : 'amber'} /></View>
+          {!list.length && !open ? <View style={{ height: 320 }}><Message icon="people-outline" title={t('admin.noPartners')} text={t('admin.noPartnersHelp')} actionLabel={t('admin.addPartner')} onAction={() => setOpen(true)} /></View> : null}
+          <ResponsiveGrid>
+            {list.map((p, i) => (
+              <Enter key={p.id} index={i + 1}>
+                <Card style={s.block}>
+                  <View style={s.personRow}>
+                    <Avatar name={p.name} size={48} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[type.h3, { color: colors.text }]}>{p.name}</Text>
+                      <Text style={[type.small, { color: colors.secondary }]}>+91 {p.phone}</Text>
+                      <View style={s.pillRow}>{statePill(t, p)}</View>
+                      {p.checkedInAt && p.state !== 'off' ? <Text style={[type.small, { color: colors.secondary, marginTop: 4 }]}>{t('admin.checkedIn', { time: clock(p.checkedInAt) })}</Text> : null}
+                    </View>
+                    <CallButton phone={p.phone} compact label={t('admin.callPartner')} />
                   </View>
-                  <CallButton phone={p.phone} compact label={t('admin.callPartner')} />
-                </View>
-                <View style={s.stats}>
-                  <View style={s.stat}><Text style={[type.h3, { color: colors.text }]}>{p.activeOrders}</Text><Text style={[type.small, { color: colors.secondary }]}>{t('admin.activeLabel')}</Text></View>
-                  <View style={s.stat}><Text style={[type.h3, { color: colors.text }]}>{formatMoney(p.codCollectedToday)}</Text><Text style={[type.small, { color: colors.secondary }]}>{t('admin.codToday')}</Text></View>
-                </View>
-                <Tap accessibilityRole="button" onPress={() => nav.navigate('PartnerAreas', { partnerId: p.id, name: p.name })} scaleTo={0.98} style={s.areaRow}>
-                  <Icon name="map" size={20} />
-                  <Text style={[type.bodyMedium, { color: colors.text, flex: 1 }]}>{p.pincodes.length ? t('admin.areasCount', { count: p.pincodes.length }) : t('admin.areasAll')}</Text>
-                  <Text style={[type.smallMedium, { color: colors.primary }]}>{t('common.edit')}</Text>
-                </Tap>
-                <View style={s.activeRow}><Text style={[type.small, { color: colors.secondary }]}>{t('admin.active')}</Text><Switch accessibilityLabel={t('admin.active')} value={p.active} onValueChange={(v) => toggleActive(p, v)} /></View>
-              </Card>
-            </Enter>
-          ))}
-        </Screen>)}
+                  <View style={s.stats}>
+                    <View style={s.stat}><Text style={[type.h3, { color: colors.text }]}>{p.activeOrders}</Text><Text style={[type.small, { color: colors.secondary }]}>{t('admin.activeLabel')}</Text></View>
+                    <View style={s.stat}><Text style={[type.h3, { color: colors.text }]}>{p.deliveredToday}</Text><Text style={[type.small, { color: colors.secondary }]}>{t('admin.deliveredTodayShort')}</Text></View>
+                    <View style={s.stat}><Text style={[type.h3, { color: colors.text }]}>{formatMoney(p.codCollectedToday)}</Text><Text style={[type.small, { color: colors.secondary }]}>{t('admin.codToday')}</Text></View>
+                  </View>
+                  <Tap accessibilityRole="button" onPress={() => nav.navigate('PartnerAreas', { partnerId: p.id, name: p.name })} scaleTo={0.98} style={s.areaRow}>
+                    <Icon name="map" size={20} />
+                    <Text style={[type.bodyMedium, { color: colors.text, flex: 1 }]}>{p.pincodes.length ? t('admin.areasCount', { count: p.pincodes.length }) : t('admin.areasAll')}</Text>
+                    <Text style={[type.smallMedium, { color: colors.primary }]}>{t('common.edit')}</Text>
+                  </Tap>
+                  <View style={s.activeRow}>
+                    <View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]}>{t('admin.canCall')}</Text><Text style={[type.small, { color: colors.secondary }]}>{p.canCallCustomer ? t('admin.canCallOn') : t('admin.canCallOff')}</Text></View>
+                    <Switch accessibilityLabel={t('admin.canCall')} value={p.canCallCustomer} onValueChange={(v) => toggleCall(p, v)} />
+                  </View>
+                  <View style={s.activeRow}><Text style={[type.small, { color: colors.secondary }]}>{t('admin.active')}</Text><Switch accessibilityLabel={t('admin.active')} value={p.active} onValueChange={(v) => toggleActive(p, v)} /></View>
+                  {p.active && (p.state === 'off' || p.state === 'returning' || p.state === 'available') ? (
+                    <View style={[s.btnRow, { marginTop: spacing.sm }]}>
+                      {p.state !== 'available' ? <Button small title={t('admin.markAvailable')} variant="outline" onPress={() => override(p, 'available')} style={{ flex: 1 }} /> : null}
+                      {p.state !== 'off' ? <Button small title={t('admin.markAbsent')} variant="ghost" onPress={() => override(p, 'off')} style={{ flex: 1 }} /> : null}
+                    </View>
+                  ) : null}
+                </Card>
+              </Enter>
+            ))}
+          </ResponsiveGrid>
+        </ScrollView>)}
     </SafeAreaView>
+  );
+}
+
+// Attendance: today's roster and a 7-day strip.
+export function AttendanceScreen() {
+  const { t } = useTranslation();
+  const { data, error, loading, reload } = useLoad(() => endpoints.admin.attendance(7), ['partner:update']);
+  if (loading && !data) return <ListSkeleton />;
+  if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
+  const a = data!;
+  const dayLetter = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' });
+  return (
+    <Screen wide>
+      <Enter><View style={s.attRow}>
+        {[{ l: t('admin.present'), v: a.summary.present, c: colors.green }, { l: t('admin.st_available'), v: a.summary.available, c: colors.green }, { l: t('admin.onTheRoad'), v: a.summary.busy, c: colors.primary }, { l: t('admin.st_off'), v: a.summary.absent, c: colors.red }].map((x) => (
+          <View key={x.l} style={s.attCell}><CountUp value={x.v} style={[type.h1, { color: x.c }]} /><Text style={[type.small, { color: colors.secondary, textAlign: 'center' }]}>{x.l}</Text></View>
+        ))}
+      </View></Enter>
+      <Enter index={1}><Text style={[type.h3, s.sec]}>{t('admin.attendanceToday')}</Text></Enter>
+      {a.today.map((p, i) => (
+        <Enter key={p.id} index={i + 2}>
+          <View style={s.pinRow}>
+            <Avatar name={p.name} />
+            <View style={{ flex: 1 }}>
+              <Text style={[type.bodyMedium, { color: colors.text }]}>{p.name}</Text>
+              <Text style={[type.small, { color: colors.secondary }]}>{p.present ? t('admin.checkedIn', { time: clock(p.checkedInAt) }) + (p.checkedOutAt ? ` · ${t('admin.checkedOut', { time: clock(p.checkedOutAt) })}` : '') : t('admin.notCheckedIn')}</Text>
+            </View>
+            <Pill text={t(`admin.st_${p.state}`)} tone={STATE_TONE[p.state]} />
+          </View>
+        </Enter>
+      ))}
+      <Enter index={9}><Text style={[type.h3, s.sec]}>{t('admin.last7')}</Text></Enter>
+      <Enter index={10}>
+        <Card style={s.block}>
+          <View style={s.gridHead}><View style={{ flex: 1.4 }} />{a.dates.map((d) => <Text key={d} style={[type.small, s.gridCell, { color: colors.secondary }]}>{dayLetter(d)}</Text>)}</View>
+          {a.history.map((h) => (
+            <View key={h.id} style={s.gridRow}>
+              <Text style={[type.small, { flex: 1.4, color: colors.text }]} numberOfLines={1}>{h.name}</Text>
+              {h.days.map((on, i) => <View key={i} style={s.gridCell}><View style={[s.gridDot, on && s.gridDotOn]}>{on ? <Icon name="checkmark" size={12} color={colors.white} /> : null}</View></View>)}
+            </View>
+          ))}
+        </Card>
+      </Enter>
+    </Screen>
   );
 }
 
@@ -446,8 +552,10 @@ export function MoreScreen(_p: BottomTabScreenProps<AdminTabParamList, 'More'>) 
   return (
     <SafeAreaView style={s.fill} edges={['top']}>
       <Header title={t('admin.more')} />
-      <ScrollView contentContainerStyle={s.pad} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[s.pad, useContentStyle()]} showsVerticalScrollIndicator={false}>
         <Enter index={0}><View style={s.me}><Avatar name={user?.name} size={56} /><View><Text style={[type.h3, { color: colors.text }]}>{user?.name}</Text><Text style={[type.small, { color: colors.secondary }]}>+91 {user?.phone}</Text></View></View></Enter>
+        {row('card-outline', t('admin.paymentDetails'), () => nav.navigate('PaymentDetails'))}
+        {row('calendar-outline', t('admin.attendance'), () => nav.navigate('Attendance'))}
         {row('location-outline', t('admin.pincodes'), () => nav.navigate('Pincodes'))}
         {row('people-outline', t('admin.customers'), () => nav.navigate('Customers'))}
         {row('bar-chart-outline', t('admin.reports'), () => nav.navigate('Reports'))}
@@ -509,16 +617,32 @@ export function ReportsScreen() {
 export function StoreSettingsScreen({ navigation }: NativeStackScreenProps<AdminStackParamList, 'StoreSettings'>) {
   const { t } = useTranslation();
   const { data, error, loading, reload } = useLoad(() => endpoints.admin.settings());
-  const [f, setF] = useState<{ isOpen: boolean; openingTime: string; closingTime: string; address: string; phone: string; email: string } | null>(null);
-  const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
-  useEffect(() => { if (data && !f) setF({ isOpen: data.isOpen, openingTime: data.openingTime, closingTime: data.closingTime, address: data.address ?? '', phone: data.phone ?? '', email: data.email ?? '' }); }, [data, f]);
+  const [f, setF] = useState<{ isOpen: boolean; openingTime: string; closingTime: string; address: string; phone: string; email: string; latitude: string; longitude: string; geofenceM: string } | null>(null);
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState(''); const [gps, setGps] = useState(false);
+  useEffect(() => { if (data && !f) setF({ isOpen: data.isOpen, openingTime: data.openingTime, closingTime: data.closingTime, address: data.address ?? '', phone: data.phone ?? '', email: data.email ?? '', latitude: data.latitude != null ? String(data.latitude) : '', longitude: data.longitude != null ? String(data.longitude) : '', geofenceM: String(data.geofenceM ?? 150) }); }, [data, f]);
   if (loading && !data) return <ListSkeleton />;
   if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
   if (!f) return <ListSkeleton />;
   const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v });
+  const lat = f.latitude.trim() === '' ? null : Number(f.latitude), lng = f.longitude.trim() === '' ? null : Number(f.longitude);
+  const locationOk = (lat === null && lng === null) || (lat !== null && lng !== null && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180);
+  const useHere = async () => {
+    setGps(true); setErr('');
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (!perm.granted) { setErr(t('admin.gpsDenied')); return; }
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      setF({ ...f, latitude: pos.coords.latitude.toFixed(6), longitude: pos.coords.longitude.toFixed(6) });
+      tick('success');
+    } catch { setErr(t('address.gpsFailed')); } finally { setGps(false); }
+  };
   const save = async () => {
+    if (!locationOk) { setErr(t('admin.locationInvalid')); tick('error'); return; }
     setBusy(true); setErr('');
-    try { await endpoints.admin.saveSettings({ ...f, address: f.address || null, phone: f.phone || null, email: f.email || null }); tick('success'); navigation.goBack(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+    try {
+      await endpoints.admin.saveSettings({ isOpen: f.isOpen, openingTime: f.openingTime, closingTime: f.closingTime, address: f.address || null, phone: f.phone || null, email: f.email || null, latitude: lat, longitude: lng, geofenceM: Number(f.geofenceM) || 150 });
+      tick('success'); navigation.goBack();
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
   return (
     <Screen footer={<Button title={t('address.save')} icon="checkmark" onPress={save} loading={busy} />}>
@@ -528,6 +652,66 @@ export function StoreSettingsScreen({ navigation }: NativeStackScreenProps<Admin
       <Enter index={3}><TextField label={t('admin.storeAddress')} value={f.address} onChangeText={set('address')} multiline /></Enter>
       <Enter index={4}><TextField label={t('address.phone')} value={f.phone} onChangeText={set('phone')} keyboardType="phone-pad" /></Enter>
       <Enter index={5}><TextField label={t('signup.email')} value={f.email} onChangeText={set('email')} keyboardType="email-address" autoCapitalize="none" /></Enter>
+      <Enter index={6}>
+        <Card style={s.block}>
+          <View style={s.personRow}><Icon name="storefront" size={22} /><Text style={[type.h3, { color: colors.text, flex: 1 }]}>{t('admin.shopLocation')}</Text></View>
+          <Text style={[type.small, { color: colors.secondary, marginVertical: spacing.sm }]}>{t('admin.shopLocationHelp')}</Text>
+          <Button title={gps ? t('address.gpsBusy') : t('admin.useHere')} variant="outline" icon="locate" onPress={useHere} loading={gps} style={{ marginBottom: spacing.md }} />
+          <View style={s.btnRow}>
+            <View style={{ flex: 1 }}><TextField label={t('admin.latitude')} value={f.latitude} onChangeText={set('latitude')} keyboardType="numbers-and-punctuation" valid={lat !== null && locationOk} /></View>
+            <View style={{ flex: 1 }}><TextField label={t('admin.longitude')} value={f.longitude} onChangeText={set('longitude')} keyboardType="numbers-and-punctuation" valid={lng !== null && locationOk} /></View>
+          </View>
+          <TextField label={t('admin.geofence')} value={f.geofenceM} onChangeText={(v) => set('geofenceM')(v.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" hint={t('admin.geofenceHint')} />
+        </Card>
+      </Enter>
+      {err ? <Text style={[type.small, { color: colors.red }]}>{err}</Text> : null}
+    </Screen>
+  );
+}
+
+/** UPI ID, QR and bank details the delivery partner shows on cash-on-delivery orders. */
+export function PaymentDetailsScreen({ navigation }: NativeStackScreenProps<AdminStackParamList, 'PaymentDetails'>) {
+  const { t } = useTranslation();
+  const { data, error, loading, reload } = useLoad(() => endpoints.admin.paymentDetails());
+  const [f, setF] = useState<{ upiId: string; upiName: string; bankName: string; bankAccountName: string; bankAccountNumber: string; bankIfsc: string } | null>(null);
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
+  useEffect(() => { if (data && !f) setF({ upiId: data.upiId ?? '', upiName: data.upiName ?? '', bankName: data.bankName ?? '', bankAccountName: data.bankAccountName ?? '', bankAccountNumber: data.bankAccountNumber ?? '', bankIfsc: data.bankIfsc ?? '' }); }, [data, f]);
+  if (loading && !data) return <ListSkeleton />;
+  if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
+  if (!f) return <ListSkeleton />;
+  const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v });
+  const upiOk = /^[\w.\-]{2,}@[\w.\-]{2,}$/.test(f.upiId.trim());
+  const ifscOk = /^[A-Za-z]{4}0[A-Za-z0-9]{6}$/.test(f.bankIfsc.trim());
+  const accOk = /^\d{6,20}$/.test(f.bankAccountNumber.trim());
+  const uri = upiOk ? `upi://pay?pa=${encodeURIComponent(f.upiId.trim())}&pn=${encodeURIComponent(f.upiName.trim() || 'Kamal Medical Hall')}&cu=INR` : null;
+  const save = async () => {
+    if ((f.upiId && !upiOk) || (f.bankIfsc && !ifscOk) || (f.bankAccountNumber && !accOk)) { setErr(t('admin.paymentInvalid')); tick('error'); return; }
+    setBusy(true); setErr('');
+    try {
+      await endpoints.admin.savePaymentDetails({ upiId: f.upiId.trim() || null, upiName: f.upiName.trim() || null, bankName: f.bankName.trim() || null, bankAccountName: f.bankAccountName.trim() || null, bankAccountNumber: f.bankAccountNumber.trim() || null, bankIfsc: f.bankIfsc.trim().toUpperCase() || null });
+      tick('success'); await notice(t('admin.paymentSaved'), t('admin.paymentSavedMsg'), t('common.ok')); navigation.goBack();
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <Screen footer={<Button title={t('address.save')} icon="checkmark" onPress={save} loading={busy} />}>
+      <Enter><Text style={[type.small, { color: colors.secondary, marginBottom: spacing.md }]}>{t('admin.paymentHelp')}</Text></Enter>
+      <Enter index={1}>
+        <Card style={s.block}>
+          <View style={s.personRow}><Icon name="qr-code" size={22} /><Text style={[type.h3, { color: colors.text }]}>UPI</Text></View>
+          <TextField label={t('pay.upiId')} value={f.upiId} onChangeText={set('upiId')} autoCapitalize="none" placeholder="shop@upi" valid={upiOk} error={f.upiId && !upiOk ? t('admin.upiInvalid') : undefined} />
+          <TextField label={t('pay.payeeName')} value={f.upiName} onChangeText={set('upiName')} autoCapitalize="words" />
+          {uri ? <View style={s.qrPreview}><QRCode value={uri} size={150} color={colors.navy} backgroundColor={colors.white} /><Text style={[type.small, { color: colors.secondary, marginTop: 8, textAlign: 'center' }]}>{t('admin.qrPreview')}</Text></View> : null}
+        </Card>
+      </Enter>
+      <Enter index={2}>
+        <Card style={s.block}>
+          <View style={s.personRow}><Icon name="business" size={22} /><Text style={[type.h3, { color: colors.text }]}>{t('pay.bankTransfer')}</Text></View>
+          <TextField label={t('pay.bankName')} value={f.bankName} onChangeText={set('bankName')} autoCapitalize="words" />
+          <TextField label={t('pay.accountName')} value={f.bankAccountName} onChangeText={set('bankAccountName')} autoCapitalize="words" />
+          <TextField label={t('pay.accountNumber')} value={f.bankAccountNumber} onChangeText={(v) => set('bankAccountNumber')(v.replace(/\D/g, '').slice(0, 20))} keyboardType="number-pad" valid={accOk} />
+          <TextField label={t('pay.ifsc')} value={f.bankIfsc} onChangeText={(v) => set('bankIfsc')(v.toUpperCase().slice(0, 11))} autoCapitalize="characters" valid={ifscOk} error={f.bankIfsc && !ifscOk ? t('admin.ifscInvalid') : undefined} />
+        </Card>
+      </Enter>
       {err ? <Text style={[type.small, { color: colors.red }]}>{err}</Text> : null}
     </Screen>
   );
@@ -542,7 +726,7 @@ const s = StyleSheet.create({
   pad: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   tile: { width: '47.5%' },
-  tileCard: { gap: 4, backgroundColor: colors.white, boxShadow: '0px 6px 16px rgba(15,33,71,0.08)' },
+  tileCard: { gap: 4, marginBottom: 12, backgroundColor: colors.white, boxShadow: '0px 6px 16px rgba(15,33,71,0.08)' },
   tileIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   teamCard: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: spacing.md, backgroundColor: colors.white },
   sec: { color: colors.text, marginTop: spacing.xl, marginBottom: spacing.sm },
@@ -574,5 +758,15 @@ const s = StyleSheet.create({
   pinIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   me: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: spacing.md, marginBottom: spacing.sm },
   moreRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  attendance: { padding: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.card, marginBottom: spacing.md },
+  attHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm },
+  attRow: { flexDirection: 'row', gap: 8 },
+  attCell: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, borderRadius: radius.md, backgroundColor: colors.white },
+  gridHead: { flexDirection: 'row', alignItems: 'center', paddingBottom: 6 },
+  gridRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  gridCell: { flex: 1, textAlign: 'center', alignItems: 'center' },
+  gridDot: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  gridDotOn: { backgroundColor: colors.green },
+  qrPreview: { alignItems: 'center', padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.tint, marginTop: spacing.sm },
   moreIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
 });

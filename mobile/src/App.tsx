@@ -18,6 +18,9 @@ void SplashScreen.preventAutoHideAsync();
 const patch = (C: { defaultProps?: { style?: unknown } }) => { C.defaultProps = { ...C.defaultProps, style: [{ fontFamily: fonts.regular }, C.defaultProps?.style] }; };
 patch(Text as never);
 patch(TextInput as never);
+// Respect the user's font size but cap it so very large settings do not break layouts.
+(Text as unknown as { defaultProps: Record<string, unknown> }).defaultProps.maxFontSizeMultiplier = 1.3;
+(TextInput as unknown as { defaultProps: Record<string, unknown> }).defaultProps.maxFontSizeMultiplier = 1.3;
 
 const MIN_SPLASH_MS = 2200;
 

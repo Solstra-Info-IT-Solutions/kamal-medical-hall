@@ -44,7 +44,7 @@ describe('realtime, pincodes, coverage and account deletion', () => {
     await pool.query('delete from service_pincodes where pincode = $1', [TEST_PIN]);
     await pool.query('delete from orders where customer_id in (select id from users where phone = $1 or phone like $2)', [CUSTOMER, 'deleted-%']);
     await pool.query("delete from users where phone = $1 or (phone like 'deleted-%' and name is null and role = 'customer')", [CUSTOMER]);
-    await pool.query("update delivery_partners set is_available = true where user_id in (select id from users where phone in ('9000000002','9000000003'))");
+    await pool.query("update delivery_partners set on_duty = false, state = 'off', is_available = false where user_id in (select id from users where phone in ('9000000002','9000000003'))");
     await pool.query("delete from partner_pincodes where partner_id in (select id from users where phone in ('9000000002','9000000003'))");
     closeRealtime(); server.close(); await pool.end();
   });
@@ -89,6 +89,7 @@ describe('realtime, pincodes, coverage and account deletion', () => {
     assert.equal((await call('POST', `/admin/orders/${id}/assign`, admin.token, { partnerId: p.id })).body.error.code, 'out_of_coverage');
     await call('PUT', `/admin/partners/${p.id}/pincodes`, admin.token, { pincodes: ['302020'] });
     const partnerLogin = await login('9000000002');
+    await call('POST', '/partner/duty', partnerLogin.token, { onDuty: true });
     const partnerSock = await open(partnerLogin.token);
     const partnerGetsJob = waitFor(partnerSock, 'notification');
     const adminSeesBusy = waitFor(adminSock, 'partner:update');

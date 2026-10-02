@@ -11,7 +11,8 @@ import { endpoints } from '../../api/endpoints';
 import type { Order, OrderStatus, PaymentMethod } from '../../api/types';
 import { OrderCard } from '../../components/OrderCard';
 import { CountUp, Enter, Ripples, Skeleton, Tap, tick, useShake } from '../../components/motion';
-import { Button, Card, ErrorView, Icon, Message, Pill, Screen } from '../../components/ui';
+import { Button, Card, ErrorView, Icon, Message, Pill, ResponsiveGrid, Screen } from '../../components/ui';
+import { useContentStyle } from '../../layout';
 import { useLoad } from '../../hooks';
 import type { CustomerStackParamList, CustomerTabParamList } from '../../navigation/types';
 import { useSession } from '../../store/session';
@@ -25,13 +26,14 @@ const ListSkeleton = () => <View style={{ gap: 14, padding: spacing.lg }}>{[0, 1
 export function OrdersScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Orders'>) {
   const { t } = useTranslation();
   const nav = useNavigation<Nav>();
+  const content = useContentStyle(true);
   const { data, error, loading, reload } = useLoad(() => endpoints.orders('completed'), ['order:update']);
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.white }} edges={['top']}>
       <Enter><Text style={[type.h2, s.heading]}>{t('orders.title')}</Text></Enter>
       {loading && !data ? <ListSkeleton /> : error && !data ? <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} /> : !data?.orders.length ? <Message icon="receipt-outline" title={t('orders.emptyTitle')} text={t('orders.empty')} /> :
-        <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }} refreshControl={<RefreshControl refreshing={loading && !!data} onRefresh={reload} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
-          {data.orders.map((o, i) => <OrderCard key={o.id} order={o} index={i} onPress={() => nav.navigate('OrderDetail', { orderId: o.id })} />)}
+        <ScrollView contentContainerStyle={[{ padding: spacing.lg, paddingBottom: spacing.xxxl }, content]} refreshControl={<RefreshControl refreshing={loading && !!data} onRefresh={reload} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
+          <ResponsiveGrid>{data.orders.map((o, i) => <OrderCard key={o.id} order={o} index={i} onPress={() => nav.navigate('OrderDetail', { orderId: o.id })} />)}</ResponsiveGrid>
         </ScrollView>}
     </SafeAreaView>
   );
@@ -101,7 +103,7 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
 
   return (
     <>
-      <Screen footer={o.status === 'quoted' ? <Button title={t('order.acceptPay')} icon="arrow-forward" onPress={() => navigation.navigate('Payment', { orderId: o.id })} /> : o.status === 'awaiting_payment' ? <Button title={t('order.completePayment')} icon="card" onPress={() => navigation.navigate('Payment', { orderId: o.id })} /> : undefined}>
+      <Screen footer={o.status === 'quoted' ? <Button title={t('order.acceptPay')} icon="arrow-forward" onPress={() => navigation.navigate('Payment', { orderId: o.id })} /> : o.status === 'awaiting_payment' ? <Button title={t('order.completePayment')} icon="card" onPress={() => navigation.navigate('Payment', { orderId: o.id })} /> : (o.status === 'ready_to_dispatch' || o.status === 'out_for_delivery') ? <Button title={t('live.trackBtn')} icon="navigate" onPress={() => navigation.navigate('Track', { orderId: o.id })} /> : undefined}>
         <Enter index={0}>
           <View style={s.head}><Text style={[type.h2, { color: colors.text }]}>#{o.orderNumber}</Text><Pill text={t(`status.${o.status}`)} tone={statusTone(o.status)} /></View>
           <Text style={[type.small, { color: colors.secondary }]}>{formatDateTime(o.createdAt)}</Text>

@@ -1,50 +1,91 @@
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useState } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Linking, Platform, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Linking, Platform, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
+import type { Order, OrderSummary, PartnerState } from '../../api/types';
+import { Avatar, CallButton } from '../../components/CallButton';
 import { OrderCard } from '../../components/OrderCard';
-import { Avatar } from '../../components/CallButton';
-import { CountUp, Enter, Tap, tick } from '../../components/motion';
-import { Button, Card, ErrorView, Icon, Loading, Screen } from '../../components/ui';
-import { confirmAsync, showDialog } from '../../dialog';
+import { PaymentSheet, type PaymentInfo } from '../../components/PaymentSheet';
+import { CountUp, Enter, Skeleton, Tap, tick } from '../../components/motion';
+import { Button, Card, ErrorView, Icon, Message, Pill, Screen, type IconName } from '../../components/ui';
+import { notice, showDialog } from '../../dialog';
 import { useLoad } from '../../hooks';
-import type { PartnerStackParamList } from '../../navigation/types';
+import { useContentStyle } from '../../layout';
+import type { PartnerStackParamList, PartnerTabParamList } from '../../navigation/types';
+import { distanceMeters, formatDistance, usePartnerLocation } from '../../partnerLocation';
 import { useSession } from '../../store/session';
 import { colors, radius, spacing, type } from '../../theme';
-import { formatDate, formatMoney } from '../../utils';
+import { formatDate, formatDateTime, formatMoney, statusTone } from '../../utils';
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList>;
+const LIVE = ['partner:update', 'order:update', 'notification'];
 
-export function PartnerHomeScreen() {
+const STATE_UI: Record<PartnerState, { icon: IconName; fg: string; bg: [string, string]; title: string; help: string }> = {
+  off: { icon: 'moon', fg: colors.secondary, bg: [colors.white, colors.card], title: 'partner.stOff', help: 'partner.stOffHelp' },
+  available: { icon: 'checkmark-circle', fg: colors.green, bg: [colors.white, colors.greenBg], title: 'partner.stAvailable', help: 'partner.stAvailableHelp' },
+  reserved: { icon: 'notifications', fg: colors.amber, bg: [colors.white, colors.amberBg], title: 'partner.stReserved', help: 'partner.stReservedHelp' },
+  busy: { icon: 'bicycle', fg: colors.primary, bg: [colors.white, colors.card], title: 'partner.stBusy', help: 'partner.stBusyHelp' },
+  returning: { icon: 'storefront', fg: colors.primary, bg: [colors.white, colors.card], title: 'partner.stReturning', help: 'partner.stReturningHelp' },
+};
+
+const ListSkeleton = () => <View style={{ padding: spacing.lg, gap: 12 }}>{[0, 1, 2].map((i) => <Skeleton key={i} h={110} r={16} />)}</View>;
+
+// ---------------------------------------------------------------- Home
+export function PartnerHomeScreen(_p: BottomTabScreenProps<PartnerTabParamList, 'Home'>) {
   const { t } = useTranslation();
   const nav = useNavigation<Nav>();
+  const content = useContentStyle();
   const { user, logout } = useSession();
-  const me = useLoad(() => endpoints.partner.me(), ['partner:update', 'order:update', 'notification']);
-  const jobs = useLoad(() => endpoints.partner.orders('active'), ['order:update', 'notification']);
-  const history = useLoad(() => endpoints.partner.orders('history'), ['order:update']);
+  const me = useLoad(() => endpoints.partner.me(), LIVE);
+  const jobs = useLoad(() => endpoints.partner.orders('active'), LIVE);
+  const delivered = useLoad(() => endpoints.partner.orders('delivered'), ['order:update']);
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const state = me.data?.state ?? 'off';
+  const { coords, denied } = usePartnerLocation(state === 'busy' || state === 'returning', () => { void me.reload(); });
+
+  if (me.loading && !me.data) return <ListSkeleton />;
+  if (me.error && !me.data) return <ErrorView message={me.error} onRetry={me.reload} retryLabel={t('common.retry')} />;
+  const ui = STATE_UI[state];
+  const all = jobs.data?.orders ?? [];
+  const pending = all.filter((o) => !o.partnerAccepted && o.status === 'ready_to_dispatch');
+  const active = all.filter((o) => !pending.includes(o));
+  const cash = active.filter((o) => o.paymentMethod === 'cod').reduce((sum, o) => sum + (o.quotedAmount ?? 0), 0);
+  const onDuty = me.data!.onDuty;
+  const toShop = me.data!.store && coords ? distanceMeters(coords, me.data!.store) : null;
+  const refresh = () => { void me.reload(); void jobs.reload(); void delivered.reload(); };
+
   const toggle = async (v: boolean) => {
     setErr('');
-    try { await endpoints.partner.setAvailable(v); tick(); await me.reload(); } catch (e) { setErr((e as Error).message); tick('error'); await me.reload(); }
+    try { await endpoints.partner.setDuty(v); tick('success'); await me.reload(); } catch (e) { setErr((e as Error).message); tick('error'); await me.reload(); }
+  };
+  const accept = async (o: OrderSummary) => {
+    setBusy(o.id);
+    try { await endpoints.partner.accept(o.id); tick('success'); await Promise.all([jobs.reload(), me.reload()]); } catch (e) { await notice(t('common.error'), (e as Error).message, t('common.ok')); } finally { setBusy(null); }
+  };
+  const reject = async (o: OrderSummary) => {
+    const ok = await showDialog({ title: t('partner.rejectTitle'), message: t('partner.rejectMsg', { order: o.orderNumber }), icon: 'close-circle', tone: 'danger', confirmLabel: t('partner.reject'), cancelLabel: t('common.cancel') });
+    if (!ok) return;
+    setBusy(o.id);
+    try { await endpoints.partner.reject(o.id, 'Rejected by partner'); await Promise.all([jobs.reload(), me.reload(), delivered.reload()]); } catch (e) { await notice(t('common.error'), (e as Error).message, t('common.ok')); } finally { setBusy(null); }
   };
   const signOut = async () => {
     const ok = await showDialog({ title: t('profile.logout'), message: t('profile.logoutMsg'), icon: 'log-out', confirmLabel: t('profile.logout'), cancelLabel: t('common.cancel') });
     if (ok) await logout();
   };
-  if (me.loading && !me.data) return <Loading />;
-  if (me.error && !me.data) return <ErrorView message={me.error} onRetry={me.reload} retryLabel={t('common.retry')} />;
-  const refresh = () => { void me.reload(); void jobs.reload(); void history.reload(); };
-  const available = me.data!.isAvailable;
-  const active = jobs.data?.orders ?? [];
-  const cashToCollect = active.filter((o) => o.paymentMethod === 'cod').reduce((sum, o) => sum + (o.quotedAmount ?? 0), 0);
-  const hasJob = active.length > 0;
+  const imBack = async () => {
+    try { await endpoints.partner.arrived(); await me.reload(); } catch (e) { await notice(t('common.error'), (e as Error).message, t('common.ok')); }
+  };
+
   return (
     <SafeAreaView style={s.fill} edges={['top']}>
-      <ScrollView contentContainerStyle={s.pad} refreshControl={<RefreshControl refreshing={false} onRefresh={refresh} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[s.pad, content]} refreshControl={<RefreshControl refreshing={false} onRefresh={refresh} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
         <Enter index={0}>
           <View style={s.greet}>
             <Avatar name={user?.name} size={48} />
@@ -53,43 +94,65 @@ export function PartnerHomeScreen() {
         </Enter>
 
         <Enter index={1}>
-          <LinearGradient colors={available ? [colors.white, colors.greenBg] : [colors.white, colors.amberBg]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.avail}>
-            <View style={[s.availIcon, { backgroundColor: available ? colors.green : colors.amber }]}><Icon name={available ? 'bicycle' : 'pause'} size={26} color={colors.white} /></View>
+          <LinearGradient colors={ui.bg} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.status}>
+            <View style={[s.statusIcon, { backgroundColor: ui.fg }]}><Icon name={ui.icon} size={26} color={colors.white} /></View>
             <View style={{ flex: 1 }}>
-              <Text style={[type.h3, { color: colors.text }]}>{available ? t('partner.available') : t('partner.busy')}</Text>
-              <Text style={[type.small, { color: colors.secondary }]}>{hasJob ? t('partner.finishFirst') : t('partner.availableHelp')}</Text>
+              <Text style={[type.h3, { color: colors.text }]}>{t(ui.title)}</Text>
+              <Text style={[type.small, { color: colors.secondary }]}>{t(ui.help)}</Text>
             </View>
-            <Switch accessibilityLabel={t('partner.available')} value={available} onValueChange={toggle} disabled={hasJob && !available} />
           </LinearGradient>
-          {err ? <Text style={[type.small, { color: colors.red, marginTop: 6 }]}>{err}</Text> : null}
+          <View style={s.dutyRow}>
+            <View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]}>{onDuty ? t('partner.onDuty') : t('partner.startDuty')}</Text><Text style={[type.small, { color: colors.secondary }]}>{onDuty ? t('partner.onDutyHelp') : t('partner.startDutyHelp')}</Text></View>
+            <Switch accessibilityLabel={t('partner.onDuty')} value={onDuty} onValueChange={toggle} disabled={state === 'reserved' || state === 'busy'} />
+          </View>
+          {err ? <Animated.Text entering={FadeInDown.duration(220)} style={[type.small, { color: colors.red, marginTop: 6 }]}>{err}</Animated.Text> : null}
         </Enter>
 
-        <Enter index={2}>
+        {state === 'returning' ? (
+          <Enter index={2}>
+            <Card style={s.returning}>
+              <Icon name="navigate" size={22} />
+              <View style={{ flex: 1 }}>
+                <Text style={[type.bodyMedium, { color: colors.text }]}>{toShop != null ? t('partner.toShop', { distance: formatDistance(toShop) }) : t('partner.headBack')}</Text>
+                <Text style={[type.small, { color: colors.secondary }]}>{denied ? t('partner.locationDenied') : me.data!.store ? t('partner.autoAvailable') : t('partner.noShopLocation')}</Text>
+              </View>
+              {!me.data!.store ? <Button small title={t('partner.imBack')} onPress={imBack} /> : null}
+            </Card>
+          </Enter>
+        ) : null}
+
+        <Enter index={3}>
           <View style={s.stats}>
-            <View style={s.stat}><CountUp value={active.length} style={[type.h2, { color: colors.text }]} /><Text style={[type.small, { color: colors.secondary }]}>{t('partner.assigned')}</Text></View>
-            <View style={s.stat}><CountUp value={history.data?.orders.length ?? 0} style={[type.h2, { color: colors.text }]} /><Text style={[type.small, { color: colors.secondary }]}>{t('partner.delivered')}</Text></View>
-            <View style={s.stat}><CountUp value={cashToCollect} prefix="₹" style={[type.h2, { color: colors.text }]} /><Text style={[type.small, { color: colors.secondary }]}>{t('partner.cashToCollect')}</Text></View>
+            <View style={s.stat}><CountUp value={all.length} style={[type.h2, { color: colors.text }]} /><Text style={[type.small, { color: colors.secondary }]}>{t('partner.assigned')}</Text></View>
+            <View style={s.stat}><CountUp value={delivered.data?.orders.length ?? 0} style={[type.h2, { color: colors.text }]} /><Text style={[type.small, { color: colors.secondary }]}>{t('partner.delivered')}</Text></View>
+            <View style={s.stat}><CountUp value={cash} prefix="₹" style={[type.h2, { color: colors.text }]} /><Text style={[type.small, { color: colors.secondary }]}>{t('partner.cashToCollect')}</Text></View>
           </View>
         </Enter>
 
-        <Enter index={3}><Text style={[type.h3, s.sec]}>{t('partner.assigned')}</Text></Enter>
-        {jobs.data && !active.length ? <Enter index={4}><Card style={s.empty}><Icon name="cube-outline" size={30} color={colors.muted} /><Text style={[type.body, { color: colors.secondary, flex: 1 }]}>{t('partner.noJobs')}</Text></Card></Enter> : null}
-        {active.map((o, i) => <OrderCard key={o.id} order={o} index={i + 4} onPress={() => nav.navigate('Job', { orderId: o.id })} subtitle={`${o.customerName ?? ''} · ${o.deliverySlot ?? ''}`} />)}
-
-        {history.data?.orders.length ? <>
-          <Enter index={6}><Text style={[type.h3, s.sec]}>{t('partner.history')}</Text></Enter>
-          {history.data.orders.slice(0, 8).map((o, i) => (
-            <Enter key={o.id} index={7 + i}>
-              <View style={s.histRow}>
-                <View style={s.histIcon}><Icon name="checkmark" size={16} color={colors.green} /></View>
-                <Text style={[type.body, { color: colors.text, flex: 1 }]}>#{o.orderNumber} · {o.customerName}</Text>
-                {o.paymentMethod === 'cod' && o.quotedAmount !== null ? <Text style={[type.smallMedium, { color: colors.secondary }]}>{formatMoney(o.quotedAmount)}</Text> : null}
-              </View>
+        {pending.length > 0 ? <>
+          <Enter index={4}><Text style={[type.h3, s.sec]}>{t('partner.newRequests')}</Text></Enter>
+          {pending.map((o, i) => (
+            <Enter key={o.id} index={5 + i}>
+              <Card style={s.request}>
+                <Tap accessibilityRole="button" onPress={() => nav.navigate('Job', { orderId: o.id })} scaleTo={0.98}>
+                  <View style={s.reqHead}><Text style={[type.h3, { color: colors.text }]}>#{o.orderNumber}</Text><Pill text={t('partner.respondNow')} tone="amber" /></View>
+                  <Text style={[type.small, { color: colors.secondary }]}>{o.deliveryDate ? formatDate(o.deliveryDate) : ''} · {o.deliverySlot}</Text>
+                  <Text style={[type.small, { color: colors.secondary }]}>{o.pincode ? `${t('address.pincode')} ${o.pincode}` : ''}{o.quotedAmount != null && o.paymentMethod === 'cod' ? ` · ${t('pay.cod')} ${formatMoney(o.quotedAmount)}` : ''}</Text>
+                </Tap>
+                <View style={s.reqBtns}>
+                  <Button title={t('partner.reject')} variant="outline" onPress={() => reject(o)} disabled={busy === o.id} style={{ flex: 1 }} />
+                  <Button title={t('partner.accept')} icon="checkmark" onPress={() => accept(o)} loading={busy === o.id} style={{ flex: 1 }} />
+                </View>
+              </Card>
             </Enter>
           ))}
         </> : null}
 
-        <Enter index={9}>
+        <Enter index={6}><Text style={[type.h3, s.sec]}>{t('partner.activeDeliveries')}</Text></Enter>
+        {jobs.data && !active.length ? <Enter index={7}><Card style={s.empty}><Icon name="cube-outline" size={30} color={colors.muted} /><Text style={[type.body, { color: colors.secondary, flex: 1 }]}>{t('partner.noJobs')}</Text></Card></Enter> : null}
+        {active.map((o, i) => <OrderCard key={o.id} order={o} index={i + 7} onPress={() => nav.navigate('Job', { orderId: o.id })} subtitle={`${o.customerName ?? ''} · ${o.deliverySlot ?? ''}`} />)}
+
+        <Enter index={12}>
           <Tap accessibilityRole="button" onPress={() => nav.navigate('Language')} scaleTo={0.98} style={s.menuRow}><View style={s.menuIcon}><Icon name="language-outline" size={22} color={colors.navy} /></View><Text style={[type.bodyMedium, { color: colors.text, flex: 1 }]}>{t('profile.language')}</Text><Icon name="chevron-forward" size={20} color={colors.muted} /></Tap>
           <Tap accessibilityRole="button" onPress={signOut} scaleTo={0.98} style={s.menuRow}><View style={[s.menuIcon, { backgroundColor: colors.redBg }]}><Icon name="log-out-outline" size={22} color={colors.red} /></View><Text style={[type.bodyMedium, { color: colors.red, flex: 1 }]}>{t('profile.logout')}</Text></Tap>
         </Enter>
@@ -98,45 +161,171 @@ export function PartnerHomeScreen() {
   );
 }
 
+// ---------------------------------------------------------------- Orders (delivered / rejected)
+export function PartnerOrdersScreen(_p: BottomTabScreenProps<PartnerTabParamList, 'Orders'>) {
+  const { t } = useTranslation();
+  const nav = useNavigation<Nav>();
+  const content = useContentStyle();
+  const [tab, setTab] = useState<'delivered' | 'rejected'>('delivered');
+  const { data, error, loading, reload } = useLoad(() => endpoints.partner.orders(tab), ['order:update']);
+  useEffect(() => { void reload(); }, [tab, reload]);
+  return (
+    <SafeAreaView style={s.fill} edges={['top']}>
+      <Text style={[type.h2, s.heading]}>{t('tabs.orders')}</Text>
+      <View style={[s.segWrap, content]}>
+        {(['delivered', 'rejected'] as const).map((k) => (
+          <Tap key={k} accessibilityRole="tab" accessibilityState={{ selected: tab === k }} onPress={() => setTab(k)} scaleTo={0.97} style={[s.seg, tab === k && s.segOn]}>
+            <Icon name={k === 'delivered' ? 'checkmark-done' : 'close-circle'} size={18} color={tab === k ? colors.white : colors.navy} />
+            <Text style={[type.smallMedium, { color: tab === k ? colors.white : colors.navy }]}>{t(`partner.tab_${k}`)}</Text>
+          </Tap>
+        ))}
+      </View>
+      {loading && !data ? <ListSkeleton /> : error && !data ? <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} /> : !data?.orders.length ? (
+        <Message icon={tab === 'delivered' ? 'checkmark-done-circle-outline' : 'close-circle-outline'} title={t(`partner.empty_${tab}`)} text={t(`partner.emptyHelp_${tab}`)} />
+      ) : (
+        <ScrollView contentContainerStyle={[s.pad, content]} refreshControl={<RefreshControl refreshing={false} onRefresh={reload} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
+          {data.orders.map((o, i) => tab === 'delivered'
+            ? <OrderCard key={o.id} order={o} index={i} onPress={() => nav.navigate('Job', { orderId: o.id })} subtitle={`${o.customerName ?? ''}${o.paymentMethod === 'cod' && o.quotedAmount != null ? ` · ${t('pay.cod')} ${formatMoney(o.quotedAmount)}` : ''}`} />
+            : (
+              <Enter key={`${o.id}-${o.respondedAt}`} index={i}>
+                <Card style={s.rejected}>
+                  <View style={s.reqHead}><Text style={[type.h3, { color: colors.text }]}>#{o.orderNumber}</Text><Pill text={t('partner.rejectedPill')} tone="red" /></View>
+                  <Text style={[type.small, { color: colors.secondary }]}>{o.customerName ? `${o.customerName} · ` : ''}{o.respondedAt ? formatDateTime(o.respondedAt) : ''}</Text>
+                  {o.rejectedReason ? <Text style={[type.small, { color: colors.red, marginTop: 4 }]}>{o.rejectedReason}</Text> : null}
+                </Card>
+              </Enter>
+            ))}
+        </ScrollView>
+      )}
+    </SafeAreaView>
+  );
+}
+
+// ---------------------------------------------------------------- Delivery
+const HOW: { key: 'cash' | 'upi' | 'bank'; icon: IconName; label: string }[] = [
+  { key: 'cash', icon: 'cash', label: 'partner.viaCash' },
+  { key: 'upi', icon: 'qr-code', label: 'partner.viaUpi' },
+  { key: 'bank', icon: 'business', label: 'partner.viaBank' },
+];
+
 export function JobScreen({ navigation, route }: NativeStackScreenProps<PartnerStackParamList, 'Job'>) {
   const { t } = useTranslation();
   const { data, error, loading, reload, setData } = useLoad(() => endpoints.order(route.params.orderId), ['order:update']);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState('');
-  if (loading && !data) return <Loading />;
+  const [via, setVia] = useState<'cash' | 'upi' | 'bank' | null>(null);
+  const [ref, setRef] = useState('');
+  const [received, setReceived] = useState(false);
+  const [sheet, setSheet] = useState<PaymentInfo | null>(null);
+  if (loading && !data) return <ListSkeleton />;
   if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
-  const o = data!.order;
+  const o: Order = data!.order;
   const cod = o.paymentMethod === 'cod';
   const a = o.address;
   const query = encodeURIComponent([a.line1, a.line2, a.landmark, a.city, a.pincode].filter(Boolean).join(', '));
   const mapUrl = a.latitude != null && a.longitude != null ? `https://www.google.com/maps/dir/?api=1&destination=${a.latitude},${a.longitude}` : `https://www.google.com/maps/search/?api=1&query=${query}`;
+  const pendingRequest = o.status === 'ready_to_dispatch' && !o.partnerAccepted;
+  const readyToRide = o.status === 'ready_to_dispatch' && o.partnerAccepted;
+  const riding = o.status === 'out_for_delivery';
 
-  const run = async (fn: () => Promise<{ order: typeof o }>) => {
-    setBusy(true); setErr('');
-    try { const r = await fn(); setData({ order: r.order }); if (r.order.status === 'delivered') navigation.goBack(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  const run = async (key: string, fn: () => Promise<{ order: Order } | { ok: boolean }>, after?: () => void) => {
+    setBusy(key); setErr('');
+    try { const r = await fn(); if ('order' in r) setData({ order: r.order }); tick('success'); after?.(); } catch (e) { setErr((e as Error).message); tick('error'); } finally { setBusy(null); }
   };
-  const delivered = async () => {
-    if (cod && !(await confirmAsync(t('partner.collectTitle'), t('partner.collectMsg', { amount: formatMoney(o.quotedAmount ?? 0) }), t('partner.collected'), t('common.cancel')))) return;
-    await run(() => endpoints.partner.delivered(o.id, cod));
+  const showPayment = async () => {
+    try { setSheet(await endpoints.partner.paymentDetails(o.id)); } catch (e) { setErr((e as Error).message); }
   };
+  const deliver = async () => {
+    const ok = await showDialog({ title: t('partner.deliverTitle'), message: cod ? t('partner.deliverMsgCod', { amount: formatMoney(o.quotedAmount ?? 0), via: t(HOW.find((h) => h.key === via)?.label ?? 'partner.viaCash') }) : t('partner.deliverMsg'), icon: 'checkmark-done-circle', confirmLabel: t('partner.markDelivered'), cancelLabel: t('common.cancel') });
+    if (ok) await run('deliver', () => endpoints.partner.delivered(o.id, cod ? { collectedVia: via ?? undefined, reference: ref.trim() || undefined } : {}), () => navigation.goBack());
+  };
+  const reject = async () => {
+    const ok = await showDialog({ title: t('partner.rejectTitle'), message: t('partner.rejectMsg', { order: o.orderNumber }), icon: 'close-circle', tone: 'danger', confirmLabel: t('partner.reject'), cancelLabel: t('common.cancel') });
+    if (ok) await run('reject', () => endpoints.partner.reject(o.id, 'Rejected by partner'), () => navigation.goBack());
+  };
+
+  const canDeliver = riding && (!cod || (via !== null && received));
+  const footer = pendingRequest ? (
+    <View style={s.footerRow}>
+      <Button title={t('partner.reject')} variant="outline" onPress={reject} disabled={!!busy} style={{ flex: 1 }} />
+      <Button title={t('partner.accept')} icon="checkmark" onPress={() => run('accept', () => endpoints.partner.accept(o.id))} loading={busy === 'accept'} style={{ flex: 1 }} />
+    </View>
+  ) : readyToRide ? (
+    <View style={{ gap: 8 }}>
+      <Button title={t('partner.startRide')} icon="bicycle" onPress={() => run('ride', () => endpoints.partner.outForDelivery(o.id))} loading={busy === 'ride'} />
+      <Button title={t('partner.reject')} variant="ghost" onPress={reject} disabled={!!busy} />
+    </View>
+  ) : riding ? (
+    <Button title={t('partner.markDelivered')} icon="checkmark-done" onPress={deliver} loading={busy === 'deliver'} disabled={!canDeliver} />
+  ) : undefined;
+
   return (
-    <Screen footer={o.status === 'ready_to_dispatch' ? <Button title={t('partner.outForDelivery')} loading={busy} onPress={() => run(() => endpoints.partner.outForDelivery(o.id))} /> : o.status === 'out_for_delivery' ? <Button title={t('partner.markDelivered')} loading={busy} onPress={delivered} /> : undefined}>
-      <Text style={[type.h2, { color: colors.text }]}>#{o.orderNumber}</Text>
-      <Text style={[type.bodyMedium, { color: colors.text, marginTop: spacing.md }]}>{o.customer?.name}</Text>
-      <Text style={[type.body, { color: colors.secondary }]}>{[a.line1, a.line2, a.landmark].filter(Boolean).join(', ')}, {a.city} - {a.pincode}</Text>
-      <Text style={[type.small, { color: colors.secondary }]}>{formatDate(o.deliveryDate)} · {o.deliverySlot}</Text>
-      <View style={s.actions}>
-        <Button title={t('partner.call')} icon="call" onPress={() => Linking.openURL(`tel:${a.phone || o.customer?.phone}`)} style={{ flex: 1 }} />
-        <Button title={t('partner.map')} icon="navigate" variant="outline" onPress={() => Linking.openURL(Platform.OS === 'ios' ? `http://maps.apple.com/?q=${query}` : mapUrl)} style={{ flex: 1 }} />
-      </View>
-      <Card style={{ marginTop: spacing.xl }}>
-        <Text style={[type.h3, { color: colors.text }]}>{cod ? t('partner.collectCash') : t('partner.prepaid')}</Text>
-        {cod ? <Text style={[type.h1, { color: colors.text }]}>{formatMoney(o.quotedAmount ?? 0)}</Text> : <Text style={[type.body, { color: colors.secondary }]}>{t('partner.noCash')}</Text>}
-      </Card>
-      <Text style={[type.h3, s.sec]}>{t('order.items')}</Text>
-      {o.items.length ? o.items.map((i) => <Text key={i.id} style={[type.body, { color: colors.text }]}>• {i.name} × {i.quantity}</Text>) : <Text style={[type.body, { color: colors.secondary }]}>{t('partner.packed')}</Text>}
-      {err ? <Text style={[type.small, { color: colors.red, marginTop: spacing.md }]}>{err}</Text> : null}
-    </Screen>
+    <>
+      <Screen footer={footer}>
+        <Enter index={0}>
+          <View style={s.reqHead}><Text style={[type.h2, { color: colors.text }]}>#{o.orderNumber}</Text><Pill text={pendingRequest ? t('partner.respondNow') : t(`status.${o.status}`)} tone={pendingRequest ? 'amber' : statusTone(o.status)} /></View>
+          <Text style={[type.small, { color: colors.secondary, marginBottom: spacing.md }]}>{formatDate(o.deliveryDate)} · {o.deliverySlot}</Text>
+        </Enter>
+
+        {pendingRequest ? <Enter index={1}><Card style={[s.block, { backgroundColor: colors.amberBg, borderColor: colors.amberBg }]}><Text style={[type.bodyMedium, { color: colors.amber }]}>{t('partner.newRequestBanner')}</Text><Text style={[type.small, { color: colors.text }]}>{t('partner.newRequestHelp')}</Text></Card></Enter> : null}
+
+        <Enter index={2}>
+          <Card style={s.block}>
+            <View style={s.person}>
+              <Avatar name={o.customer?.name} size={48} />
+              <View style={{ flex: 1 }}>
+                <Text style={[type.h3, { color: colors.text }]}>{o.customer?.name ?? '—'}</Text>
+                <Text style={[type.small, { color: colors.secondary }]}>{o.customer?.phone ? `+91 ${o.customer.phone}` : o.canCallCustomer ? t('partner.phoneAfterAccept') : t('partner.callDisabled')}</Text>
+              </View>
+            </View>
+            <Text style={[type.body, { color: colors.text, marginTop: spacing.md }]}>{[a.line1, a.line2, a.landmark].filter(Boolean).join(', ')}, {a.city} - {a.pincode}</Text>
+            <View style={s.btnRow}>
+              <Button title={t('partner.map')} icon="navigate" variant="outline" onPress={() => Linking.openURL(Platform.OS === 'ios' ? `http://maps.apple.com/?q=${query}` : mapUrl)} style={{ flex: 1 }} />
+              {o.canCallCustomer && o.customer?.phone ? <View style={{ flex: 1 }}><CallButton phone={o.customer.phone} label={t('partner.call')} /></View> : null}
+            </View>
+            {!o.canCallCustomer ? <View style={s.noCall}><Icon name="call-outline" size={18} color={colors.secondary} /><Text style={[type.small, { color: colors.secondary, flex: 1 }]}>{t('partner.callDisabledHelp')}</Text></View> : null}
+          </Card>
+        </Enter>
+
+        {cod ? (
+          <Enter index={3}>
+            <Card style={s.block}>
+              <Text style={[type.small, { color: colors.secondary }]}>{t('partner.collectCash')}</Text>
+              <Text style={[type.h1, { color: colors.text }]}>{formatMoney(o.quotedAmount ?? 0)}</Text>
+              {riding ? <>
+                <Button title={t('partner.showPayment')} icon="qr-code" variant="outline" onPress={showPayment} style={{ marginTop: spacing.md }} />
+                <Text style={[type.h3, s.sec]}>{t('partner.howPaid')}</Text>
+                <View style={s.howRow}>
+                  {HOW.map((h) => (
+                    <Tap key={h.key} accessibilityRole="radio" accessibilityState={{ selected: via === h.key }} onPress={() => setVia(h.key)} scaleTo={0.95} style={[s.how, via === h.key && s.howOn]}>
+                      <Icon name={h.icon} size={22} color={via === h.key ? colors.white : colors.navy} />
+                      <Text style={[type.smallMedium, { color: via === h.key ? colors.white : colors.navy }]}>{t(h.label)}</Text>
+                    </Tap>
+                  ))}
+                </View>
+                {via && via !== 'cash' ? <TextInput value={ref} onChangeText={setRef} maxLength={60} placeholder={t('partner.refPlaceholder')} placeholderTextColor={colors.muted} accessibilityLabel={t('partner.refPlaceholder')} style={[type.body, s.refInput]} /> : null}
+                <Tap accessibilityRole="checkbox" accessibilityState={{ checked: received }} onPress={() => setReceived((v) => !v)} scaleTo={0.98} style={s.ack}>
+                  <Icon name={received ? 'checkbox' : 'square-outline'} size={26} color={received ? colors.green : colors.muted} />
+                  <Text style={[type.small, { color: colors.text, flex: 1 }]}>{t('partner.receivedAck', { amount: formatMoney(o.quotedAmount ?? 0) })}</Text>
+                </Tap>
+                <Text style={[type.small, { color: colors.secondary, marginTop: 6 }]}>{t('partner.mustComplete')}</Text>
+              </> : null}
+            </Card>
+          </Enter>
+        ) : (
+          <Enter index={3}><Card style={s.block}><View style={s.person}><Icon name="shield-checkmark" size={24} color={colors.green} /><Text style={[type.body, { color: colors.text, flex: 1 }]}>{t('partner.prepaid')} · {t('partner.noCash')}</Text></View></Card></Enter>
+        )}
+
+        <Enter index={4}>
+          <Card style={s.block}>
+            <Text style={[type.h3, { color: colors.text, marginBottom: 4 }]}>{t('order.items')}</Text>
+            {o.items.length ? o.items.map((i) => <Text key={i.id} style={[type.body, { color: colors.text }]}>• {i.name} × {i.quantity}</Text>) : <Text style={[type.body, { color: colors.secondary }]}>{t('partner.packed')}</Text>}
+          </Card>
+        </Enter>
+        {err ? <Animated.Text entering={FadeInDown.duration(220)} style={[type.small, { color: colors.red, marginTop: spacing.md }]}>{err}</Animated.Text> : null}
+      </Screen>
+      <PaymentSheet visible={!!sheet} info={sheet} onClose={() => setSheet(null)} />
+    </>
   );
 }
 
@@ -144,18 +333,32 @@ const s = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.white },
   heading: { color: colors.text, textAlign: 'center', paddingVertical: spacing.md },
   pad: { padding: spacing.lg, paddingBottom: spacing.xxxl },
-  avail: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.cardBorder },
-  stats: { flexDirection: 'row', gap: 10, marginTop: spacing.md },
-  sec: { color: colors.text, marginTop: spacing.xl, marginBottom: 6 },
-  job: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: spacing.md, backgroundColor: colors.white },
-  actions: { flexDirection: 'row', gap: 12, marginTop: spacing.lg },
   greet: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: spacing.lg },
-  availIcon: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
+  status: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.cardBorder },
+  statusIcon: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
+  dutyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
+  returning: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: spacing.md, backgroundColor: colors.white },
+  stats: { flexDirection: 'row', gap: 10, marginTop: spacing.md },
   stat: { flex: 1, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.border },
+  sec: { color: colors.text, marginTop: spacing.xl, marginBottom: spacing.sm },
+  request: { marginBottom: spacing.md, backgroundColor: colors.white, borderColor: colors.amberBg, borderWidth: 1.5, boxShadow: '0px 6px 18px rgba(181,71,8,0.12)' },
+  reqHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  reqBtns: { flexDirection: 'row', gap: 12, marginTop: spacing.md },
   empty: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.white },
-  histRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  histIcon: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.greenBg, alignItems: 'center', justifyContent: 'center' },
+  segWrap: { flexDirection: 'row', gap: 10, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
+  seg: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
+  segOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  rejected: { marginBottom: spacing.md, backgroundColor: colors.white, borderLeftWidth: 5, borderLeftColor: colors.red },
+  block: { marginBottom: spacing.md, backgroundColor: colors.white, boxShadow: '0px 4px 14px rgba(15,33,71,0.07)' },
+  person: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  btnRow: { flexDirection: 'row', gap: 12, marginTop: spacing.md },
+  noCall: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.md, padding: spacing.sm, borderRadius: radius.sm, backgroundColor: colors.tint },
+  howRow: { flexDirection: 'row', gap: 10 },
+  how: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
+  howOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  refInput: { marginTop: spacing.md, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, color: colors.text },
+  ack: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.border },
+  footerRow: { flexDirection: 'row', gap: 12 },
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   menuIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
 });
-void Icon;
