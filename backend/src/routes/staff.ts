@@ -9,6 +9,7 @@ import { CANCELLABLE, loadOrder, transition } from '../orderService.js';
 import { closeStore, reopenStore, setDutyStatus, type DutyStatus } from '../dutyService.js';
 import { distanceMeters, etaMinutes, releasePartner, setPartnerState, storeLocation, TODAY_IST } from '../partnerState.js';
 import { clearPincodeCache } from '../pincodes.js';
+import { isBlockedFile } from '../services.js';
 import { emitAdmins, emitUser } from '../realtime.js';
 
 export const adminRouter = Router();
@@ -72,15 +73,15 @@ adminRouter.post('/orders/:id/quote', async (req, res) => {
   // The bill is mandatory: the customer downloads it from the order.
   const { amount, bill } = parse(z.object({
     amount: z.number().positive().max(500000),
-    bill: z.object({ publicId: z.string().min(3).max(300), mimeType: z.string().min(3).max(100), sizeBytes: z.number().int().min(0).max(30_000_000).optional(), name: z.string().trim().max(120).optional() }, { error: 'Please attach the bill.' }),
+    bill: z.object({ publicId: z.string().min(3).max(300), mimeType: z.string().min(3).max(120), resourceType: z.enum(['image', 'raw', 'video']).default('image'), sizeBytes: z.number().int().min(0).max(30_000_000).optional(), name: z.string().trim().max(160).optional() }, { error: 'Please attach the bill.' }),
   }), req.body);
-  if (!bill.publicId.startsWith('bills/')) throw bad('Invalid bill file.', 'invalid_file');
+  if (!bill.publicId.startsWith('bills/') || isBlockedFile(bill.publicId) || isBlockedFile(bill.name ?? '')) throw bad('Invalid bill file.', 'invalid_file');
   const order = await loadOrder(String(req.params.id), req.user!);
   const expires = new Date(Date.now() + config.quoteValidHours * 3600000);
   await tx(async (c) => {
     await transition(c, order.id, ['requested', 'quoted'], 'quoted', req.user!.id, {
       quoted_amount: amount, quote_expires_at: expires, reviewed_by: req.user!.id,
-      bill_public_id: bill.publicId, bill_mime: bill.mimeType, bill_name: bill.name ?? null, bill_size: bill.sizeBytes ?? null, bill_uploaded_at: new Date(),
+      bill_public_id: bill.publicId, bill_mime: bill.mimeType, bill_resource_type: bill.resourceType, bill_name: bill.name ?? null, bill_size: bill.sizeBytes ?? null, bill_uploaded_at: new Date(),
     });
     await notify(order.customer!.id, order.id, 'quote_ready', 'Your order amount is ready', `${order.orderNumber}: pay ₹${amount} (free delivery). Please review and accept.`, c);
   });

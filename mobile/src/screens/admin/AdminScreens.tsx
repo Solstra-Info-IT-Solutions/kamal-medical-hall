@@ -11,7 +11,6 @@ import QRCode from 'react-native-qrcode-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
 import { uploadPrescription } from '../../api/upload';
-import type { PrescriptionFile } from '../../store/cart';
 import type { Order, OrderSummary, Partner, PartnerState } from '../../api/types';
 import { Avatar, CallButton } from '../../components/CallButton';
 import { OrderCard } from '../../components/OrderCard';
@@ -19,6 +18,7 @@ import { CountUp, Enter, Skeleton, Tap, tick } from '../../components/motion';
 import { Button, Card, ErrorView, Icon, Message, Pill, ResponsiveGrid, Screen, TextField, type IconName } from '../../components/ui';
 import { notice, showDialog } from '../../dialog';
 import { useLoad } from '../../hooks';
+import { guessMime, isBlockedName, isImageMime } from '../../fileKinds';
 import { useContentStyle, useLayout } from '../../layout';
 import type { AdminStackParamList, AdminTabParamList } from '../../navigation/types';
 import { useSession } from '../../store/session';
@@ -178,7 +178,7 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
   const { data, error, loading, reload, setData } = useLoad(() => endpoints.order(route.params.orderId), ['order:update']);
   const partners = useLoad(() => endpoints.admin.partners(), ['partner:update', 'order:update']);
   const [amount, setAmount] = useState('');
-  const [bill, setBill] = useState<{ uri: string; name: string; mimeType: PrescriptionFile['mimeType']; sizeBytes?: number } | null>(null);
+  const [bill, setBill] = useState<{ uri: string; name: string; mimeType: string; sizeBytes?: number } | null>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState('');
@@ -198,13 +198,12 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
   const pickBill = async () => {
     setErr('');
     try {
-      const res = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/jpeg', 'image/png'], copyToCacheDirectory: true });
+      const res = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
       if (res.canceled || !res.assets?.[0]) return;
       const a = res.assets[0];
-      const mime = (a.mimeType ?? (a.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')) as PrescriptionFile['mimeType'];
-      if (!['application/pdf', 'image/jpeg', 'image/png'].includes(mime)) { setErr(t('admin.billType')); return; }
+      if (isBlockedName(a.name)) { setErr(t('admin.billType')); return; }
       if ((a.size ?? 0) > 10 * 1024 * 1024) { setErr(t('admin.billTooBig')); return; }
-      setBill({ uri: a.uri, name: a.name, mimeType: mime, sizeBytes: a.size });
+      setBill({ uri: a.uri, name: a.name, mimeType: guessMime(a.name, a.mimeType), sizeBytes: a.size });
       tick();
     } catch { setErr(t('admin.billPickFailed')); }
   };
@@ -214,7 +213,7 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
     try {
       const sig = await endpoints.signUpload('bill');
       const up = await uploadPrescription({ id: 'bill', ...bill }, sig);
-      await endpoints.admin.quote(o.id, quoteValue, { publicId: up.publicId, mimeType: up.mimeType, sizeBytes: up.sizeBytes, name: bill.name });
+      await endpoints.admin.quote(o.id, quoteValue, { publicId: up.publicId, mimeType: up.mimeType, resourceType: up.resourceType, sizeBytes: up.sizeBytes, name: bill.name });
       tick('success');
       await notice(t('admin.quoteSentTitle'), t('admin.quoteSentMsg', { order: o.orderNumber, amount: formatMoney(quoteValue) }), t('common.ok'));
       nav.goBack();
@@ -254,11 +253,17 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
           {o.items.map((i) => <Text key={i.id} style={[type.body, { color: colors.text }]}>• {i.name} × {i.quantity}</Text>)}
           <View style={s.rxRow}>{o.prescriptions.map((p) => (
             <Tap key={p.id} accessibilityRole="button" onPress={() => p.url && Linking.openURL(p.url)} style={s.rx}>
-              {p.mimeType === 'application/pdf' || !p.url ? <Icon name="document-text" size={30} /> : <Image source={{ uri: p.url }} style={{ flex: 1, width: '100%', borderRadius: radius.sm }} />}
+              {!isImageMime(p.mimeType) || !p.url ? <Icon name="document-text" size={30} /> : <Image source={{ uri: p.url }} style={{ flex: 1, width: '100%', borderRadius: radius.sm }} />}
             </Tap>))}</View>
           {o.note ? <Text style={[type.small, { color: colors.secondary, marginTop: 6 }]}>{t('review.note')}: {o.note}</Text> : null}
           {o.quotedAmount !== null ? <Text style={[type.bodyMedium, { color: colors.text, marginTop: spacing.md }]}>{t('order.amount')}: {formatMoney(o.quotedAmount)}{o.paymentMethod ? ` · ${t(`pay.${o.paymentMethod}`)} (${o.paymentStatus})` : ''}</Text> : null}
-          {o.bill?.url ? <Button title={t('admin.viewBill')} variant="outline" icon="document-text" small onPress={() => { void Linking.openURL(o.bill!.url!); }} style={{ marginTop: spacing.sm, alignSelf: 'flex-start' }} /> : null}
+          {o.bill ? <View style={[s.btnRow, { marginTop: spacing.sm }]}>
+            <Button title={t('admin.viewBill')} variant="outline" icon="eye" small disabled={!o.bill.viewUrl} onPress={() => { void Linking.openURL(o.bill!.viewUrl!); }} style={{ flex: 1 }} />
+            <Button title={t('order.downloadBill')} icon="download" small disabled={!o.bill.downloadUrl} onPress={() => { void Linking.openURL(o.bill!.downloadUrl!); }} style={{ flex: 1 }} />
+          </View> : null}
+          {['ready_to_dispatch', 'out_for_delivery', 'delivered'].includes(o.status) && o.quotedAmount !== null ? (
+            <Button title={t('order.invoice')} variant="outline" icon="receipt" small onPress={async () => { try { const l = await endpoints.invoiceLink(o.id); await Linking.openURL(l.url); } catch (e) { await notice(t('common.error'), (e as Error).message, t('common.ok')); } }} style={{ marginTop: spacing.sm }} />
+          ) : null}
           {o.rejectionReason || o.cancelReason ? <Text style={[type.body, { color: colors.red, marginTop: spacing.sm }]}>{o.rejectionReason ?? o.cancelReason}</Text> : null}
         </Card>
       </Enter>

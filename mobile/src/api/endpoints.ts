@@ -6,7 +6,7 @@ export interface UploadSignature { cloudName: string; apiKey: string; signature:
 export interface NewOrderInput {
   kind: 'prescription' | 'medicines';
   items: { name: string; quantity: number }[];
-  prescriptions: { publicId: string; mimeType: string; sizeBytes: number; url: string }[];
+  prescriptions: { publicId: string; mimeType: string; sizeBytes: number; url: string; resourceType: 'image' | 'raw' | 'video' }[];
   note?: string; addressId: string; deliveryDate: string; deliverySlot: string; idempotencyKey: string;
 }
 
@@ -26,6 +26,7 @@ export const endpoints = {
   deleteAddress: (id: string) => api<void>('DELETE', `/addresses/${id}`),
 
   signUpload: (purpose: 'prescription' | 'bill' = 'prescription') => api<UploadSignature>('POST', '/uploads/sign', { purpose }),
+  invoiceLink: (orderId: string) => api<{ url: string }>('GET', `/orders/${orderId}/invoice-link`),
   createOrder: (b: NewOrderInput) => api<{ order: Order }>('POST', '/orders', b, { timeoutMs: 30000 }),
   orders: (scope: 'completed' | 'cancelled' | 'active', offset = 0, range?: { from?: string; to?: string }) => api<{ orders: OrderSummary[]; hasMore: boolean }>('GET', `/orders?${new URLSearchParams({ scope, offset: String(offset), ...(range?.from ? { from: range.from } : {}), ...(range?.to ? { to: range.to } : {}) })}`),
   order: (id: string) => api<{ order: Order }>('GET', `/orders/${id}`),
@@ -41,7 +42,7 @@ export const endpoints = {
   admin: {
     dashboard: () => api<{ isOpen: boolean; requested: number; awaitingPayment: number; readyToDispatch: number; outForDelivery: number; deliveredToday: number; salesToday: number }>('GET', '/admin/dashboard'),
     orders: (status?: string, search?: string) => api<{ orders: OrderSummary[] }>('GET', `/admin/orders?${new URLSearchParams({ ...(status ? { status } : {}), ...(search ? { search } : {}) })}`),
-    quote: (id: string, amount: number, bill: { publicId: string; mimeType: string; sizeBytes?: number; name?: string }) => api<{ order: Order }>('POST', `/admin/orders/${id}/quote`, { amount, bill }),
+    quote: (id: string, amount: number, bill: { publicId: string; mimeType: string; resourceType: 'image' | 'raw' | 'video'; sizeBytes?: number; name?: string }) => api<{ order: Order }>('POST', `/admin/orders/${id}/quote`, { amount, bill }),
     setStoreOpen: (isOpen: boolean) => api<{ isOpen: boolean }>('PUT', '/admin/store-open', { isOpen }),
     reject: (id: string, reason: string) => api<{ order: Order }>('POST', `/admin/orders/${id}/reject`, { reason }),
     cancel: (id: string, reason: string) => api<{ order: Order }>('POST', `/admin/orders/${id}/cancel`, { reason }),

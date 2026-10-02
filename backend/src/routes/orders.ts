@@ -11,20 +11,24 @@ import { distanceMeters, etaMinutes, releasePartner, storeLocation } from '../pa
 import { CANCELLABLE, loadOrder, transition } from '../orderService.js';
 import { isServiceable } from '../pincodes.js';
 import { isSlotBookable, SLOTS } from '../slots.js';
-import { razorpayClient, verifyPaymentSignature, verifyWebhookSignature } from '../services.js';
+import jwt from 'jsonwebtoken';
+import type { AuthUser } from '../auth.js';
+import { INVOICE_STATUSES, streamInvoice } from '../invoice.js';
+import { isBlockedFile, razorpayClient, verifyPaymentSignature, verifyWebhookSignature } from '../services.js';
 
 export const orders = Router();
 export const razorpayWebhook = Router();
 
 const MAX_FILES = 3;
-const MAX_BYTES = 5 * 1024 * 1024;
+const MAX_BYTES = 10 * 1024 * 1024;
 
 const createSchema = z.object({
   kind: z.enum(['prescription', 'medicines']),
   items: z.array(z.object({ name: z.string().trim().min(2).max(120), quantity: z.number().int().min(1).max(99) })).max(30).default([]),
   prescriptions: z.array(z.object({
     publicId: z.string().min(1).max(300),
-    mimeType: z.enum(['image/jpeg', 'image/png', 'application/pdf']),
+    mimeType: z.string().min(3).max(120),
+    resourceType: z.enum(['image', 'raw', 'video']).default('image'),
     sizeBytes: z.number().int().positive().max(MAX_BYTES),
     url: z.string().url().max(600),
   })).max(MAX_FILES).default([]),
@@ -40,7 +44,7 @@ orders.post('/', authed, requireRole('customer'), async (req, res) => {
   const b = parse(createSchema, req.body);
   if (b.kind === 'prescription' && (b.prescriptions.length < 1 || b.items.length)) throw bad('A prescription order needs 1 to 3 prescription files and no typed medicines.', 'mixed_order');
   if (b.kind === 'medicines' && (b.items.length < 1 || b.prescriptions.length)) throw bad('A medicine order needs at least one medicine and no prescription files.', 'mixed_order');
-  if (b.prescriptions.some((p) => !p.publicId.startsWith(`prescriptions/${user.id}/`))) throw bad('Invalid prescription file.', 'invalid_file');
+  if (b.prescriptions.some((p) => !p.publicId.startsWith(`prescriptions/${user.id}/`) || isBlockedFile(p.publicId))) throw bad('Invalid prescription file.', 'invalid_file');
   if (!SLOTS.some((s) => s.id === b.deliverySlot) || !isSlotBookable(b.deliveryDate, b.deliverySlot)) throw bad('That delivery time is no longer available. Please choose another.', 'slot_unavailable');
 
   const store = await pool.query('select is_open from store_settings where id = 1');
@@ -62,7 +66,7 @@ orders.post('/', authed, requireRole('customer'), async (req, res) => {
     );
     const id = ins.rows[0].id as string;
     for (const item of b.items) await c.query('insert into order_items (order_id, name, quantity) values ($1,$2,$3)', [id, item.name, item.quantity]);
-    for (const p of b.prescriptions) await c.query('insert into prescriptions (order_id, url, public_id, mime_type, size_bytes) values ($1,$2,$3,$4,$5)', [id, p.url, p.publicId, p.mimeType, p.sizeBytes]);
+    for (const p of b.prescriptions) await c.query('insert into prescriptions (order_id, url, public_id, mime_type, size_bytes, resource_type) values ($1,$2,$3,$4,$5,$6)', [id, p.url, p.publicId, p.mimeType, p.sizeBytes, p.resourceType]);
     await c.query('insert into status_history (order_id, status, actor_id) values ($1,$2,$3)', [id, 'requested', user.id]);
     await notifyAdmins(id, 'order_requested', 'New order request', `${ins.rows[0].order_number} from ${user.name ?? user.phone}`, c);
     return { id, replay: false };
@@ -94,6 +98,27 @@ orders.get('/', authed, requireRole('customer'), async (req, res) => {
     id: r.id, orderNumber: r.order_number, kind: r.kind, status: r.status, createdAt: r.created_at,
     quotedAmount: r.quoted_amount === null ? null : Number(r.quoted_amount), fileCount: Number(r.file_count), summary: r.summary,
   })), hasMore: rows.length === limit });
+});
+
+/** A short-lived download link for the invoice PDF (the app opens it in the browser, which cannot send the login token). */
+orders.get('/:id/invoice-link', authed, async (req, res) => {
+  if (req.user!.role === 'delivery_partner') throw new HttpError(403, 'forbidden', 'Not allowed');
+  const order = await loadOrder(String(req.params.id), req.user!);
+  if (order.quotedAmount === null || !INVOICE_STATUSES.includes(order.status)) throw conflict('The invoice is available after you accept the amount.', 'no_invoice');
+  const token = jwt.sign({ oid: order.id, purpose: 'invoice' }, config.jwtSecret, { expiresIn: '10m' });
+  res.json({ url: `${req.protocol}://${req.get('host')}/orders/${order.id}/invoice.pdf?t=${encodeURIComponent(token)}` });
+});
+
+orders.get('/:id/invoice.pdf', async (req, res) => {
+  let oid = '';
+  try {
+    const p = jwt.verify(String(req.query.t ?? ''), config.jwtSecret) as { oid?: string; purpose?: string };
+    if (p.purpose !== 'invoice' || p.oid !== req.params.id) throw new Error('wrong token');
+    oid = p.oid;
+  } catch { throw new HttpError(401, 'invalid_link', 'This invoice link has expired. Please open it again from the app.'); }
+  const order = await loadOrder(oid, { id: 'system', role: 'admin', phone: '', name: null } as unknown as AuthUser);
+  const s = (await pool.query('select address, phone, email from store_settings where id = 1')).rows[0];
+  streamInvoice(res, order, { name: 'Kamal Medical Hall', address: s?.address ?? null, phone: s?.phone ?? null, email: s?.email ?? null });
 });
 
 orders.get('/:id', authed, async (req, res) => {

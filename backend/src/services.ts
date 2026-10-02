@@ -18,20 +18,27 @@ export function signUpload(userId: string, purpose: 'prescription' | 'bill' = 'p
   return { cloudName: cld.cloudName, apiKey: cld.apiKey, signature, ...params };
 }
 
-export function signedPrescriptionUrl(publicId: string, mimeType: string) {
+export type ResourceType = 'image' | 'raw' | 'video';
+
+/** Files that could harm whoever opens them are never accepted, whatever the upload form says. */
+const BLOCKED_EXT = /\.(exe|bat|cmd|com|msi|apk|aab|sh|bash|js|mjs|jar|scr|vbs|ps1|dll|dmg|pkg|app|lnk|reg)$/i;
+export const isBlockedFile = (name: string) => BLOCKED_EXT.test(name.trim());
+
+export function signedPrescriptionUrl(publicId: string, mimeType: string, resourceType: ResourceType = 'image') {
   if (!cloudinaryConfigured()) return null;
   return cloudinary.url(publicId, {
-    type: 'authenticated', resource_type: 'image', sign_url: true, secure: true,
-    format: mimeType === 'application/pdf' ? 'pdf' : undefined,
+    type: 'authenticated', resource_type: resourceType, sign_url: true, secure: true,
+    format: resourceType === 'image' && mimeType === 'application/pdf' ? 'pdf' : undefined,
   });
 }
 
 /** Signed link that downloads the bill as a file (Cloudinary attachment flag) instead of displaying it. */
-export function signedBillUrl(publicId: string, mimeType: string, fileName: string) {
+export function signedBillUrl(publicId: string, mimeType: string, resourceType: ResourceType, download: boolean, fileName: string) {
   if (!cloudinaryConfigured()) return null;
   return cloudinary.url(publicId, {
-    type: 'authenticated', resource_type: 'image', sign_url: true, secure: true, flags: `attachment:${fileName.replace(/[^\w-]/g, '_').slice(0, 60)}`,
-    format: mimeType === 'application/pdf' ? 'pdf' : undefined,
+    type: 'authenticated', resource_type: resourceType, sign_url: true, secure: true,
+    ...(download ? { flags: `attachment:${fileName.replace(/[^\w-]/g, '_').slice(0, 60)}` } : {}),
+    format: resourceType === 'image' && mimeType === 'application/pdf' ? 'pdf' : undefined,
   });
 }
 

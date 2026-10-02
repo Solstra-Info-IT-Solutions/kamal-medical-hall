@@ -68,6 +68,31 @@ describe('bills, order history tabs and the open / closed switch', () => {
     assert.equal((await call('POST', '/uploads/sign', admin, { purpose: 'prescription' })).status, 403);
   });
 
+  it('accepts a bill in any file type but not programs, and builds an invoice PDF', async () => {
+    const id = await place('bill-key-0003');
+    const exe = await call('POST', `/admin/orders/${id}/quote`, admin, { amount: 150, bill: { publicId: 'bills/test/setup.exe', mimeType: 'application/octet-stream', resourceType: 'raw', name: 'setup.exe' } });
+    assert.equal(exe.status, 400);
+    const doc = await call('POST', `/admin/orders/${id}/quote`, admin, { amount: 150, bill: { publicId: 'bills/test/bill-9.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', resourceType: 'raw', name: 'bill.docx' } });
+    assert.equal(doc.body.order.status, 'quoted');
+    // No invoice until the customer accepts the amount.
+    assert.equal((await call('GET', `/orders/${id}/invoice-link`, cust)).status, 409);
+    await call('POST', `/orders/${id}/accept-quote`, cust, { paymentMethod: 'cod' });
+    const link = await call('GET', `/orders/${id}/invoice-link`, cust);
+    assert.equal(link.status, 200);
+    const res = await fetch(link.body.url.replace(/^https?:\/\/[^/]+/, base));
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'application/pdf');
+    assert.match(res.headers.get('content-disposition') ?? '', /attachment; filename="Invoice-KMH\d+\.pdf"/);
+    const bytes = Buffer.from(await res.arrayBuffer());
+    assert.equal(bytes.subarray(0, 4).toString(), '%PDF');
+    assert.ok(bytes.length > 1500);
+    // A tampered or foreign link is refused.
+    assert.equal((await fetch(`${base}/orders/${id}/invoice.pdf?t=bad`)).status, 401);
+    const other = await login('9444444442');
+    assert.equal((await call('GET', `/orders/${id}/invoice-link`, other)).status, 404);
+    await pool.query('delete from users where phone = $1', ['9444444442']);
+  });
+
   it('lists delivered and cancelled orders separately with a date filter', async () => {
     const id = await place('bill-key-0002');
     const cancelled = await call('POST', `/orders/${id}/cancel`, cust, { reason: 'Ordered by mistake' });

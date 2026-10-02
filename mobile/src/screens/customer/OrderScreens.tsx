@@ -12,6 +12,8 @@ import type { Order, OrderStatus, PaymentMethod } from '../../api/types';
 import { OrderCard } from '../../components/OrderCard';
 import { CountUp, Enter, Ripples, Skeleton, Tap, tick, useShake } from '../../components/motion';
 import { Button, Card, ErrorView, Icon, Message, Pill, ResponsiveGrid, Screen } from '../../components/ui';
+import { fileBadge, isImageMime } from '../../fileKinds';
+import { notice } from '../../dialog';
 import { useContentStyle } from '../../layout';
 import { useLoad } from '../../hooks';
 import type { CustomerStackParamList, CustomerTabParamList } from '../../navigation/types';
@@ -176,7 +178,7 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
           {o.items.map((i) => <Text key={i.id} style={[type.body, { color: colors.text }]}>• {i.name} × {i.quantity}</Text>)}
           {o.prescriptions.length > 0 ? <View style={s.rxRow}>{o.prescriptions.map((p) => (
             <Tap key={p.id} accessibilityRole="button" onPress={() => p.url && Linking.openURL(p.url)} style={s.rx}>
-              {p.mimeType === 'application/pdf' || !p.url ? <Icon name="document-text" size={28} /> : <Image source={{ uri: p.url }} style={{ flex: 1, width: '100%', borderRadius: radius.sm }} />}
+              {!isImageMime(p.mimeType) || !p.url ? <Icon name="document-text" size={28} /> : <Image source={{ uri: p.url }} style={{ flex: 1, width: '100%', borderRadius: radius.sm }} />}
             </Tap>))}</View> : null}
           {o.note ? <Text style={[type.small, { color: colors.secondary, marginTop: 6 }]}>{t('review.note')}: {o.note}</Text> : null}
         </Enter>
@@ -206,10 +208,16 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
             <Text style={[type.h3, s.sec]}>{t('order.bill')}</Text>
             <View style={s.billCard}>
               <Icon name="document-text" size={28} />
-              <View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={1}>{o.bill.name}</Text><Text style={[type.small, { color: colors.secondary }]}>{o.bill.mimeType === 'application/pdf' ? 'PDF' : 'Image'}{o.bill.uploadedAt ? ` · ${formatDateTime(o.bill.uploadedAt)}` : ''}</Text></View>
-              <Button small title={t('order.downloadBill')} icon="download" onPress={() => { if (o.bill?.url) void Linking.openURL(o.bill.url); }} disabled={!o.bill.url} />
+              <View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={1}>{o.bill.name}</Text><Text style={[type.small, { color: colors.secondary }]}>{fileBadge(o.bill.name, o.bill.mimeType)}{o.bill.uploadedAt ? ` · ${formatDateTime(o.bill.uploadedAt)}` : ''}</Text></View>
+            </View>
+            <View style={s.billBtns}>
+              <Button small variant="outline" title={t('order.viewBill')} icon="eye" onPress={() => { if (o.bill?.viewUrl) void Linking.openURL(o.bill.viewUrl); }} disabled={!o.bill.viewUrl} style={{ flex: 1 }} />
+              <Button small title={t('order.downloadBill')} icon="download" onPress={() => { if (o.bill?.downloadUrl) void Linking.openURL(o.bill.downloadUrl); }} disabled={!o.bill.downloadUrl} style={{ flex: 1 }} />
             </View>
           </> : null}
+          {['ready_to_dispatch', 'out_for_delivery', 'delivered'].includes(o.status) && o.quotedAmount !== null ? (
+            <Button title={t('order.invoice')} variant="outline" icon="receipt" onPress={async () => { try { const l = await endpoints.invoiceLink(o.id); await Linking.openURL(l.url); } catch (e) { await notice(t('common.error'), (e as Error).message, t('common.ok')); } }} style={{ marginTop: spacing.lg }} />
+          ) : null}
           {o.deliveredAt ? <Text style={[type.bodyMedium, { color: colors.green, marginTop: spacing.md }]}>{t('order.deliveredOn', { time: formatDateTime(o.deliveredAt) })}</Text> : null}
           {o.history.length > 0 ? <>
             <Text style={[type.h3, s.sec]}>{t('order.activity')}</Text>
@@ -342,6 +350,7 @@ const s = StyleSheet.create({
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   dateInput: { flex: 1, paddingVertical: 10, paddingHorizontal: 14, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, color: colors.text, textAlign: 'center' },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
+  billBtns: { flexDirection: 'row', gap: 10, marginTop: spacing.sm },
   billCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder },
   actRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 5 },
   actDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary, marginTop: 7 },

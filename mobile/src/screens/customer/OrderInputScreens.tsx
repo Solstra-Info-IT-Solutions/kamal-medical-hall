@@ -10,6 +10,7 @@ import { Button, Card, Icon, Screen } from '../../components/ui';
 import { useAutoFocus } from '../../hooks';
 import { confirmAsync } from '../../dialog';
 import type { CustomerStackParamList } from '../../navigation/types';
+import { fileBadge, guessMime, isBlockedName, isImageMime } from '../../fileKinds';
 import { MAX_FILE_BYTES, MAX_FILES, useCart, type PrescriptionFile } from '../../store/cart';
 import { colors, radius, spacing, type } from '../../theme';
 
@@ -60,22 +61,23 @@ export function UploadScreen({ navigation }: NativeStackScreenProps<CustomerStac
       if (res.canceled) return;
       const out: PrescriptionFile[] = [];
       for (const a of res.assets) {
-        const mime = (a.mimeType ?? '').toLowerCase();
-        const mimeType = mime === 'image/png' || a.uri.toLowerCase().endsWith('.png') ? 'image/png' : mime === 'image/jpeg' || mime === 'image/jpg' || /\.jpe?g$/i.test(a.uri) || mime === '' ? 'image/jpeg' : null;
-        if (!mimeType) { setError(t('upload.unsupported')); continue; }
-        out.push({ id: uid(), uri: a.uri, name: a.fileName ?? `prescription.${mimeType === 'image/png' ? 'png' : 'jpg'}`, mimeType, sizeBytes: a.fileSize });
+        const mimeType = guessMime(a.fileName ?? a.uri, a.mimeType ?? 'image/jpeg');
+        const ext = (mimeType.split('/')[1] ?? 'jpg').replace('jpeg', 'jpg');
+        out.push({ id: uid(), uri: a.uri, name: a.fileName ?? `prescription.${ext}`, mimeType: isImageMime(mimeType) ? mimeType : 'image/jpeg', sizeBytes: a.fileSize });
       }
       accept(out);
     } catch { setError(t('upload.pickFailed')); } finally { setBusy(false); }
   };
 
-  const pickPdf = async () => {
+  const pickFile = async () => {
     setSheet(false);
     if (files.length >= MAX_FILES) return setError(t('upload.limit'));
     try {
-      const res = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', multiple: true, copyToCacheDirectory: true });
+      const res = await DocumentPicker.getDocumentAsync({ type: '*/*', multiple: true, copyToCacheDirectory: true });
       if (res.canceled) return;
-      accept(res.assets.map((a) => ({ id: uid(), uri: a.uri, name: a.name, mimeType: 'application/pdf' as const, sizeBytes: a.size })));
+      const ok = res.assets.filter((a) => !isBlockedName(a.name));
+      if (ok.length < res.assets.length) setError(t('upload.blocked'));
+      accept(ok.map((a) => ({ id: uid(), uri: a.uri, name: a.name, mimeType: guessMime(a.name, a.mimeType), sizeBytes: a.size })));
     } catch { setError(t('upload.pickFailed')); }
   };
 
@@ -96,7 +98,7 @@ export function UploadScreen({ navigation }: NativeStackScreenProps<CustomerStac
       <View style={s.strip}>
         {files.map((f) => (
           <Animated.View key={f.id} entering={ZoomIn.duration(320).springify().damping(12)} exiting={ZoomOut.duration(200)} layout={LinearTransition.springify()} style={s.thumb}>
-            {f.mimeType === 'application/pdf' ? <View style={s.pdf}><Icon name="document-text" size={30} /><Text style={type.smallMedium}>PDF</Text></View> : <Image source={{ uri: f.uri }} style={s.img} />}
+            {!isImageMime(f.mimeType) ? <View style={s.pdf}><Icon name="document-text" size={30} /><Text style={type.smallMedium}>{fileBadge(f.name, f.mimeType)}</Text></View> : <Image source={{ uri: f.uri }} style={s.img} />}
             <Pressable accessibilityRole="button" accessibilityLabel={t('upload.remove', { name: f.name })} onPress={() => setFiles((c) => c.filter((x) => x.id !== f.id))} style={s.x}><Icon name="close" size={14} color={colors.white} /></Pressable>
           </Animated.View>
         ))}
@@ -111,7 +113,7 @@ export function UploadScreen({ navigation }: NativeStackScreenProps<CustomerStac
       <Modal transparent visible={sheet} animationType="fade" onRequestClose={() => setSheet(false)}>
         <Pressable style={s.backdrop} onPress={() => setSheet(false)}>
           <Animated.View entering={SlideInDown.duration(320).springify().damping(18)} style={s.sheet}>
-            {([['camera', 'upload.camera', () => pickImages('camera')], ['images', 'upload.gallery', () => pickImages('gallery')], ['document-text', 'upload.pdf', pickPdf]] as const).map(([icon, label, fn]) => (
+            {([['camera', 'upload.camera', () => pickImages('camera')], ['images', 'upload.gallery', () => pickImages('gallery')], ['document-text', 'upload.file', pickFile]] as const).map(([icon, label, fn]) => (
               <Pressable key={label} accessibilityRole="button" onPress={fn} style={s.sheetRow}><Icon name={icon} size={24} /><Text style={[type.bodyMedium, { color: colors.text }]}>{t(label)}</Text></Pressable>
             ))}
           </Animated.View>

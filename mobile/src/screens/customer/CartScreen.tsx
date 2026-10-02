@@ -1,3 +1,4 @@
+import { isImageMime } from '../../fileKinds';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -33,7 +34,7 @@ export function CartScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Cart'
         {prescriptions.map((f, i) => (
           <Animated.View key={f.id} entering={FadeInDown.delay(i * 70).duration(420).springify().damping(18)} exiting={FadeOutLeft.duration(240)} layout={LinearTransition.springify().damping(18)}>
           <Card style={s.item}>
-            {f.mimeType === 'application/pdf' ? <View style={s.pdf}><Icon name="document-text" size={28} /></View> : <Image source={{ uri: f.uri }} style={s.thumb} />}
+            {!isImageMime(f.mimeType) ? <View style={s.pdf}><Icon name="document-text" size={28} /></View> : <Image source={{ uri: f.uri }} style={s.thumb} />}
             <View style={{ flex: 1, marginHorizontal: spacing.md }}><Text style={[type.bodyMedium, { color: colors.text }]}>{t('cart.prescription')} {i + 1}</Text><Text style={[type.small, { color: colors.secondary }]} numberOfLines={1}>{f.name}</Text></View>
             <Tap accessibilityRole="button" accessibilityLabel={t('upload.remove', { name: f.name })} hitSlop={10} onPress={() => setPrescriptions(prescriptions.filter((x) => x.id !== f.id))}><Icon name="close-circle" size={26} color={colors.navy} /></Tap>
           </Card>

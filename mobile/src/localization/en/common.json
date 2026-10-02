@@ -101,21 +101,23 @@
   },
   "upload": {
     "cardTitle": "Upload photo",
-    "cardSub": "Upload one or more photos / PDF",
+    "cardSub": "Upload a photo, PDF or any file",
     "add": "Add another file",
     "remove": "Remove {{name}}",
     "hint1": "Upload clear and readable photos",
-    "hint2": "JPG, PNG, PDF (max 5 MB each, up to {{max}} files)",
+    "hint2": "Any file type (max 10 MB each, up to {{max}} files)",
     "notice": "The pharmacy checks your prescription before preparing the order.",
     "camera": "Take a photo",
     "gallery": "Choose from gallery",
     "pdf": "Choose a PDF",
     "limit": "You can add up to 3 files to one order.",
-    "tooLarge": "{{name}} is larger than 5 MB.",
+    "tooLarge": "{{name}} is larger than 10 MB.",
     "unsupported": "Choose a JPG or PNG image.",
     "permission": "Please allow camera or photo access in your phone settings.",
     "pickFailed": "Could not open that file. Please try again.",
-    "needOne": "Add at least one prescription file."
+    "needOne": "Add at least one prescription file.",
+    "file": "Choose a file",
+    "blocked": "Programs and installers cannot be uploaded. Please choose a document or photo."
   },
   "medicines": {
     "placeholder": "Type a medicine name…",
@@ -256,7 +258,9 @@
     "bill": "Bill",
     "downloadBill": "Download",
     "deliveredOn": "Delivered on {{time}}",
-    "activity": "Order activity"
+    "activity": "Order activity",
+    "viewBill": "View",
+    "invoice": "Download invoice"
   },
   "pay": {
     "razorpay": "Pay online",
@@ -579,8 +583,8 @@
     "billLabel": "Bill",
     "billAttach": "Attach the bill",
     "billChange": "Tap to change the file",
-    "billHint": "PDF, JPG or PNG up to 10 MB",
-    "billType": "Please attach a PDF, JPG or PNG file.",
+    "billHint": "Any file up to 10 MB: PDF, photo, Word, Excel...",
+    "billType": "This type of file cannot be uploaded. Please choose a document, photo or PDF.",
     "billTooBig": "The bill must be 10 MB or smaller.",
     "billPickFailed": "Could not open that file. Please try again.",
     "billRequired": "Please attach the bill before sending the amount.",

@@ -3,10 +3,10 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 export const MAX_FILES = 3;
-export const MAX_FILE_BYTES = 5 * 1024 * 1024;
+export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 export interface CartMedicine { id: string; name: string; quantity: number }
-export interface PrescriptionFile { id: string; uri: string; name: string; mimeType: 'image/jpeg' | 'image/png' | 'application/pdf'; sizeBytes?: number }
+export interface PrescriptionFile { id: string; uri: string; name: string; mimeType: string; sizeBytes?: number }
 
 interface CartState {
   medicines: CartMedicine[];
