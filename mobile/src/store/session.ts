@@ -5,6 +5,7 @@ import type { User } from '../api/types';
 import { otpProvider } from '../auth/provider';
 import { setLanguage } from '../localization';
 import { registerForPush } from '../push';
+import { setMonitoringUser } from '../monitoring';
 import { connectRealtime, disconnectRealtime } from '../realtime';
 
 interface SessionState {
@@ -16,6 +17,8 @@ interface SessionState {
   /** Called after OTP: exchanges the verified token for the server-side account and role. */
   login: (token: string) => Promise<{ needsProfile: boolean }>;
   updateProfile: (b: { name?: string; email?: string; language?: 'en' | 'hi' }) => Promise<void>;
+  /** Sets (publicId) or removes (null) the profile picture. */
+  setAvatar: (publicId: string | null) => Promise<void>;
   logout: () => Promise<void>;
   /** Permanently deletes the signed-in customer's account (server enforces the rules), then signs out. */
   deleteAccount: () => Promise<void>;
@@ -32,6 +35,7 @@ export const useSession = create<SessionState>((set, get) => ({
     try {
       const { user } = await endpoints.me();
       set({ status: 'in', user });
+      setMonitoringUser(user);
       connectRealtime();
       void registerForPush();
     } catch (error) {
@@ -42,6 +46,7 @@ export const useSession = create<SessionState>((set, get) => ({
   async login(token) {
     const { user, needsProfile } = await endpoints.session(token);
     set({ status: 'in', user, bootError: null });
+    setMonitoringUser(user);
     connectRealtime();
     void registerForPush();
     return { needsProfile };
@@ -51,7 +56,12 @@ export const useSession = create<SessionState>((set, get) => ({
     set({ user });
     if (b.language) await setLanguage(b.language);
   },
+  async setAvatar(publicId) {
+    const { user } = publicId ? await endpoints.setAvatar(publicId) : await endpoints.removeAvatar();
+    set({ user });
+  },
   async logout() {
+    setMonitoringUser(null);
     disconnectRealtime();
     await otpProvider.signOut();
     set({ status: 'out', user: null });

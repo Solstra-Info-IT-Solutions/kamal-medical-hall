@@ -1,5 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, SlideInDown } from 'react-native-reanimated';
@@ -17,8 +17,10 @@ export interface PaymentInfo {
 
 function CopyRow({ label, value }: { label: string; value: string }) {
   const [done, setDone] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
   return (
-    <Tap accessibilityRole="button" accessibilityLabel={`Copy ${label}`} onPress={async () => { await Clipboard.setStringAsync(value); tick('success'); setDone(true); setTimeout(() => setDone(false), 1500); }} scaleTo={0.98} style={s.row}>
+    <Tap accessibilityRole="button" accessibilityLabel={`Copy ${label}`} onPress={async () => { await Clipboard.setStringAsync(value); tick('success'); setDone(true); clearTimeout(timer.current); timer.current = setTimeout(() => setDone(false), 1500); }} scaleTo={0.98} style={s.row}>
       <View style={{ flex: 1 }}><Text style={[type.small, { color: colors.secondary }]}>{label}</Text><Text style={[type.bodyMedium, { color: colors.text }]} selectable>{value}</Text></View>
       <Icon name={done ? 'checkmark-circle' : 'copy-outline'} size={22} color={done ? colors.green : colors.primary} />
     </Tap>

@@ -1,3 +1,4 @@
+import { useErrorPopup } from '../../hooks';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
@@ -50,6 +51,7 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<AuthStackPara
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  useErrorPopup(error);
   const [errCount, setErrCount] = useState(0);
   const valid = /^[6-9]\d{9}$/.test(phone);
   const focus = useSharedValue(0);
@@ -126,6 +128,7 @@ export function OtpScreen({ route, navigation }: NativeStackScreenProps<AuthStac
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  useErrorPopup(error);
   const [errCount, setErrCount] = useState(0);
   const [left, setLeft] = useState(RESEND_SECONDS);
   const input = useRef<TextInput>(null);
@@ -200,6 +203,7 @@ export function SignupScreen() {
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; email?: string; api?: string }>({});
+  useErrorPopup(errors.api);
   const emailRef = useRef<TextInput>(null);
   const nameRef = useRef<TextInput>(null);
   useAutoFocus(nameRef);

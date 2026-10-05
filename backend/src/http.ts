@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError, type ZodType } from 'zod';
+import { reportError } from './monitoring.js';
 
 export class HttpError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
@@ -19,5 +20,6 @@ export function errorHandler(error: unknown, _req: Request, res: Response, _next
   if (error instanceof HttpError) return res.status(error.status).json({ error: { code: error.code, message: error.message } });
   if (error instanceof ZodError) return res.status(422).json({ error: { code: 'validation_failed', message: error.message } });
   console.error(error);
+  reportError(error);
   res.status(500).json({ error: { code: 'internal', message: 'Something went wrong. Please try again.' } });
 }

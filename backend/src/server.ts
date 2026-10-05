@@ -1,3 +1,4 @@
+import './monitoring.js'; // first, so the error reporter is ready before anything else runs
 import http from 'node:http';
 import cors from 'cors';
 import express from 'express';

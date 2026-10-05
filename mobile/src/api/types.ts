@@ -3,7 +3,8 @@ export type OrderStatus = 'requested' | 'quoted' | 'accepted' | 'awaiting_paymen
 export type OrderKind = 'prescription' | 'medicines';
 export type PaymentMethod = 'razorpay' | 'cod';
 
-export interface User { id: string; phone: string; role: Role; name: string | null; email: string | null; language?: string }
+export interface User {
+  avatarUrl?: string | null; id: string; phone: string; role: Role; name: string | null; email: string | null; language?: string }
 
 export interface Address {
   id: string; label: 'home' | 'office' | 'other'; recipientName: string; phone: string;
@@ -29,6 +30,7 @@ export interface Order {
   prescriptions: { id: string; mimeType: string; sizeBytes: number | null; url: string | null; name?: string }[];
   history: { status: OrderStatus; reason: string | null; created_at: string }[];
   deliveredAt: string | null;
+  review?: { id: string; rating: number; status: ReviewStatus } | null;
   /** The bill the store attached to the amount request (not shown to delivery partners). */
   bill: { name: string; mimeType: string; sizeBytes: number | null; uploadedAt: string | null; viewUrl: string | null; downloadUrl: string | null } | null;
   store: { name: string; address: string | null; phone: string | null };
@@ -81,3 +83,32 @@ export interface StoreSettings {
   isOpen: boolean; openingTime: string; closingTime: string; address: string | null; phone: string | null; email: string | null;
   latitude: number | null; longitude: number | null; geofenceM: number;
 }
+
+export type ChatRole = 'customer' | 'admin' | 'bot';
+export interface ChatMessage { id: string; threadId: string; role: ChatRole; body: string; createdAt: string; customerName?: string | null }
+export interface ChatQueue { state: 'active' | 'waiting' | 'closed'; position: number; estimatedMinutes: number; adminBusy: boolean }
+export interface AdminChatThread {
+  id: string; status: 'open' | 'closed'; customerName: string | null; customerPhone: string; orderNumber: string | null; subject: string | null;
+  lastBody: string | null; lastMessageAt: string; unread: number; state: 'active' | 'waiting' | 'closed'; position: number;
+}
+export type ReviewStatus = 'pending' | 'approved' | 'rejected';
+export interface Review {
+  id: string; orderId: string; orderNumber: string; rating: number; comment: string | null; status: ReviewStatus; adminNote: string | null;
+  createdAt: string; decidedAt: string | null; customerName: string | null; customerPhone: string; images: { id: string; url: string | null }[];
+}
+export interface Overview {
+  customers: number; ordersTotal: number; ordersToday: number; cancelledToday: number; salesToday: number; sales7d: number; sales30d: number;
+  avgOrder30d: number; pendingReviews: number; chatWaiting: number; chatOpen: number;
+}
+export interface Revenue {
+  days: number; sales: number; delivered: number; avgOrder: number; ordersPlaced: number; ordersLost: number;
+  daily: { day: string; orders: number; sales: number }[];
+  paymentSplit: { method: string | null; orders: number; sales: number }[];
+  topItems: { name: string; quantity: number; orders: number }[];
+}
+export interface CustomerDetail {
+  customer: { id: string; name: string | null; phone: string; email: string | null; joinedAt: string };
+  orderCount: number; deliveredCount: number; lifetimeValue: number;
+  orders: { id: string; orderNumber: string; status: OrderStatus; amount: number | null; createdAt: string }[];
+}
+export type ExportKind = 'orders' | 'revenue' | 'customers' | 'payments' | 'attendance' | 'reviews';

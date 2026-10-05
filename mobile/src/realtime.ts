@@ -25,7 +25,7 @@ export function connectRealtime() {
     auth: (cb) => { void otpProvider.getToken().then((token) => cb({ token: token ?? '' })); },
     reconnection: true, reconnectionDelay: 1000, reconnectionDelayMax: 8000,
   });
-  for (const event of ['notification', 'order:update', 'partner:update', 'store:update']) socket.on(event, (p) => fan(event, p));
+  for (const event of ['notification', 'order:update', 'partner:update', 'store:update', 'chat:message', 'chat:queue', 'chat:update']) socket.on(event, (p) => fan(event, p));
   // After a reconnect we may have missed events, so screens refresh themselves.
   socket.on('connect', () => fan('connect'));
 }

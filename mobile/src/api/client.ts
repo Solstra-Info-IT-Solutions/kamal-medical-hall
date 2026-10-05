@@ -1,3 +1,4 @@
+import { captureError } from '../monitoring';
 import Constants from 'expo-constants';
 
 /** Set EXPO_PUBLIC_API_URL in .env (e.g. http://192.168.1.5:4000 for a phone on the same Wi-Fi). */
@@ -31,6 +32,7 @@ export async function api<T = unknown>(method: string, path: string, body?: unkn
     const data = await res.json().catch(() => null);
     if (!res.ok) {
       if (res.status === 401 && opts.auth !== false && !opts.token) onUnauthorized();
+      if (res.status >= 500) captureError(new Error(`API ${res.status} ${method} ${path.split('?')[0]}`));
       throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? 'Something went wrong. Please try again.');
     }
     return data as T;

@@ -52,21 +52,20 @@ export function BackButton({ onPress }: { onPress?: () => void }) {
   return <Tap accessibilityRole="button" accessibilityLabel="Back" hitSlop={12} onPress={onPress ?? (() => nav.goBack())} style={s.back}><Icon name="chevron-back" size={28} color={colors.text} /></Tap>;
 }
 
+/** Every button in the app has the same fixed height (52, or 40 when `small`) so screens look uniform. */
+export const BUTTON_HEIGHT = 52;
+export const BUTTON_HEIGHT_SMALL = 40;
+
 export function Button({ title, onPress, variant = 'primary', loading, disabled, icon, style, small }: { title: string; onPress: () => void; variant?: 'primary' | 'outline' | 'danger' | 'ghost'; loading?: boolean; disabled?: boolean; icon?: IconName; style?: StyleProp<ViewStyle>; small?: boolean }) {
   const off = disabled || loading;
   const fg = variant === 'primary' ? colors.white : variant === 'danger' ? colors.red : colors.primary;
-  const lift = useSharedValue(off ? 0 : 1);
-  useEffect(() => { lift.value = withTiming(off ? 0 : 1, { duration: 240 }); }, [off, lift]);
-  const glow = useAnimatedStyle(() => ({ opacity: interpolate(lift.value, [0, 1], [0.5, 1]) }));
   return (
-    <Tap accessibilityRole="button" accessibilityState={{ disabled: !!off, busy: !!loading }} disabled={off} onPress={onPress} haptic={!off}
-      style={[s.btn, small && s.btnSmall, variant === 'primary' && s.btnPrimary, variant === 'outline' && s.btnOutline, variant === 'danger' && s.btnDanger, variant === 'ghost' && s.btnGhost, style]}>
-      <Animated.View style={[s.btnInner, small && s.btnInnerSmall, glow]}>
-        {loading ? <Animated.View entering={FadeIn.duration(200)}><ActivityIndicator color={fg} /></Animated.View> : <>
-          <Text style={[type.button, small && { fontSize: 15, lineHeight: 22 }, { color: fg }]}>{title}</Text>
-          {icon ? <Icon name={icon} size={20} color={fg} /> : null}
-        </>}
-      </Animated.View>
+    <Tap accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ disabled: !!off, busy: !!loading }} disabled={off} onPress={onPress} haptic={!off}
+      style={[s.btn, small && s.btnSmall, variant === 'primary' && s.btnPrimary, variant === 'outline' && s.btnOutline, variant === 'danger' && s.btnDanger, variant === 'ghost' && s.btnGhost, off && { opacity: 0.5 }, style]}>
+      {loading ? <ActivityIndicator color={fg} /> : <>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={[type.button, small && { fontSize: 15, lineHeight: 22 }, { color: fg, flexShrink: 1 }]}>{title}</Text>
+        {icon ? <Icon name={icon} size={small ? 18 : 20} color={fg} /> : null}
+      </>}
     </Tap>
   );
 }
@@ -166,10 +165,8 @@ const s = StyleSheet.create({
   pad: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xxl },
   footer: { paddingTop: spacing.sm, paddingBottom: spacing.md, backgroundColor: colors.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   back: { padding: 4, marginLeft: 4 },
-  btn: { minHeight: 54, borderRadius: radius.md },
-  btnInner: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing.lg },
-  btnSmall: { minHeight: 40, borderRadius: radius.sm },
-  btnInnerSmall: { minHeight: 40, paddingHorizontal: 14 },
+  btn: { height: BUTTON_HEIGHT, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing.lg },
+  btnSmall: { height: BUTTON_HEIGHT_SMALL, borderRadius: radius.sm, paddingHorizontal: 14 },
   btnPrimary: { backgroundColor: colors.primary, boxShadow: '0px 6px 16px rgba(11,95,219,0.28)' },
   btnOutline: { borderWidth: 1.5, borderColor: colors.primary, backgroundColor: colors.white },
   btnDanger: { borderWidth: 1.5, borderColor: colors.red, backgroundColor: colors.white },

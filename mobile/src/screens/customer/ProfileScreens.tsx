@@ -1,3 +1,5 @@
+import { useErrorPopup } from '../../hooks';
+import { clearOrderCache } from '../../cache';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -5,7 +7,11 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import { endpoints } from '../../api/endpoints';
+import { uploadPrescription } from '../../api/upload';
+import { Avatar } from '../../components/CallButton';
+import { guessMime } from '../../fileKinds';
 import { Enter, Tap } from '../../components/motion';
 import { Button, Card, ErrorView, Icon, Loading, Message, Screen, TextField, type IconName } from '../../components/ui';
 import { formatDate } from '../../utils';
@@ -26,12 +32,12 @@ export function ProfileScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Pr
   const deleteAccountApi = useSession((st) => st.deleteAccount);
   const logOut = async () => {
     const ok = await showDialog({ title: t('profile.logout'), message: t('profile.logoutMsg'), icon: 'log-out', tone: 'primary', confirmLabel: t('profile.logout'), cancelLabel: t('common.cancel') });
-    if (ok) { useCart.getState().clear(); await logout(); }
+    if (ok) { await clearOrderCache(); await logout(); }
   };
   const deleteAccount = async () => {
     const ok = await showDialog({ title: t('profile.deleteTitle'), message: t('profile.deleteMsg'), icon: 'trash', tone: 'danger', confirmLabel: t('profile.deleteConfirm'), cancelLabel: t('common.cancel'), acknowledge: t('profile.deleteAck') });
     if (!ok) return;
-    try { useCart.getState().clear(); await deleteAccountApi(); } catch (e) { await notice(t('profile.deleteFailed'), e instanceof ApiError && e.code === 'active_orders' ? t('profile.deleteActive') : (e as Error).message, t('common.ok')); }
+    try { await clearOrderCache(); await deleteAccountApi(); } catch (e) { await notice(t('profile.deleteFailed'), e instanceof ApiError && e.code === 'active_orders' ? t('profile.deleteActive') : (e as Error).message, t('common.ok')); }
   };
   let rowIndex = 1;
   const row = (icon: IconName, label: string, onPress: () => void, danger = false) => (
@@ -45,11 +51,13 @@ export function ProfileScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Pr
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.white }} edges={['top']}>
       <Screen>
         <Enter index={0}><View style={s.avatarRow}>
-          <View style={s.avatar}><Icon name="person" size={34} color={colors.white} /></View>
+          <Tap accessibilityRole="button" accessibilityLabel={t('profile.changePhoto')} onPress={() => nav.navigate('EditProfile')} haptic={false}><Avatar name={user?.name} uri={user?.avatarUrl} size={72} /></Tap>
           <View style={{ flex: 1 }}><Text style={[type.h3, { color: colors.text }]}>{user?.name}</Text><Text style={[type.body, { color: colors.secondary }]}>+91 {user?.phone}</Text></View>
         </View></Enter>
         {row('create-outline', t('profile.edit'), () => nav.navigate('EditProfile'))}
         {row('location-outline', t('profile.addresses'), () => nav.navigate('Addresses'))}
+        {row('star-outline', t('reviews.title'), () => nav.navigate('MyReviews'))}
+        {row('chatbubbles-outline', t('chat.title'), () => nav.navigate('Chat'))}
         {row('notifications-outline', t('home.notifications'), () => nav.navigate('Notifications'))}
         {row('language-outline', t('profile.language'), () => nav.navigate('Language'))}
         {row('help-circle-outline', t('profile.help'), () => nav.navigate('Help'))}
@@ -63,11 +71,35 @@ export function ProfileScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Pr
 
 export function EditProfileScreen({ navigation }: { navigation: Nav }) {
   const { t } = useTranslation();
-  const { user, updateProfile } = useSession();
+  const { user, updateProfile, setAvatar } = useSession();
   const [name, setName] = useState(user?.name ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [errors, setErrors] = useState<{ name?: string; email?: string; api?: string }>({});
+  useErrorPopup(errors.api);
   const [busy, setBusy] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const changePhoto = async (source: 'camera' | 'gallery') => {
+    setErrors({});
+    try {
+      if (source === 'camera') {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) return setErrors({ api: t('upload.permission') });
+      }
+      const res = source === 'camera'
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.7 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+      if (res.canceled || !res.assets[0]) return;
+      const a = res.assets[0];
+      setPhotoBusy(true);
+      const sig = await endpoints.signUpload('avatar');
+      const up = await uploadPrescription({ id: 'avatar', uri: a.uri, name: a.fileName ?? 'profile.jpg', mimeType: guessMime(a.fileName ?? a.uri, a.mimeType ?? 'image/jpeg'), sizeBytes: a.fileSize }, sig);
+      await setAvatar(up.publicId);
+    } catch (e) { setErrors({ api: (e as Error).message }); } finally { setPhotoBusy(false); }
+  };
+  const removePhoto = async () => {
+    setPhotoBusy(true);
+    try { await setAvatar(null); } catch (e) { setErrors({ api: (e as Error).message }); } finally { setPhotoBusy(false); }
+  };
   const save = async () => {
     const e: typeof errors = {};
     if (name.trim().length < 2) e.name = t('validation.name');
@@ -79,6 +111,14 @@ export function EditProfileScreen({ navigation }: { navigation: Nav }) {
   };
   return (
     <Screen footer={<Button title={t('address.save')} onPress={save} loading={busy} />}>
+      <View style={s.photoBlock}>
+        <Avatar name={user?.name} uri={user?.avatarUrl} size={110} />
+        <View style={s.photoBtns}>
+          <Button small variant="outline" icon="camera" title={t('upload.camera')} onPress={() => { void changePhoto('camera'); }} disabled={photoBusy} style={{ flex: 1 }} />
+          <Button small variant="outline" icon="images" title={t('upload.gallery')} onPress={() => { void changePhoto('gallery'); }} disabled={photoBusy} loading={photoBusy} style={{ flex: 1 }} />
+        </View>
+        {user?.avatarUrl ? <Button small variant="ghost" icon="trash-outline" title={t('profile.removePhoto')} onPress={() => { void removePhoto(); }} disabled={photoBusy} /> : null}
+      </View>
       <TextField label={t('signup.name')} value={name} onChangeText={setName} error={errors.name} autoCapitalize="words" />
       <TextField label={t('signup.email')} value={email} onChangeText={setEmail} error={errors.email} keyboardType="email-address" autoCapitalize="none" />
       <TextField label={t('profile.phone')} value={`+91 ${user?.phone ?? ''}`} editable={false} style={{ backgroundColor: colors.tint }} />
@@ -92,6 +132,7 @@ export function LanguageScreen() {
   const { t, i18n } = useTranslation();
   const update = useSession((st) => st.updateProfile);
   const [err, setErr] = useState('');
+  useErrorPopup(err);
   const choose = async (language: 'en' | 'hi') => {
     try { await update({ language }); setErr(''); } catch (e) { setErr((e as Error).message); }
   };
@@ -140,6 +181,8 @@ export function LegalScreen() {
 }
 
 const s = StyleSheet.create({
+  photoBlock: { alignItems: 'center', gap: 12, marginBottom: spacing.lg },
+  photoBtns: { flexDirection: 'row', gap: 10, alignSelf: 'stretch' },
   avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: spacing.lg, marginBottom: spacing.sm },
   avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16, borderTopWidth: 1, borderTopColor: colors.border },

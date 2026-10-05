@@ -2,17 +2,23 @@
   "build": {
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://kamal-medical-hall-api.onrender.com",
-        "EXPO_PUBLIC_AUTH_MODE": "firebase"
+        "EXPO_PUBLIC_AUTH_MODE": "firebase",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_PUBLIC_ENV": "preview"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://kamal-medical-hall-api.onrender.com",
-        "EXPO_PUBLIC_AUTH_MODE": "firebase"
+        "EXPO_PUBLIC_AUTH_MODE": "firebase",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_PUBLIC_ENV": "production"
       }
     }
   }

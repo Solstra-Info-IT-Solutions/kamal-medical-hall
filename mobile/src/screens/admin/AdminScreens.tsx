@@ -1,3 +1,4 @@
+import { useErrorPopup } from '../../hooks';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -50,6 +51,7 @@ export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Das
   const content = useContentStyle(true);
   const { tileColumns } = useLayout();
   const stats = useLoad(() => endpoints.admin.dashboard(), DASH_LIVE);
+  const ov = useLoad(() => endpoints.admin.overview(), [...DASH_LIVE, 'chat:update']);
   const [toggling, setToggling] = useState(false);
   const team = useLoad(() => endpoints.admin.partners(), ['partner:update', 'order:update']);
   const recent = useLoad(() => endpoints.admin.orders('requested'), LIVE);
@@ -78,7 +80,7 @@ export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Das
     <SafeAreaView style={s.fill} edges={['top']}>
       <Header title={t('admin.dashboard')} />
       {stats.loading && !data ? <ListSkeleton /> : stats.error && !data ? <ErrorView message={stats.error} onRetry={stats.reload} retryLabel={t('common.retry')} /> : (
-        <ScrollView contentContainerStyle={[s.pad, content]} refreshControl={<RefreshControl refreshing={false} onRefresh={() => { void stats.reload(); void team.reload(); void recent.reload(); }} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={[s.pad, content]} refreshControl={<RefreshControl refreshing={false} onRefresh={() => { void stats.reload(); void ov.reload(); void team.reload(); void recent.reload(); }} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
           <Enter index={0}>
             <View style={[s.storeCard, data!.isOpen ? { backgroundColor: colors.greenBg } : { backgroundColor: colors.redBg }]}>
               <View style={[s.tileIcon, { backgroundColor: colors.white, marginBottom: 0 }]}><Icon name="storefront" size={22} color={data!.isOpen ? colors.green : colors.red} /></View>
@@ -89,13 +91,28 @@ export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Das
               <Switch accessibilityLabel={t('admin.storeOpen')} value={data!.isOpen} onValueChange={setOpen} disabled={toggling} />
             </View>
           </Enter>
+          <Text style={[type.h3, s.sec]}>{t('admin.secOrders')}</Text>
           <ResponsiveGrid columns={tileColumns}>
             {tile('mail-unread', t('admin.newRequests'), data!.requested, false, 'amber', () => nav.navigate('Tabs', { screen: 'Requests' }))}
-            {tile('hourglass', t('admin.awaiting'), data!.awaitingPayment)}
-            {tile('cube', t('admin.ready'), data!.readyToDispatch, false, 'blue', () => nav.navigate('Tabs', { screen: 'Orders' }))}
-            {tile('bicycle', t('admin.outForDelivery'), data!.outForDelivery)}
-            {tile('checkmark-done', t('admin.deliveredToday'), data!.deliveredToday, false, 'green')}
-            {tile('cash', t('admin.salesToday'), data!.salesToday, true, 'green')}
+            {tile('hourglass', t('admin.awaiting'), data!.awaitingPayment, false, 'blue', () => nav.navigate('OrdersByStatus', { title: t('admin.awaiting'), status: 'quoted,accepted,awaiting_payment' }))}
+            {tile('cube', t('admin.ready'), data!.readyToDispatch, false, 'blue', () => nav.navigate('OrdersByStatus', { title: t('admin.ready'), status: 'ready_to_dispatch' }))}
+            {tile('bicycle', t('admin.outForDelivery'), data!.outForDelivery, false, 'blue', () => nav.navigate('OrdersByStatus', { title: t('admin.outForDelivery'), status: 'out_for_delivery' }))}
+            {tile('checkmark-done', t('admin.deliveredToday'), data!.deliveredToday, false, 'green', () => nav.navigate('OrdersByStatus', { title: t('admin.delivered'), status: 'delivered' }))}
+            {tile('close-circle', t('admin.cancelledToday'), ov.data?.cancelledToday ?? 0, false, 'amber', () => nav.navigate('OrdersByStatus', { title: t('admin.cancelled'), status: 'cancelled,rejected' }))}
+          </ResponsiveGrid>
+
+          <Text style={[type.h3, s.sec]}>{t('admin.secMoney')}</Text>
+          <ResponsiveGrid columns={tileColumns}>
+            {tile('cash', t('admin.salesToday'), data!.salesToday, true, 'green', () => nav.navigate('Revenue'))}
+            {tile('trending-up', t('admin.sales7d'), ov.data?.sales7d ?? 0, true, 'green', () => nav.navigate('Revenue'))}
+            {tile('pricetag', t('admin.avgOrder'), ov.data?.avgOrder30d ?? 0, true, 'blue', () => nav.navigate('Revenue'))}
+          </ResponsiveGrid>
+
+          <Text style={[type.h3, s.sec]}>{t('admin.secPeople')}</Text>
+          <ResponsiveGrid columns={tileColumns}>
+            {tile('people', t('admin.customers'), ov.data?.customers ?? 0, false, 'blue', () => nav.navigate('Customers'))}
+            {tile('chatbubbles', t('admin.chatsWaiting'), ov.data?.chatWaiting ?? 0, false, (ov.data?.chatWaiting ?? 0) > 0 ? 'amber' : 'blue', () => nav.navigate('AdminChats'))}
+            {tile('star', t('admin.pendingReviews'), ov.data?.pendingReviews ?? 0, false, (ov.data?.pendingReviews ?? 0) > 0 ? 'amber' : 'blue', () => nav.navigate('AdminReviews'))}
           </ResponsiveGrid>
 
           <Enter index={8}>
@@ -109,6 +126,20 @@ export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Das
             </Card>
           </Enter>
 
+          <Text style={[type.h3, s.sec]}>{t('admin.secManage')}</Text>
+          <ResponsiveGrid columns={tileColumns}>
+            {([
+              ['bar-chart', 'admin.revenue', 'Revenue'], ['download', 'admin.exports', 'Exports'], ['megaphone', 'admin.broadcast', 'Broadcast'],
+              ['card', 'admin.paymentDetails', 'PaymentDetails'], ['location', 'admin.pincodes', 'Pincodes'], ['calendar', 'admin.attendance', 'Attendance'],
+              ['document-text', 'admin.terms', 'Terms'], ['settings', 'admin.settings', 'StoreSettings'],
+            ] as const).map(([icon, label, route]) => (
+              <Card key={route} onPress={() => nav.navigate(route)} style={s.manageCard}>
+                <Icon name={icon} size={24} color={colors.primary} />
+                <Text style={[type.smallMedium, { color: colors.text, textAlign: 'center' }]} numberOfLines={2}>{t(label)}</Text>
+              </Card>
+            ))}
+          </ResponsiveGrid>
+
           <Enter index={9}><Text style={[type.h3, s.sec]}>{t('admin.recentRequests')}</Text></Enter>
           {recent.data && !recent.data.orders.length ? <Text style={[type.small, { color: colors.secondary }]}>{t('admin.noRequests')}</Text> : null}
           <ResponsiveGrid>{recent.data?.orders.slice(0, 4).map((o, i) => <OrderRow key={o.id} o={o} index={i + 10} onPress={() => nav.navigate('OrderReview', { orderId: o.id })} />)}</ResponsiveGrid>
@@ -117,7 +148,7 @@ export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Das
   );
 }
 
-function OrderList({ status, title, search }: { status?: string; title: string; search?: boolean }) {
+function OrderList({ status, title, search, embedded }: { status?: string; title: string; search?: boolean; embedded?: boolean }) {
   const { t } = useTranslation();
   const nav = useNavigation<Nav>();
   const [q, setQ] = useState('');
@@ -129,8 +160,8 @@ function OrderList({ status, title, search }: { status?: string; title: string; 
   useEffect(() => { void reload(); }, [filter, term, reload]);
   const filters = [undefined, 'requested', 'quoted,awaiting_payment', 'ready_to_dispatch', 'out_for_delivery', 'delivered', 'cancelled,rejected'];
   return (
-    <SafeAreaView style={s.fill} edges={['top']}>
-      <Header title={title} />
+    <SafeAreaView style={s.fill} edges={embedded ? ['left', 'right', 'bottom'] : ['top']}>
+      {embedded ? null : <Header title={title} />}
       {search ? <>
         <Enter><View style={s.search}><Icon name="search" size={20} color={colors.secondary} /><TextInput value={q} onChangeText={setQ} placeholder={t('admin.search')} placeholderTextColor={colors.muted} accessibilityLabel={t('admin.search')} style={[type.body, s.searchInput]} /></View></Enter>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filters} style={{ flexGrow: 0 }}>
@@ -144,6 +175,7 @@ function OrderList({ status, title, search }: { status?: string; title: string; 
   );
 }
 export const RequestsScreen = () => { const { t } = useTranslation(); return <OrderList status="requested" title={t('admin.newRequests')} />; };
+export function OrdersByStatusScreen({ route }: NativeStackScreenProps<AdminStackParamList, 'OrdersByStatus'>) { return <OrderList status={route.params.status} title={route.params.title} search embedded />; }
 export const AllOrdersScreen = () => { const { t } = useTranslation(); return <OrderList title={t('admin.allOrders')} search />; };
 
 // ---------------------------------------------------------------- Order review
@@ -182,6 +214,7 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState('');
+  useErrorPopup(err);
   if (loading && !data) return <ListSkeleton />;
   if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
   const o: Order = data!.order;
@@ -230,6 +263,9 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
       <Enter index={0}>
         <View style={s.rowBetween}><Text style={[type.h2, { color: colors.text }]}>#{o.orderNumber}</Text><Pill text={t(`status.${o.status}`)} tone={statusTone(o.status)} /></View>
         <Text style={[type.small, { color: colors.secondary, marginBottom: spacing.md }]}>{formatDateTime(o.createdAt)}</Text>
+        {['ready_to_dispatch', 'out_for_delivery', 'delivered'].includes(o.status) && o.quotedAmount !== null ? (
+          <Button title={t('order.invoice')} variant="outline" icon="receipt" onPress={async () => { try { const l = await endpoints.invoiceLink(o.id); await Linking.openURL(l.url); } catch (e) { await notice(t('common.error'), (e as Error).message, t('common.ok')); } }} style={{ marginBottom: spacing.md }} />
+        ) : null}
       </Enter>
 
       <Enter index={1}>
@@ -261,9 +297,7 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
             <Button title={t('admin.viewBill')} variant="outline" icon="eye" small disabled={!o.bill.viewUrl} onPress={() => { void Linking.openURL(o.bill!.viewUrl!); }} style={{ flex: 1 }} />
             <Button title={t('order.downloadBill')} icon="download" small disabled={!o.bill.downloadUrl} onPress={() => { void Linking.openURL(o.bill!.downloadUrl!); }} style={{ flex: 1 }} />
           </View> : null}
-          {['ready_to_dispatch', 'out_for_delivery', 'delivered'].includes(o.status) && o.quotedAmount !== null ? (
-            <Button title={t('order.invoice')} variant="outline" icon="receipt" small onPress={async () => { try { const l = await endpoints.invoiceLink(o.id); await Linking.openURL(l.url); } catch (e) { await notice(t('common.error'), (e as Error).message, t('common.ok')); } }} style={{ marginTop: spacing.sm }} />
-          ) : null}
+
           {o.rejectionReason || o.cancelReason ? <Text style={[type.body, { color: colors.red, marginTop: spacing.sm }]}>{o.rejectionReason ?? o.cancelReason}</Text> : null}
         </Card>
       </Enter>
@@ -354,6 +388,7 @@ export function TeamScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Team'>) 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [err, setErr] = useState('');
+  useErrorPopup(err);
   const [busy, setBusy] = useState(false);
   const add = async () => {
     setBusy(true); setErr('');
@@ -527,6 +562,7 @@ export function TermsScreen({ navigation }: NativeStackScreenProps<AdminStackPar
   const { data, error, loading, reload } = useLoad(() => endpoints.admin.terms());
   const [text, setText] = useState<string | null>(null);
   const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
+  useErrorPopup(err);
   useEffect(() => { if (data && text === null) setText(data.text); }, [data, text]);
   if (loading && !data) return <ListSkeleton />;
   if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
@@ -554,6 +590,7 @@ export function PartnerAreasScreen({ navigation, route }: NativeStackScreenProps
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  useErrorPopup(err);
   useEffect(() => {
     if (selected || !partners.data) return;
     setSelected(new Set(partners.data.partners.find((p) => p.id === partnerId)?.pincodes ?? []));
@@ -598,6 +635,7 @@ export function PincodesScreen() {
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  useErrorPopup(err);
   const parsed = useMemo(() => [...new Set(input.split(/[^0-9]+/).filter(Boolean))], [input]);
   const invalid = parsed.filter((p) => !/^\d{6}$/.test(p));
   const list = (data?.pincodes ?? []).filter((p) => !q.trim() || p.pincode.includes(q.trim()));
@@ -666,6 +704,11 @@ export function MoreScreen(_p: BottomTabScreenProps<AdminTabParamList, 'More'>) 
       <Header title={t('admin.more')} />
       <ScrollView contentContainerStyle={[s.pad, useContentStyle()]} showsVerticalScrollIndicator={false}>
         <Enter index={0}><View style={s.me}><Avatar name={user?.name} size={56} /><View><Text style={[type.h3, { color: colors.text }]}>{user?.name}</Text><Text style={[type.small, { color: colors.secondary }]}>+91 {user?.phone}</Text></View></View></Enter>
+        {row('chatbubbles-outline', t('admin.chats'), () => nav.navigate('AdminChats'))}
+        {row('star-outline', t('admin.reviews'), () => nav.navigate('AdminReviews'))}
+        {row('bar-chart-outline', t('admin.revenue'), () => nav.navigate('Revenue'))}
+        {row('download-outline', t('admin.exports'), () => nav.navigate('Exports'))}
+        {row('megaphone-outline', t('admin.broadcast'), () => nav.navigate('Broadcast'))}
         {row('card-outline', t('admin.paymentDetails'), () => nav.navigate('PaymentDetails'))}
         {row('calendar-outline', t('admin.attendance'), () => nav.navigate('Attendance'))}
         {row('document-text-outline', t('admin.terms'), () => nav.navigate('Terms'))}
@@ -682,6 +725,7 @@ export function MoreScreen(_p: BottomTabScreenProps<AdminTabParamList, 'More'>) 
 
 export function CustomersScreen() {
   const { t } = useTranslation();
+  const nav = useNavigation<Nav>();
   const [q, setQ] = useState(''); const [term, setTerm] = useState('');
   useEffect(() => { const id = setTimeout(() => setTerm(q.trim()), 400); return () => clearTimeout(id); }, [q]);
   const { data, error, loading, reload } = useLoad(() => endpoints.admin.customers(term || undefined));
@@ -691,7 +735,7 @@ export function CustomersScreen() {
       <View style={[s.search, { marginHorizontal: 0 }]}><Icon name="search" size={20} color={colors.secondary} /><TextInput value={q} onChangeText={setQ} placeholder={t('admin.search')} placeholderTextColor={colors.muted} accessibilityLabel={t('admin.search')} style={[type.body, s.searchInput]} /></View>
       {loading && !data ? <ListSkeleton /> : error && !data ? <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} /> : !data!.customers.length ? <View style={{ height: 300 }}><Message icon="people-outline" title={t('admin.noCustomers')} /></View> : data!.customers.map((c, i) => (
         <Enter key={c.id} index={i}>
-          <Card style={[s.block, s.personRow]}>
+          <Card onPress={() => nav.navigate('CustomerDetail', { id: c.id, name: c.name ?? c.phone })} style={[s.block, s.personRow]}>
             <Avatar name={c.name} />
             <View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]}>{c.name ?? '—'}</Text><Text style={[type.small, { color: colors.secondary }]}>+91 {c.phone} · {t('admin.orderCount', { count: c.orderCount })}</Text></View>
             <CallButton phone={c.phone} compact label={t('admin.callCustomer')} />
@@ -731,7 +775,8 @@ export function StoreSettingsScreen({ navigation }: NativeStackScreenProps<Admin
   const { t } = useTranslation();
   const { data, error, loading, reload } = useLoad(() => endpoints.admin.settings());
   const [f, setF] = useState<{ isOpen: boolean; openingTime: string; closingTime: string; address: string; phone: string; email: string; latitude: string; longitude: string; geofenceM: string } | null>(null);
-  const [busy, setBusy] = useState(false); const [err, setErr] = useState(''); const [gps, setGps] = useState(false);
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
+  useErrorPopup(err); const [gps, setGps] = useState(false);
   useEffect(() => { if (data && !f) setF({ isOpen: data.isOpen, openingTime: data.openingTime, closingTime: data.closingTime, address: data.address ?? '', phone: data.phone ?? '', email: data.email ?? '', latitude: data.latitude != null ? String(data.latitude) : '', longitude: data.longitude != null ? String(data.longitude) : '', geofenceM: String(data.geofenceM ?? 150) }); }, [data, f]);
   if (loading && !data) return <ListSkeleton />;
   if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
@@ -792,6 +837,7 @@ export function PaymentDetailsScreen({ navigation }: NativeStackScreenProps<Admi
   const { data, error, loading, reload } = useLoad(() => endpoints.admin.paymentDetails());
   const [f, setF] = useState<{ upiId: string; upiName: string; bankName: string; bankAccountName: string; bankAccountNumber: string; bankIfsc: string } | null>(null);
   const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
+  useErrorPopup(err);
   useEffect(() => { if (data && !f) setF({ upiId: data.upiId ?? '', upiName: data.upiName ?? '', bankName: data.bankName ?? '', bankAccountName: data.bankAccountName ?? '', bankAccountNumber: data.bankAccountNumber ?? '', bankIfsc: data.bankIfsc ?? '' }); }, [data, f]);
   if (loading && !data) return <ListSkeleton />;
   if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
@@ -875,6 +921,7 @@ const s = StyleSheet.create({
   pinIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   me: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: spacing.md, marginBottom: spacing.sm },
   moreRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  manageCard: { alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 92, padding: spacing.md, marginBottom: 12, backgroundColor: colors.white },
   storeCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.md },
   billPick: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: radius.md, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.primary, backgroundColor: colors.card },
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: spacing.md },

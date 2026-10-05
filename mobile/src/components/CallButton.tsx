@@ -1,4 +1,4 @@
-import { Linking, StyleSheet, Text } from 'react-native';
+import { Image, Linking, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, type } from '../theme';
 import { Tap } from './motion';
 import { Icon } from './ui';
@@ -20,9 +20,12 @@ export function CallButton({ phone, label, compact, tone = 'green' }: { phone: s
   );
 }
 
-export const Avatar = ({ name, size = 44 }: { name: string | null | undefined; size?: number }) => {
+/** Round profile picture, or the person's initials when they have not set one. */
+export const Avatar = ({ name, size = 44, uri }: { name: string | null | undefined; size?: number; uri?: string | null }) => {
   const initials = (name ?? '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('') || '?';
-  return <Tap disabled haptic={false} style={[s.avatar, { width: size, height: size, borderRadius: size / 2 }]}><Text style={[type.bodyMedium, { color: colors.primary }]}>{initials}</Text></Tap>;
+  const box = { width: size, height: size, borderRadius: size / 2 };
+  if (uri) return <View style={[s.avatar, box, { overflow: 'hidden' }]}><Image source={{ uri }} style={{ width: size, height: size }} accessibilityLabel={name ?? 'Profile picture'} /></View>;
+  return <View style={[s.avatar, box]}><Text style={[type.bodyMedium, { color: colors.primary, fontSize: Math.max(12, size * 0.34) }]}>{initials}</Text></View>;
 };
 
 const s = StyleSheet.create({

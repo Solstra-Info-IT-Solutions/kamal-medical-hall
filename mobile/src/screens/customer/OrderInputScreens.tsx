@@ -1,3 +1,4 @@
+import { useErrorPopup } from '../../hooks';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -22,6 +23,7 @@ export function UploadScreen({ navigation }: NativeStackScreenProps<CustomerStac
   const setMedicines = useCart((s) => s.setMedicines);
   const [files, setFiles] = useState<PrescriptionFile[]>(stored);
   const [error, setError] = useState('');
+  useErrorPopup(error);
   const [busy, setBusy] = useState(false);
 
   const accept = (incoming: PrescriptionFile[]) => {
@@ -152,6 +154,7 @@ export function TypeMedicinesScreen({ navigation }: NativeStackScreenProps<Custo
   const [text, setText] = useState('');
   const [instruction, setInstruction] = useState(note);
   const [error, setError] = useState('');
+  useErrorPopup(error);
   const input = useRef<TextInput>(null);
   useAutoFocus(input);
 

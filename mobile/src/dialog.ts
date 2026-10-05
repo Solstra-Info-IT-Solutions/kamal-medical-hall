@@ -47,3 +47,8 @@ export function confirmAsync(title: string, message: string, okLabel: string, ca
 export async function notice(title: string, message?: string, okLabel = 'OK') {
   await showDialog({ title, message, confirmLabel: okLabel, icon: 'information-circle' });
 }
+
+/** Themed popup for an error or warning (instead of red text that is easy to miss). */
+export function showErrorPopup(message: string, title: string, okLabel: string, kind: 'error' | 'warning' = 'error') {
+  return showDialog({ title, message, confirmLabel: okLabel, icon: kind === 'error' ? 'alert-circle' : 'warning', tone: 'danger' });
+}

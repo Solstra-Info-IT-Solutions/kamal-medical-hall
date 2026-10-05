@@ -1,3 +1,4 @@
+import { useErrorPopup } from '../../hooks';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
@@ -82,6 +83,7 @@ export function AddressFormScreen({ navigation, route }: NativeStackScreenProps<
   const [f, setF] = useState({ label: 'home' as Address['label'], recipientName: user?.name ?? '', phone: user?.phone ?? '', line1: '', line2: '', landmark: '', pincode: '' });
   const [coords, setCoords] = useState<{ latitude?: number; longitude?: number }>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  useErrorPopup(Object.values(errors)[0]);
   const [busy, setBusy] = useState(false);
   const [gpsBusy, setGpsBusy] = useState(false);
   const [gpsError, setGpsError] = useState('');

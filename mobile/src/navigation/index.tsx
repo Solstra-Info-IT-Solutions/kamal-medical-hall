@@ -7,7 +7,8 @@ import { Platform, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { Icon, type IconName } from '../components/ui';
 import { LoginScreen, OtpScreen, SignupScreen, WelcomeScreen } from '../screens/auth/AuthScreens';
-import { AllOrdersScreen, AttendanceScreen, CustomersScreen, DashboardScreen, MoreScreen, OrderReviewScreen, PartnerAreasScreen, PaymentDetailsScreen, PincodesScreen, ReportsScreen, RequestsScreen, StoreSettingsScreen, TeamScreen, TermsScreen } from '../screens/admin/AdminScreens';
+import { AdminChatScreen, AdminChatsScreen, AdminReviewsScreen, BroadcastScreen, CustomerDetailScreen, ExportsScreen, RevenueScreen } from '../screens/admin/AdminMore';
+import { AllOrdersScreen, AttendanceScreen, CustomersScreen, DashboardScreen, MoreScreen, OrderReviewScreen, OrdersByStatusScreen, PartnerAreasScreen, PaymentDetailsScreen, PincodesScreen, ReportsScreen, RequestsScreen, StoreSettingsScreen, TeamScreen, TermsScreen } from '../screens/admin/AdminScreens';
 import { AddressFormScreen, AddressesScreen } from '../screens/customer/AddressScreens';
 import { CartScreen } from '../screens/customer/CartScreen';
 import { DeliveryTimeScreen, ReviewScreen, SuccessScreen } from '../screens/customer/CheckoutScreens';
@@ -15,6 +16,7 @@ import { HomeScreen } from '../screens/customer/HomeScreen';
 import { TypeMedicinesScreen, UploadScreen } from '../screens/customer/OrderInputScreens';
 import { NotificationsScreen, OrderDetailScreen, OrdersScreen, PaymentScreen } from '../screens/customer/OrderScreens';
 import { TrackScreen } from '../screens/customer/TrackScreen';
+import { ChatScreen, MyReviewsScreen, WriteReviewScreen } from '../screens/customer/Extras';
 import { EditProfileScreen, HelpScreen, LanguageScreen, LegalScreen, ProfileScreen } from '../screens/customer/ProfileScreens';
 import { JobScreen, MyAttendanceScreen, PartnerHomeScreen, PartnerOrdersScreen } from '../screens/partner/PartnerScreens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -119,6 +121,9 @@ function CustomerNavigator() {
       <CStack.Screen name="Language" component={LanguageScreen} options={{ title: t('profile.language') }} />
       <CStack.Screen name="Help" component={HelpScreen} options={{ title: t('profile.help') }} />
       <CStack.Screen name="Legal" component={LegalScreen} options={{ title: t('legal.title') }} />
+      <CStack.Screen name="Chat" component={ChatScreen} options={{ title: t('chat.title') }} />
+      <CStack.Screen name="WriteReview" component={WriteReviewScreen} options={{ title: t('reviews.writeTitle') }} />
+      <CStack.Screen name="MyReviews" component={MyReviewsScreen} options={{ title: t('reviews.title') }} />
     </CStack.Navigator>
   );
 }
@@ -153,6 +158,14 @@ function AdminNavigator() {
       <AStack.Screen name="Attendance" component={AttendanceScreen} options={{ title: t('admin.attendance') }} />
       <AStack.Screen name="Pincodes" component={PincodesScreen} options={{ title: t('admin.pincodes') }} />
       <AStack.Screen name="PartnerAreas" component={PartnerAreasScreen} options={({ route }) => ({ title: route.params.name })} />
+      <AStack.Screen name="OrdersByStatus" component={OrdersByStatusScreen} options={({ route }) => ({ title: route.params.title })} />
+      <AStack.Screen name="Revenue" component={RevenueScreen} options={{ title: t('admin.revenue') }} />
+      <AStack.Screen name="AdminReviews" component={AdminReviewsScreen} options={{ title: t('admin.reviews') }} />
+      <AStack.Screen name="AdminChats" component={AdminChatsScreen} options={{ title: t('admin.chats') }} />
+      <AStack.Screen name="AdminChat" component={AdminChatScreen} options={({ route }) => ({ title: route.params.name })} />
+      <AStack.Screen name="CustomerDetail" component={CustomerDetailScreen} options={({ route }) => ({ title: route.params.name })} />
+      <AStack.Screen name="Broadcast" component={BroadcastScreen} options={{ title: t('admin.broadcast') }} />
+      <AStack.Screen name="Exports" component={ExportsScreen} options={{ title: t('admin.exports') }} />
       <AStack.Screen name="Terms" component={TermsScreen} options={{ title: t('admin.terms') }} />
       <AStack.Screen name="StoreSettings" component={StoreSettingsScreen} options={{ title: t('admin.settings') }} />
       <AStack.Screen name="Language" component={LanguageScreen} options={{ title: t('profile.language') }} />

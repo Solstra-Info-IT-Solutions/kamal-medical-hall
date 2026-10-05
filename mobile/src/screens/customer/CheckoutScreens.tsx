@@ -1,3 +1,5 @@
+import { useErrorPopup } from '../../hooks';
+import { clearOrderCache } from '../../cache';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -101,6 +103,7 @@ export function ReviewScreen({ navigation }: NativeStackScreenProps<CustomerStac
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState('');
   const [error, setError] = useState('');
+  useErrorPopup(error);
   const [errCount, setErrCount] = useState(0);
   const shake = useShake(errCount);
   const address = addresses.data?.addresses.find((a) => a.id === checkout.id);
@@ -129,7 +132,8 @@ export function ReviewScreen({ navigation }: NativeStackScreenProps<CustomerStac
         prescriptions: files, note: note || undefined, addressId: address.id, deliveryDate: checkout.date!, deliverySlot: checkout.slotId!, idempotencyKey: cart.ensureKey(),
       });
       tick('success');
-      cart.clear(); uploaded.clear();
+      uploaded.clear();
+      await clearOrderCache(); // cart, upload bookkeeping and the picker's temporary copies
       navigation.reset({ index: 1, routes: [{ name: 'Tabs' }, { name: 'Success', params: { orderId: order.id, orderNumber: order.orderNumber } }] });
     } catch (e) {
       setError((e as Error).message); setErrCount((c) => c + 1);

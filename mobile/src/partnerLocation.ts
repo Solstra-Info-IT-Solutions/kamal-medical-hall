@@ -34,14 +34,15 @@ export function usePartnerLocation(enabled: boolean, onServerState?: (state: Par
         const perm = await Location.requestForegroundPermissionsAsync();
         if (!perm.granted) { setDenied(true); return; }
         setDenied(false);
-        sub = await Location.watchPositionAsync({ accuracy: Location.Accuracy.Balanced, timeInterval: 7000, distanceInterval: 15 }, (pos) => {
+        const started = await Location.watchPositionAsync({ accuracy: Location.Accuracy.Balanced, timeInterval: 7000, distanceInterval: 15 }, (pos) => {
           if (cancelled) return;
           const c = { lat: pos.coords.latitude, lng: pos.coords.longitude };
           setCoords(c);
           if (Date.now() - last.current < 6000) return; // gentle on battery and server
           last.current = Date.now();
-          void endpoints.partner.location(c.lat, c.lng).then((r) => cb.current?.(r.state, r.arrived)).catch(() => undefined);
+          void endpoints.partner.location(c.lat, c.lng).then((r) => { if (!cancelled) cb.current?.(r.state, r.arrived); }).catch(() => undefined);
         });
+        if (cancelled) started.remove(); else sub = started; // the screen may have closed while the watch was starting
       } catch { setDenied(true); }
     })();
     return () => { cancelled = true; sub?.remove(); };

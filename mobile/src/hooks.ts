@@ -1,5 +1,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { showErrorPopup } from './dialog';
+import i18n from './localization';
 import { onRealtime } from './realtime';
 
 /**
@@ -12,9 +14,18 @@ export function useLoad<T>(fn: () => Promise<T>, events: string[] = []) {
   const [loading, setLoading] = useState(true);
   const fnRef = useRef(fn);
   fnRef.current = fn;
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const reload = useCallback(async () => {
-    setError(null);
-    try { setData(await fnRef.current()); } catch (e) { setError((e as Error).message); } finally { setLoading(false); }
+    if (mounted.current) setError(null);
+    try {
+      const result = await fnRef.current();
+      if (mounted.current) setData(result);
+    } catch (e) {
+      if (mounted.current) setError((e as Error).message);
+    } finally {
+      if (mounted.current) setLoading(false);
+    }
   }, []);
   useFocusEffect(useCallback(() => { void reload(); }, [reload]));
 
@@ -35,4 +46,11 @@ export function useAutoFocus(ref: { current: { focus(): void } | null }, delay =
     const id = setTimeout(() => ref.current?.focus(), delay);
     return () => clearTimeout(id);
   }, [ref, delay]);
+}
+
+/** Opens a themed popup whenever `message` changes to a non-empty text. */
+export function useErrorPopup(message?: string | null, kind: 'error' | 'warning' = 'error') {
+  useEffect(() => {
+    if (message) void showErrorPopup(message, i18n.t(kind === 'error' ? 'common.error' : 'common.warning'), i18n.t('common.ok'), kind);
+  }, [message, kind]);
 }

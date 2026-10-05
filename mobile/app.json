@@ -54,7 +54,8 @@
           "cameraPermission": "Allow Kamal Medical Hall to use the camera to photograph a prescription."
         }
       ],
-      "expo-document-picker"
+      "expo-document-picker",
+      "@sentry/react-native/expo"
     ],
     "splash": {
       "image": "./assets/splash-icon.png",

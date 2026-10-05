@@ -1,3 +1,4 @@
+import { useErrorPopup } from '../../hooks';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -56,6 +57,7 @@ export function PartnerHomeScreen(_p: BottomTabScreenProps<PartnerTabParamList, 
   const jobs = useLoad(() => endpoints.partner.orders('active'), LIVE);
   const delivered = useLoad(() => endpoints.partner.orders('delivered'), ['order:update']);
   const [err, setErr] = useState('');
+  useErrorPopup(err);
   const [busy, setBusy] = useState<string | null>(null);
   const state = me.data?.state ?? 'off';
   const { coords, denied } = usePartnerLocation(state === 'busy' || state === 'returning', () => { void me.reload(); });
@@ -244,6 +246,7 @@ export function JobScreen({ navigation, route }: NativeStackScreenProps<PartnerS
   const { data, error, loading, reload, setData } = useLoad(() => endpoints.order(route.params.orderId), ['order:update']);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState('');
+  useErrorPopup(err);
   const [via, setVia] = useState<'cash' | 'upi' | 'bank' | null>(null);
   const [ref, setRef] = useState('');
   const [received, setReceived] = useState(false);

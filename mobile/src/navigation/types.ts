@@ -20,6 +20,9 @@ export type CustomerStackParamList = {
   Language: undefined;
   Help: undefined;
   Legal: undefined;
+  Chat: { orderId?: string } | undefined;
+  WriteReview: { orderId: string; orderNumber: string };
+  MyReviews: undefined;
 };
 
 export type AdminTabParamList = { Dashboard: undefined; Requests: undefined; Orders: undefined; Team: undefined; More: undefined };
@@ -33,6 +36,14 @@ export type AdminStackParamList = {
   PaymentDetails: undefined;
   Attendance: undefined;
   Terms: undefined;
+  OrdersByStatus: { title: string; status: string };
+  Revenue: undefined;
+  AdminReviews: undefined;
+  AdminChats: undefined;
+  AdminChat: { threadId: string; name: string };
+  CustomerDetail: { id: string; name: string };
+  Broadcast: undefined;
+  Exports: undefined;
   PartnerAreas: { partnerId: string; name: string };
   Language: undefined;
 };
