@@ -3,7 +3,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn, FadeInRight, FadeOutLeft, LinearTransition, SlideInDown, ZoomIn, ZoomOut } from 'react-native-reanimated';
 import { Enter, Float, Ripples, Tap } from '../../components/motion';
 import { Button, Card, Icon, Screen } from '../../components/ui';
@@ -37,13 +37,25 @@ export function UploadScreen({ navigation }: NativeStackScreenProps<CustomerStac
     setError(msgs.join('\n'));
   };
 
-  const pickImages = async (source: 'camera' | 'gallery') => {
+  /**
+   * Closes the bottom sheet and waits until its window is really gone. On Android a system picker launched while the
+   * Modal is still dismissing can lose its result, which made the pickers appear to do nothing.
+   */
+  const closeSheet = async () => {
     setSheet(false);
+    await new Promise<void>((resolve) => setTimeout(resolve, Platform.OS === 'web' ? 0 : 450));
+  };
+
+  const pickImages = async (source: 'camera' | 'gallery') => {
+    await closeSheet();
     if (files.length >= MAX_FILES) return setError(t('upload.limit'));
     setBusy(true); setError('');
     try {
-      const perm = source === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) return setError(t('upload.permission'));
+      // The gallery uses the system photo picker, which needs no permission. Only the camera asks.
+      if (source === 'camera') {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) return setError(t('upload.permission'));
+      }
       const res = source === 'camera'
         ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 })
         : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: MAX_FILES - files.length, quality: 0.8 });
@@ -59,8 +71,9 @@ export function UploadScreen({ navigation }: NativeStackScreenProps<CustomerStac
   };
 
   const pickFile = async () => {
-    setSheet(false);
+    await closeSheet();
     if (files.length >= MAX_FILES) return setError(t('upload.limit'));
+    setError('');
     try {
       const res = await DocumentPicker.getDocumentAsync({ type: '*/*', multiple: true, copyToCacheDirectory: true });
       if (res.canceled) return;
@@ -100,7 +113,7 @@ export function UploadScreen({ navigation }: NativeStackScreenProps<CustomerStac
       </View></Enter>
       <Modal transparent visible={sheet} animationType="fade" onRequestClose={() => setSheet(false)}>
         <Pressable style={s.backdrop} onPress={() => setSheet(false)}>
-          <Animated.View entering={SlideInDown.duration(320).springify().damping(18)} style={s.sheet}>
+          <Animated.View entering={Platform.OS === 'web' ? FadeIn.duration(200) : SlideInDown.duration(320).springify().damping(18)} style={s.sheet}>
             {([['camera', 'upload.camera', () => pickImages('camera')], ['images', 'upload.gallery', () => pickImages('gallery')], ['document-text', 'upload.file', pickFile]] as const).map(([icon, label, fn]) => (
               <Pressable key={label} accessibilityRole="button" onPress={fn} style={s.sheetRow}><Icon name={icon} size={24} /><Text style={[type.bodyMedium, { color: colors.text }]}>{t(label)}</Text></Pressable>
             ))}
