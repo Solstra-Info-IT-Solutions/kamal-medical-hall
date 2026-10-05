@@ -70,7 +70,7 @@ describe('realtime, pincodes, coverage and account deletion', () => {
     const custSock = await open(cust.token);
 
     const adminGetsRequest = waitFor(adminSock, 'notification');
-    const created = await call('POST', '/orders', cust.token, { kind: 'medicines', items: [{ name: 'Paracetamol', quantity: 1 }], addressId: addr.body.address.id, deliveryDate: day.date, deliverySlot: slot.id, idempotencyKey: 'rt-test-0001' });
+    const created = await call('POST', '/orders', cust.token, { kind: 'prescription', prescriptions: [{ publicId: `prescriptions/${(await call('GET', '/me', cust.token)).body.user.id}/rx-1`, mimeType: 'image/jpeg', sizeBytes: 1000, url: 'https://example.com/rx-1.jpg' }], items: [{ name: 'Paracetamol', quantity: 1 }], addressId: addr.body.address.id, deliveryDate: day.date, deliverySlot: slot.id, idempotencyKey: 'rt-test-0001' });
     assert.equal(created.status, 201);
     assert.equal((await adminGetsRequest).type, 'order_requested');
 

@@ -29,7 +29,7 @@ export function OrderCard({ order, index = 0, onPress, subtitle }: { order: Orde
   const [fg, bg] = TONE[tone];
   const stage = STAGE[order.status];
   const attention = ATTENTION.includes(order.status);
-  const line = subtitle ?? (order.kind === 'prescription' ? t('admin.rxFiles', { count: order.fileCount }) : order.summary);
+  const line = subtitle ?? (order.summary || (order.fileCount ? t('admin.rxFiles', { count: order.fileCount }) : ''));
   return (
     <Enter index={index}>
       <Tap accessibilityRole="button" accessibilityLabel={`#${order.orderNumber}`} onPress={onPress} scaleTo={0.97} style={s.shadow}>

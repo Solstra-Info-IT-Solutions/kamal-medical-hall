@@ -8,23 +8,12 @@ import Animated, { FadeIn, FadeInRight, FadeOutLeft, LinearTransition, SlideInDo
 import { Enter, Float, Ripples, Tap } from '../../components/motion';
 import { Button, Card, Icon, Screen } from '../../components/ui';
 import { useAutoFocus } from '../../hooks';
-import { confirmAsync } from '../../dialog';
 import type { CustomerStackParamList } from '../../navigation/types';
 import { fileBadge, guessMime, isBlockedName, isImageMime } from '../../fileKinds';
 import { MAX_FILE_BYTES, MAX_FILES, useCart, type PrescriptionFile } from '../../store/cart';
 import { colors, radius, spacing, type } from '../../theme';
 
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-/** Asks before discarding a cart of the other order type (prescription and medicine orders cannot be mixed). */
-async function confirmSwitch(t: (k: string) => string, to: 'prescription' | 'medicines'): Promise<boolean> {
-  const cart = useCart.getState();
-  const hasOther = to === 'prescription' ? cart.medicines.length > 0 : cart.prescriptions.length > 0;
-  if (!hasOther) return true;
-  const ok = await confirmAsync(t(to === 'prescription' ? 'cart.switchToRxTitle' : 'cart.switchToMedTitle'), t(to === 'prescription' ? 'cart.switchToRxMsg' : 'cart.switchToMedMsg'), t('cart.switchOk'), t('common.cancel'), true);
-  if (ok) cart.clear();
-  return ok;
-}
 
 export function UploadScreen({ navigation }: NativeStackScreenProps<CustomerStackParamList, 'Upload'>) {
   const { t } = useTranslation();
@@ -83,7 +72,6 @@ export function UploadScreen({ navigation }: NativeStackScreenProps<CustomerStac
 
   const next = async () => {
     if (!files.length) return setError(t('upload.needOne'));
-    if (!(await confirmSwitch(t, 'prescription'))) return;
     setPrescriptions(files);
     navigation.navigate('Tabs', { screen: 'Cart' });
   };
@@ -144,11 +132,10 @@ export function TypeMedicinesScreen({ navigation }: NativeStackScreenProps<Custo
   };
   const qty = (id: string, d: number) => setRows((r) => r.map((x) => x.id === id ? { ...x, quantity: Math.min(99, Math.max(1, x.quantity + d)) } : x));
 
-  const next = async () => {
+  const next = () => {
     const pending = text.trim().length >= 2;
     const final = pending ? [...rows, { id: uid(), name: text.trim(), quantity: 1 }] : rows;
     if (!final.length) return setError(t('medicines.needOne'));
-    if (!(await confirmSwitch(t, 'medicines'))) return;
     setMedicines(final); setNote(instruction.trim());
     navigation.navigate('Tabs', { screen: 'Cart' });
   };

@@ -112,22 +112,20 @@ export function ReviewScreen({ navigation }: NativeStackScreenProps<CustomerStac
   const ready = !!address && !!checkout.date && !!checkout.slotId;
   const submit = async () => {
     if (!ready || !address) { setError(t('review.incomplete')); setErrCount((c) => c + 1); return; }
+    if (!prescriptions.length) { setError(t('cart.rxRequired')); setErrCount((c) => c + 1); return; }
     setBusy(true); setError('');
     try {
-      const kind = prescriptions.length ? 'prescription' : 'medicines';
       const files: UploadedFile[] = [];
-      if (kind === 'prescription') {
-        setStep(t('review.uploading'));
-        const sig = await endpoints.signUpload();
-        for (const f of prescriptions) {
-          let u = uploaded.get(f.id);
-          if (!u) { u = await uploadPrescription(f, sig); uploaded.set(f.id, u); }
-          files.push(u);
-        }
+      setStep(t('review.uploading'));
+      const sig = await endpoints.signUpload();
+      for (const f of prescriptions) {
+        let u = uploaded.get(f.id);
+        if (!u) { u = await uploadPrescription(f, sig); uploaded.set(f.id, u); }
+        files.push(u);
       }
       setStep(t('review.sending'));
       const { order } = await endpoints.createOrder({
-        kind, items: kind === 'medicines' ? medicines.map((m) => ({ name: m.name, quantity: m.quantity })) : [],
+        kind: 'prescription', items: medicines.map((m) => ({ name: m.name, quantity: m.quantity })),
         prescriptions: files, note: note || undefined, addressId: address.id, deliveryDate: checkout.date!, deliverySlot: checkout.slotId!, idempotencyKey: cart.ensureKey(),
       });
       tick('success');

@@ -47,7 +47,7 @@ describe('bills, order history tabs and the open / closed switch', () => {
     const cfg = await call('GET', '/config');
     const day = cfg.body.deliveryDays.find((d: any) => d.slots.some((s: any) => s.available));
     const slot = day.slots.find((s: any) => s.available);
-    const r = await call('POST', '/orders', cust, { kind: 'medicines', items: [{ name: 'Cetirizine 10mg', quantity: 1 }], addressId, deliveryDate: day.date, deliverySlot: slot.id, idempotencyKey: key });
+    const r = await call('POST', '/orders', cust, { kind: 'prescription', prescriptions: [{ publicId: `prescriptions/${(await call('GET', '/me', cust)).body.user.id}/rx-1`, mimeType: 'image/jpeg', sizeBytes: 1000, url: 'https://example.com/rx-1.jpg' }], items: [{ name: 'Cetirizine 10mg', quantity: 1 }], addressId, deliveryDate: day.date, deliverySlot: slot.id, idempotencyKey: key });
     assert.equal(r.status, 201);
     return r.body.order.id as string;
   };

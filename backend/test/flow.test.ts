@@ -31,7 +31,11 @@ async function newOrder(token: string, addressId: string, key: string) {
   const cfg = await call('GET', '/config');
   const day = cfg.body.deliveryDays.find((d: any) => d.slots.some((s: any) => s.available));
   const slot = day.slots.find((s: any) => s.available);
-  const r = await call('POST', '/orders', token, { kind: 'medicines', items: [{ name: 'Paracetamol 500mg', quantity: 2 }], addressId, deliveryDate: day.date, deliverySlot: slot.id, idempotencyKey: key });
+  const uid = (await call('GET', '/me', token)).body.user.id;
+  const rx = [{ publicId: `prescriptions/${uid}/rx-1`, mimeType: 'image/jpeg', sizeBytes: 1000, url: 'https://example.com/rx-1.jpg' }];
+  const none = await call('POST', '/orders', token, { kind: 'prescription', items: [{ name: 'Paracetamol 500mg', quantity: 2 }], prescriptions: [], addressId, deliveryDate: day.date, deliverySlot: slot.id, idempotencyKey: `${key}-norx` });
+  assert.equal(none.status, 400); assert.equal(none.body.error.code, 'prescription_required');
+  const r = await call('POST', '/orders', token, { kind: 'prescription', prescriptions: rx, items: [{ name: 'Paracetamol 500mg', quantity: 2 }], addressId, deliveryDate: day.date, deliverySlot: slot.id, idempotencyKey: key });
   assert.equal(r.status, 201);
   return r.body.order.id as string;
 }

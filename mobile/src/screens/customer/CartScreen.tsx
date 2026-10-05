@@ -29,8 +29,19 @@ export function CartScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Cart'
   }
   return (
     <SafeAreaView style={s.fill} edges={['top']}>
-      <Screen footer={<Button title={t('cart.chooseAddress')} icon="arrow-forward" onPress={() => nav.navigate('Addresses', { select: true })} />}>
+      <Screen footer={prescriptions.length ? <Button title={t('cart.chooseAddress')} icon="arrow-forward" onPress={() => nav.navigate('Addresses', { select: true })} /> : <Button title={t('cart.uploadRx')} icon="camera" onPress={() => nav.navigate('Upload')} />}>
         <Enter><Text style={[type.h2, s.title, { paddingHorizontal: 0 }]}>{t('cart.title', { count })}</Text></Enter>
+        {!prescriptions.length ? (
+          <Enter index={1}>
+            <Card style={s.required}>
+              <Icon name="alert-circle" size={24} color={colors.amber} />
+              <View style={{ flex: 1 }}>
+                <Text style={[type.bodyMedium, { color: colors.text }]}>{t('cart.rxRequired')}</Text>
+                <Text style={[type.small, { color: colors.secondary }]}>{t('cart.rxRequiredHelp')}</Text>
+              </View>
+            </Card>
+          </Enter>
+        ) : null}
         {prescriptions.map((f, i) => (
           <Animated.View key={f.id} entering={FadeInDown.delay(i * 70).duration(420).springify().damping(18)} exiting={FadeOutLeft.duration(240)} layout={LinearTransition.springify().damping(18)}>
           <Card style={s.item}>
@@ -51,7 +62,7 @@ export function CartScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Cart'
         ))}
         <Tap accessibilityRole="button" onPress={() => nav.navigate(prescriptions.length ? 'Upload' : 'TypeMedicines')} style={s.add}>
           <Icon name="add-circle" size={30} />
-          <View><Text style={[type.bodyMedium, { color: colors.primary }]}>{t('cart.addMore')}</Text><Text style={[type.small, { color: colors.secondary }]}>{t(prescriptions.length ? 'cart.addMoreRx' : 'cart.addMoreMed')}</Text></View>
+          <View><Text style={[type.bodyMedium, { color: colors.primary }]}>{prescriptions.length ? t('cart.addMedNames') : t('cart.uploadRx')}</Text><Text style={[type.small, { color: colors.secondary }]}>{prescriptions.length ? t('cart.addMedNamesSub') : t('cart.rxRequiredHelp')}</Text></View>
         </Tap>
         <View style={s.note}>
           <TextInput value={note} onChangeText={setNote} maxLength={300} multiline placeholder={t('cart.notePlaceholder')} placeholderTextColor={colors.muted} accessibilityLabel={t('cart.notePlaceholder')} style={[type.body, { color: colors.text, minHeight: 56, textAlignVertical: 'top' }]} />
@@ -70,5 +81,6 @@ const s = StyleSheet.create({
   thumb: { width: 54, height: 66, borderRadius: radius.sm },
   pdf: { width: 54, height: 66, borderRadius: radius.sm, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
   add: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, borderStyle: 'dashed' },
+  required: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, marginBottom: spacing.md, backgroundColor: colors.amberBg, borderColor: colors.amberBg },
   note: { marginTop: spacing.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: colors.tint },
 });

@@ -42,8 +42,8 @@ const createSchema = z.object({
 orders.post('/', authed, requireRole('customer'), async (req, res) => {
   const user = req.user!;
   const b = parse(createSchema, req.body);
-  if (b.kind === 'prescription' && (b.prescriptions.length < 1 || b.items.length)) throw bad('A prescription order needs 1 to 3 prescription files and no typed medicines.', 'mixed_order');
-  if (b.kind === 'medicines' && (b.items.length < 1 || b.prescriptions.length)) throw bad('A medicine order needs at least one medicine and no prescription files.', 'mixed_order');
+  // A prescription is required for every order. Typed medicine names are optional extras that go with it.
+  if (b.prescriptions.length < 1) throw bad('Please upload your prescription to place an order.', 'prescription_required');
   if (b.prescriptions.some((p) => !p.publicId.startsWith(`prescriptions/${user.id}/`) || isBlockedFile(p.publicId))) throw bad('Invalid prescription file.', 'invalid_file');
   if (!SLOTS.some((s) => s.id === b.deliverySlot) || !isSlotBookable(b.deliveryDate, b.deliverySlot)) throw bad('That delivery time is no longer available. Please choose another.', 'slot_unavailable');
 
@@ -62,7 +62,7 @@ orders.post('/', authed, requireRole('customer'), async (req, res) => {
     const ins = await c.query(
       `insert into orders (customer_id, kind, note, address_snapshot, delivery_date, delivery_slot, idempotency_key)
        values ($1,$2,$3,$4,$5,$6,$7) returning id, order_number`,
-      [user.id, b.kind, b.note ?? null, snapshot, b.deliveryDate, SLOTS.find((s) => s.id === b.deliverySlot)!.label, b.idempotencyKey],
+      [user.id, 'prescription', b.note ?? null, snapshot, b.deliveryDate, SLOTS.find((s) => s.id === b.deliverySlot)!.label, b.idempotencyKey],
     );
     const id = ins.rows[0].id as string;
     for (const item of b.items) await c.query('insert into order_items (order_id, name, quantity) values ($1,$2,$3)', [id, item.name, item.quantity]);

@@ -89,10 +89,10 @@
     "greetingName": "Hello, {{name}}",
     "help": "How can we help you?",
     "notifications": "Notifications",
-    "uploadTitle": "Upload medicine photo",
-    "uploadSubtitle": "Take a photo of a prescription or medicine",
-    "typeTitle": "Type medicine names",
-    "typeSubtitle": "Type the names and place an order",
+    "uploadTitle": "Upload prescription",
+    "uploadSubtitle": "Required: a photo, PDF or file of your prescription",
+    "typeTitle": "Add medicine names",
+    "typeSubtitle": "Optional, along with your prescription",
     "activeOrders": "Ongoing orders",
     "pastOrders": "My past orders",
     "viewAll": "View all",
@@ -150,7 +150,12 @@
     "switchToRxMsg": "This will remove the typed medicines from your cart. A prescription and typed medicines cannot be in one order.",
     "switchToMedTitle": "Start a medicine-name order?",
     "switchToMedMsg": "This will remove the prescription files from your cart. A prescription and typed medicines cannot be in one order.",
-    "switchOk": "Clear cart and continue"
+    "switchOk": "Clear cart and continue",
+    "rxRequired": "Prescription required",
+    "rxRequiredHelp": "Upload your prescription to place the order.",
+    "uploadRx": "Upload prescription",
+    "addMedNames": "Add medicine names",
+    "addMedNamesSub": "Optional: type the medicines you need"
   },
   "address": {
     "addNew": "Add a new address",
