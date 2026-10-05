@@ -1,6 +1,7 @@
 import 'dotenv/config';
 
-const env = process.env;
+// Values pasted into a hosting dashboard often carry a trailing space or newline; trim them all.
+const env: Record<string, string | undefined> = Object.fromEntries(Object.entries(process.env).map(([k, v]) => [k, v?.trim()]));
 export const config = {
   isProd: env.NODE_ENV === 'production',
   port: Number(env.PORT ?? 4000),
