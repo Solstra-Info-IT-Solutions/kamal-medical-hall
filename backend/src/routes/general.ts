@@ -6,7 +6,7 @@ import { pool, tx } from '../db.js';
 import { HttpError, notFound, parse } from '../http.js';
 import { isServiceable, servicePincodes } from '../pincodes.js';
 import { listDeliveryDays } from '../slots.js';
-import { deletePrescriptionFiles, signUpload } from '../services.js';
+import { deletePrescriptionFiles, isBlockedFile, signUpload, signedPrescriptionUrl, type ResourceType } from '../services.js';
 
 export const general = Router();
 
@@ -38,8 +38,11 @@ if (config.authMode === 'dev') {
   });
 }
 
-const userView = (u: { id: string; phone: string; role: string; name: string | null; email: string | null; language?: string }) =>
-  ({ id: u.id, phone: u.phone, role: u.role, name: u.name, email: u.email, language: u.language });
+type UserRow = { id: string; phone: string; role: string; name: string | null; email: string | null; language?: string; avatar_public_id?: string | null; avatar_resource_type?: string | null };
+const userView = (u: UserRow) => ({
+  id: u.id, phone: u.phone, role: u.role, name: u.name, email: u.email, language: u.language,
+  avatarUrl: u.avatar_public_id ? signedPrescriptionUrl(u.avatar_public_id, 'image/jpeg', (u.avatar_resource_type ?? 'image') as ResourceType) : null,
+});
 
 /** First call after OTP: creates the customer account if needed and returns the server-assigned role. */
 general.post('/auth/session', verified, async (req, res) => {
@@ -47,7 +50,7 @@ general.post('/auth/session', verified, async (req, res) => {
   const { rows } = await pool.query(
     `insert into users (firebase_uid, phone) values ($1, $2)
      on conflict (phone) do update set firebase_uid = excluded.firebase_uid, updated_at = now()
-     returning id, phone, role, name, email, language`,
+     returning id, phone, role, name, email, language, avatar_public_id, avatar_resource_type`,
     [uid, phone],
   );
   const user = rows[0];
@@ -69,7 +72,7 @@ general.patch('/me', authed, async (req, res) => {
   }), req.body);
   const { rows } = await pool.query(
     `update users set name = coalesce($2, name), email = case when $3::text is null then email else nullif($3, '') end,
-       language = coalesce($4, language), updated_at = now() where id = $1 returning id, phone, role, name, email, language`,
+       language = coalesce($4, language), updated_at = now() where id = $1 returning id, phone, role, name, email, language, avatar_public_id, avatar_resource_type`,
     [req.user!.id, body.name ?? null, body.email ?? null, body.language ?? null],
   );
   res.json({ user: userView(rows[0]) });
@@ -131,10 +134,27 @@ general.delete('/addresses/:id', authed, async (req, res) => {
 
 // ---- Uploads, notifications, devices ---------------------------------------
 general.post('/uploads/sign', authed, (req, res) => {
-  const { purpose } = parse(z.object({ purpose: z.enum(['prescription', 'bill']).default('prescription') }), req.body ?? {});
-  // Customers upload prescriptions; only the store admin uploads bills.
-  if (purpose === 'bill' ? req.user!.role !== 'admin' : req.user!.role !== 'customer') throw new HttpError(403, 'forbidden', 'Not allowed');
+  const { purpose } = parse(z.object({ purpose: z.enum(['prescription', 'bill', 'avatar', 'review']).default('prescription') }), req.body ?? {});
+  // Customers upload prescriptions and review photos, only the store admin uploads bills, anyone can set a profile picture.
+  const role = req.user!.role;
+  const allowed = purpose === 'bill' ? role === 'admin' : purpose === 'avatar' ? true : role === 'customer';
+  if (!allowed) throw new HttpError(403, 'forbidden', 'Not allowed');
   res.json(signUpload(req.user!.id, purpose));
+});
+
+/** Profile picture: the client uploads to Cloudinary with a signed request, then tells us which file it is. */
+general.put('/me/avatar', authed, async (req, res) => {
+  const b = parse(z.object({ publicId: z.string().min(3).max(300), resourceType: z.enum(['image']).default('image') }), req.body);
+  if (!b.publicId.startsWith(`avatars/${req.user!.id}/`) || isBlockedFile(b.publicId)) throw new HttpError(400, 'invalid_file', 'Invalid picture.');
+  const { rows } = await pool.query(
+    'update users set avatar_public_id = $2, avatar_resource_type = $3, updated_at = now() where id = $1 returning id, phone, role, name, email, language, avatar_public_id, avatar_resource_type',
+    [req.user!.id, b.publicId, b.resourceType]);
+  res.json({ user: userView(rows[0]) });
+});
+general.delete('/me/avatar', authed, async (req, res) => {
+  const { rows } = await pool.query(
+    'update users set avatar_public_id = null, updated_at = now() where id = $1 returning id, phone, role, name, email, language, avatar_public_id, avatar_resource_type', [req.user!.id]);
+  res.json({ user: userView(rows[0]) });
 });
 
 general.get('/notifications', authed, async (req, res) => {
@@ -148,6 +168,26 @@ general.get('/notifications', authed, async (req, res) => {
 
 general.post('/notifications/read-all', authed, async (req, res) => {
   await pool.query('update notifications set read_at = now() where user_id = $1 and read_at is null', [req.user!.id]);
+  res.status(204).end();
+});
+
+/** Marks just this one notification as read. */
+general.post('/notifications/:id/read', authed, async (req, res) => {
+  if (!/^[0-9a-f-]{36}$/i.test(String(req.params.id))) throw new HttpError(404, 'not_found', 'Not found');
+  await pool.query('update notifications set read_at = coalesce(read_at, now()) where id = $1 and user_id = $2', [req.params.id, req.user!.id]);
+  res.status(204).end();
+});
+
+/** Removes every notification of the signed-in user. */
+general.delete('/notifications', authed, async (req, res) => {
+  await pool.query('delete from notifications where user_id = $1', [req.user!.id]);
+  res.status(204).end();
+});
+
+/** Removes one notification. */
+general.delete('/notifications/:id', authed, async (req, res) => {
+  if (!/^[0-9a-f-]{36}$/i.test(String(req.params.id))) throw new HttpError(404, 'not_found', 'Not found');
+  await pool.query('delete from notifications where id = $1 and user_id = $2', [req.params.id, req.user!.id]);
   res.status(204).end();
 });
 

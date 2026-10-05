@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import PDFDocument from 'pdfkit';
 import type { Response } from 'express';
 import type { loadOrder } from './orderService.js';
@@ -5,6 +7,7 @@ import type { loadOrder } from './orderService.js';
 type OrderData = Awaited<ReturnType<typeof loadOrder>>;
 export interface StoreInfo { name: string; address: string | null; phone: string | null; email: string | null }
 
+const LOGO = fileURLToPath(new URL('../assets/logo.png', import.meta.url));
 const BRAND = '#0B5ED7';
 const INK = '#0F2147';
 const MUTED = '#5B6B8A';
@@ -32,8 +35,15 @@ export function streamInvoice(res: Response, o: OrderData, store: StoreInfo) {
 
   // Header band
   doc.rect(0, 0, W, 104).fill(BRAND);
-  doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(22).text(store.name, L, 30, { width: inner * 0.62 });
-  doc.font('Helvetica').fontSize(9.5).fillColor('#DDE8FF').text('Medicines delivered to your door', L, 58, { width: inner * 0.62 });
+  // App logo on a white tile so it stays readable on the blue band.
+  let textX = L;
+  if (existsSync(LOGO)) {
+    doc.roundedRect(L, 16, 72, 72, 12).fill('#FFFFFF');
+    doc.image(LOGO, L + 4, 20, { fit: [64, 64], align: 'center', valign: 'center' });
+    textX = L + 86;
+  }
+  doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(20).text(store.name, textX, 32, { width: inner * 0.55 - (textX - L) + 40 });
+  doc.font('Helvetica').fontSize(9.5).fillColor('#DDE8FF').text('Medicines delivered to your door', textX, 60, { width: inner * 0.55 });
   doc.font('Helvetica-Bold').fontSize(26).fillColor('#FFFFFF').text('INVOICE', L, 30, { width: inner, align: 'right' });
   doc.font('Helvetica').fontSize(10).fillColor('#DDE8FF').text(`No. ${o.orderNumber}`, L, 64, { width: inner, align: 'right' });
 

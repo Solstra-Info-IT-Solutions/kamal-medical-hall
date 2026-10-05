@@ -8,7 +8,7 @@ import { pool } from './db.js';
 import { HttpError, forbidden } from './http.js';
 
 export type Role = 'customer' | 'admin' | 'delivery_partner';
-export interface AuthUser { id: string; phone: string; role: Role; name: string | null; email: string | null }
+export interface AuthUser { id: string; phone: string; role: Role; name: string | null; email: string | null; avatar_public_id?: string | null; avatar_resource_type?: string | null }
 declare module 'express-serve-static-core' { interface Request { user?: AuthUser; verified?: { uid: string; phone: string } } }
 
 let firebaseApp: App | undefined;
@@ -67,7 +67,7 @@ export async function verified(req: Request, _res: Response, next: NextFunction)
 /** Verifies the token and loads the server-side user (and so the role). */
 export async function authed(req: Request, res: Response, next: NextFunction) {
   await verified(req, res, () => undefined); // throws 401 itself if the token is bad
-  const { rows } = await pool.query('select id, phone, role, name, email from users where phone = $1', [req.verified!.phone]);
+  const { rows } = await pool.query('select id, phone, role, name, email, avatar_public_id, avatar_resource_type from users where phone = $1', [req.verified!.phone]);
   if (!rows[0]) throw new HttpError(401, 'no_account', 'Account not found. Please sign in again.');
   req.user = rows[0];
   next();

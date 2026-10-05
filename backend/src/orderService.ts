@@ -27,6 +27,7 @@ export async function loadOrder(id: string, viewer: AuthUser, db: Queryable = po
     db.query('select status, reason, created_at from status_history where order_id = $1 order by created_at', [o.id]),
   ]);
   const staffView = viewer.role !== 'customer';
+  const rv = viewer.role === 'delivery_partner' ? null : (await db.query('select id, rating, status from reviews where order_id = $1', [o.id])).rows[0] ?? null;
   const store = (await db.query('select address, phone from store_settings where id = 1')).rows[0];
   const deliveredAt = history.rows.filter((h) => h.status === 'delivered').at(-1)?.created_at ?? null;
   const bill = o.bill_public_id && viewer.role !== 'delivery_partner'
@@ -54,7 +55,7 @@ export async function loadOrder(id: string, viewer: AuthUser, db: Queryable = po
     items: items.rows,
     // Partners never see prescriptions.
     prescriptions: viewer.role === 'delivery_partner' ? [] : rx.rows.map((r) => ({ id: r.id, mimeType: r.mime_type, sizeBytes: r.size_bytes, name: String(r.public_id).split('/').pop(), url: signedPrescriptionUrl(r.public_id, r.mime_type, r.resource_type) })),
-    history: history.rows, deliveredAt, bill,
+    history: history.rows, deliveredAt, bill, review: rv ? { id: rv.id, rating: rv.rating, status: rv.status } : null,
     store: { name: 'Kamal Medical Hall', address: store?.address ?? null, phone: store?.phone ?? null },
     reviewedBy: staffView ? o.reviewed_by : undefined,
     customer: staffView ? { id: o.customer_id, name: o.customer_name, phone: phoneVisible ? o.customer_phone : null } : undefined,

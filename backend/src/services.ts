@@ -10,10 +10,13 @@ if (cld.cloudName) cloudinary.config({ cloud_name: cld.cloudName, api_key: cld.a
 export function cloudinaryConfigured() { return Boolean(cld.cloudName && cld.apiKey && cld.apiSecret); }
 
 /** Prescriptions are uploaded with type=authenticated, so only signed URLs can read them. */
-export function signUpload(userId: string, purpose: 'prescription' | 'bill' = 'prescription') {
+export type UploadPurpose = 'prescription' | 'bill' | 'avatar' | 'review';
+const FOLDERS: Record<UploadPurpose, string> = { prescription: 'prescriptions', bill: 'bills', avatar: 'avatars', review: 'reviews' };
+
+export function signUpload(userId: string, purpose: UploadPurpose = 'prescription') {
   if (!cloudinaryConfigured()) throw new HttpError(503, 'uploads_unavailable', 'File upload is not configured yet');
   const timestamp = Math.round(Date.now() / 1000);
-  const params = { folder: `${purpose === 'bill' ? 'bills' : 'prescriptions'}/${userId}`, timestamp, type: 'authenticated' };
+  const params = { folder: `${FOLDERS[purpose]}/${userId}`, timestamp, type: 'authenticated' };
   const signature = cloudinary.utils.api_sign_request(params, cld.apiSecret);
   return { cloudName: cld.cloudName, apiKey: cld.apiKey, signature, ...params };
 }
