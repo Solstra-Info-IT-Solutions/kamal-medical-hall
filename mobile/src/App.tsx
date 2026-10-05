@@ -22,7 +22,7 @@ patch(TextInput as never);
 (Text as unknown as { defaultProps: Record<string, unknown> }).defaultProps.maxFontSizeMultiplier = 1.3;
 (TextInput as unknown as { defaultProps: Record<string, unknown> }).defaultProps.maxFontSizeMultiplier = 1.3;
 
-const MIN_SPLASH_MS = 2200;
+const MIN_SPLASH_MS = 600;
 
 export function App() {
   const [fontsLoaded, fontError] = useFonts({ NotoSansDevanagari_400Regular, NotoSansDevanagari_500Medium, NotoSansDevanagari_600SemiBold, NotoSansDevanagari_700Bold });
