@@ -6,6 +6,7 @@ import { Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnimatedSplash } from './components/AnimatedSplash';
 import { DialogHost } from './components/DialogHost';
+import { FileViewerHost } from './components/FileViewer';
 import { NotificationToast } from './components/NotificationToast';
 import i18n, { restoreLanguage } from './localization';
 import { Navigation } from './navigation';
@@ -46,6 +47,7 @@ export function App() {
         <Navigation />
         <NotificationToast />
         <DialogHost />
+        <FileViewerHost />
         {showSplash ? <AnimatedSplash tagline={i18n.t('brand.tagline')} /> : null}
       </View>
     </SafeAreaProvider>

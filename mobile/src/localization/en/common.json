@@ -786,5 +786,13 @@
     "rejectTitle": "Reject this review?",
     "rejectMsg": "The customer will be told it was not published.",
     "defaultRejectNote": "The shop could not publish this review."
+  },
+  "viewer": {
+    "noPreview": "This file cannot be shown here",
+    "noPreviewHelp": "It is a type of file the app cannot display. You can open it with another app.",
+    "openOutside": "Open with another app",
+    "page": "Page {{n}}",
+    "download": "Download",
+    "close": "Close"
   }
 }

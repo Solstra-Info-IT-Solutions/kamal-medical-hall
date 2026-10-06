@@ -14,7 +14,7 @@ import { isSlotBookable, SLOTS } from '../slots.js';
 import jwt from 'jsonwebtoken';
 import type { AuthUser } from '../auth.js';
 import { INVOICE_STATUSES, streamInvoice } from '../invoice.js';
-import { isBlockedFile, razorpayClient, verifyPaymentSignature, verifyWebhookSignature } from '../services.js';
+import { isBlockedFile, jpgUrl, razorpayClient, verifyPaymentSignature, verifyWebhookSignature } from '../services.js';
 
 export const orders = Router();
 export const razorpayWebhook = Router();
@@ -100,6 +100,26 @@ orders.get('/', authed, requireRole('customer'), async (req, res) => {
   })), hasMore: rows.length === limit });
 });
 
+/** Downloads the customer's prescription pictures (as JPEG) so they can be placed on the invoice. Failures are skipped. */
+async function prescriptionImages(orderId: string): Promise<Buffer[]> {
+  const { rows } = await pool.query('select public_id, mime_type, resource_type from prescriptions where order_id = $1 order by id limit 3', [orderId]);
+  const out: Buffer[] = [];
+  for (const r of rows) {
+    const url = jpgUrl(r.public_id, r.mime_type, r.resource_type, 1, 1000);
+    if (!url) continue;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) continue;
+      const buf = Buffer.from(await res.arrayBuffer());
+      const jpeg = buf[0] === 0xff && buf[1] === 0xd8, png = buf[0] === 0x89 && buf[1] === 0x50;
+      if (buf.length > 0 && buf.length < 6_000_000 && (jpeg || png)) out.push(buf);
+    } catch { /* skip this picture */ } finally { clearTimeout(timer); }
+  }
+  return out;
+}
+
 /** A short-lived download link for the invoice PDF (the app opens it in the browser, which cannot send the login token). */
 orders.get('/:id/invoice-link', authed, async (req, res) => {
   if (req.user!.role === 'delivery_partner') throw new HttpError(403, 'forbidden', 'Not allowed');
@@ -118,7 +138,8 @@ orders.get('/:id/invoice.pdf', async (req, res) => {
   } catch { throw new HttpError(401, 'invalid_link', 'This invoice link has expired. Please open it again from the app.'); }
   const order = await loadOrder(oid, { id: 'system', role: 'admin', phone: '', name: null } as unknown as AuthUser);
   const s = (await pool.query('select address, phone, email from store_settings where id = 1')).rows[0];
-  streamInvoice(res, order, { name: 'Kamal Medical Hall', address: s?.address ?? null, phone: s?.phone ?? null, email: s?.email ?? null });
+  const images = await prescriptionImages(order.id);
+  streamInvoice(res, order, { name: 'Kamal Medical Hall', address: s?.address ?? null, phone: s?.phone ?? null, email: s?.email ?? null }, images);
 });
 
 orders.get('/:id', authed, async (req, res) => {

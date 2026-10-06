@@ -2,7 +2,7 @@ import type pg from 'pg';
 import { pool, hasAfterCommit, type Queryable } from './db.js';
 import { emitOrder } from './realtime.js';
 import { conflict, notFound } from './http.js';
-import { signedBillUrl, signedPrescriptionUrl } from './services.js';
+import { previewUrls, signedBillUrl, signedPrescriptionUrl, type ResourceType } from './services.js';
 import type { AuthUser } from './auth.js';
 
 export type OrderStatus = 'requested' | 'quoted' | 'accepted' | 'awaiting_payment' | 'ready_to_dispatch' | 'out_for_delivery' | 'delivered' | 'rejected' | 'cancelled';
@@ -34,6 +34,7 @@ export async function loadOrder(id: string, viewer: AuthUser, db: Queryable = po
     ? {
       name: o.bill_name ?? `Bill-${o.order_number}`, mimeType: o.bill_mime, sizeBytes: o.bill_size, uploadedAt: o.bill_uploaded_at,
       viewUrl: signedBillUrl(o.bill_public_id, o.bill_mime, o.bill_resource_type, false, `Bill-${o.order_number}`),
+      previewUrls: previewUrls(o.bill_public_id, o.bill_mime, o.bill_resource_type as ResourceType),
       downloadUrl: signedBillUrl(o.bill_public_id, o.bill_mime, o.bill_resource_type, true, o.bill_name?.replace(/\.[^.]+$/, '') || `Bill-${o.order_number}`),
     }
     : null;
@@ -54,7 +55,7 @@ export async function loadOrder(id: string, viewer: AuthUser, db: Queryable = po
     rejectionReason: o.rejection_reason, cancelReason: o.cancel_reason, createdAt: o.created_at,
     items: items.rows,
     // Partners never see prescriptions.
-    prescriptions: viewer.role === 'delivery_partner' ? [] : rx.rows.map((r) => ({ id: r.id, mimeType: r.mime_type, sizeBytes: r.size_bytes, name: String(r.public_id).split('/').pop(), url: signedPrescriptionUrl(r.public_id, r.mime_type, r.resource_type) })),
+    prescriptions: viewer.role === 'delivery_partner' ? [] : rx.rows.map((r) => ({ id: r.id, mimeType: r.mime_type, sizeBytes: r.size_bytes, name: String(r.public_id).split('/').pop(), url: signedPrescriptionUrl(r.public_id, r.mime_type, r.resource_type), previewUrls: previewUrls(r.public_id, r.mime_type, r.resource_type as ResourceType) })),
     history: history.rows, deliveredAt, bill, review: rv ? { id: rv.id, rating: rv.rating, status: rv.status } : null,
     store: { name: 'Kamal Medical Hall', address: store?.address ?? null, phone: store?.phone ?? null },
     reviewedBy: staffView ? o.reviewed_by : undefined,

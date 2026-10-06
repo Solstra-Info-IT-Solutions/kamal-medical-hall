@@ -11,6 +11,7 @@ import Animated, { FadeIn, ZoomIn, interpolate, useAnimatedStyle, useSharedValue
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
 import type { Order, OrderStatus, PaymentMethod } from '../../api/types';
+import { openFile } from '../../components/FileViewer';
 import { OrderCard } from '../../components/OrderCard';
 import { CountUp, Enter, Ripples, Skeleton, Tap, tick, useShake } from '../../components/motion';
 import { Avatar, CallButton } from '../../components/CallButton';
@@ -167,7 +168,6 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   useErrorPopup(err);
-  const [photo, setPhoto] = useState<string | null>(null);
   const [errCount, setErrCount] = useState(0);
   if (loading && !data) return <DetailSkeleton />;
   if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
@@ -229,7 +229,7 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
           {live ? <QuickAction icon="navigate" label={t('live.trackBtn')} onPress={() => navigation.navigate('Track', { orderId: o.id })} tone="green" /> : null}
           {storePhone ? <QuickAction icon="call" label={t('order.callStore')} onPress={() => { void Linking.openURL(`tel:${storePhone}`); }} /> : null}
           <QuickAction icon="chatbubbles" label={t('order.chatAbout')} onPress={() => navigation.navigate('Chat', { orderId: o.id })} />
-          {o.bill?.viewUrl ? <QuickAction icon="document-text" label={t('order.viewBill')} onPress={() => { void Linking.openURL(o.bill!.viewUrl!); }} tone="amber" /> : null}
+          {o.bill?.viewUrl ? <QuickAction icon="document-text" label={t('order.viewBill')} onPress={() => openFile({ title: o.bill!.name, urls: o.bill!.previewUrls ?? [], fallbackUrl: o.bill!.viewUrl, downloadUrl: o.bill!.downloadUrl })} tone="amber" /> : null}
         </View>
 
         {idx >= 0 ? <Timeline idx={idx} /> : null}
@@ -237,7 +237,7 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
         <Section icon="medkit" title={`${t('order.items')} (${o.items.length + o.prescriptions.length})`} open>
           {o.items.map((i) => <View key={i.id} style={s.itemRow}><View style={s.itemDot} /><Text style={[type.body, { color: colors.text, flex: 1 }]}>{i.name}</Text><Text style={[type.bodyMedium, { color: colors.primary }]}>× {i.quantity}</Text></View>)}
           {o.prescriptions.length > 0 ? <View style={s.rxRow}>{o.prescriptions.map((p) => (
-            <Pressable key={p.id} accessibilityRole="button" accessibilityLabel={t('order.viewPhoto')} onPress={() => { if (!p.url) return; if (isImageMime(p.mimeType)) setPhoto(p.url); else void Linking.openURL(p.url); }} style={s.rx}>
+            <Pressable key={p.id} accessibilityRole="button" accessibilityLabel={t('order.viewPhoto')} onPress={() => { if (p.url || p.previewUrls?.length) openFile({ title: `${t('order.items')} · #${o.orderNumber}`, urls: p.previewUrls ?? [], fallbackUrl: p.url }); }} style={s.rx}>
               {!isImageMime(p.mimeType) || !p.url ? <Icon name="document-text" size={28} /> : <Image source={{ uri: p.url }} style={{ flex: 1, width: '100%', borderRadius: radius.sm }} />}
             </Pressable>))}</View> : null}
           {o.note ? <Text style={[type.small, { color: colors.secondary, marginTop: 8 }]}>{t('review.note')}: {o.note}</Text> : null}
@@ -268,7 +268,7 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
             {o.bill ? <>
               <View style={s.billCard}><Icon name="document-text" size={28} /><View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={1}>{o.bill.name}</Text><Text style={[type.small, { color: colors.secondary }]}>{fileBadge(o.bill.name, o.bill.mimeType)}{o.bill.uploadedAt ? ` · ${formatDateTime(o.bill.uploadedAt)}` : ''}</Text></View></View>
               <View style={s.btnPair}>
-                <Button small variant="outline" title={t('order.viewBill')} icon="eye" onPress={() => { if (o.bill?.viewUrl) void Linking.openURL(o.bill.viewUrl); }} disabled={!o.bill.viewUrl} style={{ flex: 1 }} />
+                <Button small variant="outline" title={t('order.viewBill')} icon="eye" onPress={() => openFile({ title: o.bill!.name, urls: o.bill!.previewUrls ?? [], fallbackUrl: o.bill!.viewUrl, downloadUrl: o.bill!.downloadUrl })} disabled={!o.bill.viewUrl && !o.bill.previewUrls?.length} style={{ flex: 1 }} />
                 <Button small title={t('order.downloadBill')} icon="download" onPress={() => { if (o.bill?.downloadUrl) void Linking.openURL(o.bill.downloadUrl); }} disabled={!o.bill.downloadUrl} style={{ flex: 1 }} />
               </View>
             </> : null}
@@ -292,13 +292,6 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
         {canCancel ? <Button title={t('order.cancel')} variant="danger" onPress={() => { setErr(''); setCancelOpen(true); }} style={{ marginTop: spacing.lg }} /> : null}
         {o.status === 'ready_to_dispatch' || o.status === 'awaiting_payment' ? <Text style={[type.small, { color: colors.secondary, marginTop: spacing.sm }]}>{t('order.cancelNote')}</Text> : null}
       </Screen>
-
-      <Modal transparent visible={!!photo} animationType="none" onRequestClose={() => setPhoto(null)}>
-        <Pressable style={s.photoBackdrop} onPress={() => setPhoto(null)}>
-          {photo ? <Image source={{ uri: photo }} style={s.photoFull} resizeMode="contain" /> : null}
-          <View style={s.photoClose}><Icon name="close" size={22} color={colors.white} /></View>
-        </Pressable>
-      </Modal>
 
       <Modal transparent visible={cancelOpen} animationType="none" onRequestClose={() => setCancelOpen(false)}>
         <View style={s.backdrop}>

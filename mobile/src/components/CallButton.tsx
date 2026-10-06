@@ -1,10 +1,10 @@
 import { Image, Linking, StyleSheet, Text, View } from 'react-native';
-import { colors, radius, type } from '../theme';
+import { colors, radius, spacing, type } from '../theme';
 import { Tap } from './motion';
 import { Icon } from './ui';
 
 /** Opens the phone dialer. `compact` renders a round icon-only button for dense rows. */
-export function CallButton({ phone, label, compact, tone = 'green' }: { phone: string | null | undefined; label?: string; compact?: boolean; tone?: 'green' | 'blue' }) {
+export function CallButton({ phone, label, compact, small, tone = 'green' }: { phone: string | null | undefined; label?: string; compact?: boolean; small?: boolean; tone?: 'green' | 'blue' }) {
   if (!phone) return null;
   const fg = tone === 'green' ? colors.green : colors.primary;
   const bg = tone === 'green' ? colors.greenBg : colors.card;
@@ -13,9 +13,9 @@ export function CallButton({ phone, label, compact, tone = 'green' }: { phone: s
     return <Tap accessibilityRole="button" accessibilityLabel={label ?? `Call ${phone}`} onPress={open} hitSlop={8} style={[s.round, { backgroundColor: bg }]}><Icon name="call" size={20} color={fg} /></Tap>;
   }
   return (
-    <Tap accessibilityRole="button" accessibilityLabel={label ?? `Call ${phone}`} onPress={open} style={[s.pill, { backgroundColor: fg }]}>
-      <Icon name="call" size={18} color={colors.white} />
-      <Text numberOfLines={1} style={[type.smallMedium, { color: colors.white, fontSize: 14 }]}>{label ?? phone}</Text>
+    <Tap accessibilityRole="button" accessibilityLabel={label ?? `Call ${phone}`} onPress={open} style={[s.pill, small && s.pillSmall, { backgroundColor: fg }]}>
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={[type.button, small && { fontSize: 15, lineHeight: 22 }, { color: colors.white, flexShrink: 1 }]}>{label ?? phone}</Text>
+      <Icon name="call" size={small ? 18 : 20} color={colors.white} />
     </Tap>
   );
 }
@@ -30,6 +30,8 @@ export const Avatar = ({ name, size = 44, uri }: { name: string | null | undefin
 
 const s = StyleSheet.create({
   round: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  pill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 16, minHeight: 44, borderRadius: radius.md },
+  // Same size as <Button>, so a Call button and a Directions / Message button next to each other line up exactly.
+  pill: { height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing.lg, borderRadius: radius.md },
+  pillSmall: { height: 40, paddingHorizontal: 14, borderRadius: radius.sm },
   avatar: { backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.cardBorder },
 });

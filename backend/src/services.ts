@@ -35,6 +35,29 @@ export function signedPrescriptionUrl(publicId: string, mimeType: string, resour
   });
 }
 
+const isPdfFile = (publicId: string, mimeType: string) => mimeType === 'application/pdf' || /\.pdf$/i.test(publicId);
+
+/**
+ * A JPEG version of an image (or of page `page` of a PDF), sized for screens and for embedding in the invoice.
+ * Cloudinary does the conversion, so HEIC / WebP / PDF all become something every phone can show. Null when the
+ * file cannot be shown as a picture (documents) or uploads are not configured.
+ */
+export function jpgUrl(publicId: string, mimeType: string, resourceType: ResourceType, page = 1, width = 1200): string | null {
+  if (!cloudinaryConfigured() || resourceType !== 'image') return null;
+  const pdf = isPdfFile(publicId, mimeType);
+  return cloudinary.url(publicId, {
+    type: 'authenticated', resource_type: 'image', sign_url: true, secure: true, format: 'jpg',
+    transformation: [{ ...(pdf ? { page } : {}), width, crop: 'limit' }],
+  });
+}
+
+/** Links the app shows inside itself: one picture for an image, one per page (up to `max`) for a PDF. */
+export function previewUrls(publicId: string, mimeType: string, resourceType: ResourceType, max = 10): string[] {
+  if (resourceType !== 'image') return [];
+  const count = isPdfFile(publicId, mimeType) ? max : 1;
+  return Array.from({ length: count }, (_, i) => jpgUrl(publicId, mimeType, resourceType, i + 1)).filter((u): u is string => !!u);
+}
+
 /** Signed link that downloads the bill as a file (Cloudinary attachment flag) instead of displaying it. */
 export function signedBillUrl(publicId: string, mimeType: string, resourceType: ResourceType, download: boolean, fileName: string) {
   if (!cloudinaryConfigured()) return null;

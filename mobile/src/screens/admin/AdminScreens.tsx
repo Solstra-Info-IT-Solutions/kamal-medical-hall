@@ -3,6 +3,7 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -14,6 +15,7 @@ import { endpoints } from '../../api/endpoints';
 import { uploadPrescription } from '../../api/upload';
 import type { Order, OrderSummary, Partner, PartnerState } from '../../api/types';
 import { Avatar, CallButton } from '../../components/CallButton';
+import { openFile } from '../../components/FileViewer';
 import { OrderCard } from '../../components/OrderCard';
 import { CountUp, Enter, Skeleton, Tap, tick } from '../../components/motion';
 import { Button, Card, ErrorView, Icon, Message, Pill, ResponsiveGrid, Screen, TextField, type IconName } from '../../components/ui';
@@ -228,15 +230,32 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
   const mapsQuery = encodeURIComponent([o.address.line1, o.address.line2, o.address.landmark, o.address.city, o.address.pincode].filter(Boolean).join(', '));
   const openMaps = () => { void Linking.openURL(Platform.OS === 'ios' ? `http://maps.apple.com/?q=${mapsQuery}` : `https://www.google.com/maps/search/?api=1&query=${mapsQuery}`); };
 
-  const pickBill = async () => {
+  /** The bill can be photographed, taken from the gallery or chosen as any file (PDF, Word, Excel...). */
+  const pickBill = async (source: 'camera' | 'gallery' | 'file') => {
     setErr('');
     try {
-      const res = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
-      if (res.canceled || !res.assets?.[0]) return;
-      const a = res.assets[0];
-      if (isBlockedName(a.name)) { setErr(t('admin.billType')); return; }
-      if ((a.size ?? 0) > 10 * 1024 * 1024) { setErr(t('admin.billTooBig')); return; }
-      setBill({ uri: a.uri, name: a.name, mimeType: guessMime(a.name, a.mimeType), sizeBytes: a.size });
+      let picked: { uri: string; name: string; mimeType: string; sizeBytes?: number } | null = null;
+      if (source === 'file') {
+        const res = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+        if (res.canceled || !res.assets?.[0]) return;
+        const a = res.assets[0];
+        picked = { uri: a.uri, name: a.name, mimeType: guessMime(a.name, a.mimeType), sizeBytes: a.size };
+      } else {
+        if (source === 'camera') {
+          const perm = await ImagePicker.requestCameraPermissionsAsync();
+          if (!perm.granted) { setErr(t('upload.permission')); return; }
+        }
+        const res = source === 'camera'
+          ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 })
+          : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
+        if (res.canceled || !res.assets?.[0]) return;
+        const a = res.assets[0];
+        const mime = guessMime(a.fileName ?? a.uri, a.mimeType ?? 'image/jpeg');
+        picked = { uri: a.uri, name: a.fileName ?? `bill-${o.orderNumber}.${(mime.split('/')[1] ?? 'jpg').replace('jpeg', 'jpg')}`, mimeType: isImageMime(mime) ? mime : 'image/jpeg', sizeBytes: a.fileSize };
+      }
+      if (isBlockedName(picked.name)) { setErr(t('admin.billType')); return; }
+      if ((picked.sizeBytes ?? 0) > 10 * 1024 * 1024) { setErr(t('admin.billTooBig')); return; }
+      setBill(picked);
       tick();
     } catch { setErr(t('admin.billPickFailed')); }
   };
@@ -288,13 +307,13 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
           <Text style={[type.h3, { color: colors.text, marginBottom: 6 }]}>{o.kind === 'prescription' ? t('admin.prescriptions') : t('order.items')}</Text>
           {o.items.map((i) => <Text key={i.id} style={[type.body, { color: colors.text }]}>• {i.name} × {i.quantity}</Text>)}
           <View style={s.rxRow}>{o.prescriptions.map((p) => (
-            <Tap key={p.id} accessibilityRole="button" onPress={() => p.url && Linking.openURL(p.url)} style={s.rx}>
+            <Tap key={p.id} accessibilityRole="button" onPress={() => openFile({ title: `${t('admin.prescriptions')} · #${o.orderNumber}`, urls: p.previewUrls ?? [], fallbackUrl: p.url })} style={s.rx}>
               {!isImageMime(p.mimeType) || !p.url ? <Icon name="document-text" size={30} /> : <Image source={{ uri: p.url }} style={{ flex: 1, width: '100%', borderRadius: radius.sm }} />}
             </Tap>))}</View>
           {o.note ? <Text style={[type.small, { color: colors.secondary, marginTop: 6 }]}>{t('review.note')}: {o.note}</Text> : null}
           {o.quotedAmount !== null ? <Text style={[type.bodyMedium, { color: colors.text, marginTop: spacing.md }]}>{t('order.amount')}: {formatMoney(o.quotedAmount)}{o.paymentMethod ? ` · ${t(`pay.${o.paymentMethod}`)} (${o.paymentStatus})` : ''}</Text> : null}
           {o.bill ? <View style={[s.btnRow, { marginTop: spacing.sm }]}>
-            <Button title={t('admin.viewBill')} variant="outline" icon="eye" small disabled={!o.bill.viewUrl} onPress={() => { void Linking.openURL(o.bill!.viewUrl!); }} style={{ flex: 1 }} />
+            <Button title={t('admin.viewBill')} variant="outline" icon="eye" small disabled={!o.bill.viewUrl} onPress={() => openFile({ title: o.bill!.name, urls: o.bill!.previewUrls ?? [], fallbackUrl: o.bill!.viewUrl, downloadUrl: o.bill!.downloadUrl })} style={{ flex: 1 }} />
             <Button title={t('order.downloadBill')} icon="download" small disabled={!o.bill.downloadUrl} onPress={() => { void Linking.openURL(o.bill!.downloadUrl!); }} style={{ flex: 1 }} />
           </View> : null}
 
@@ -329,13 +348,19 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
             <Text style={[type.h3, { color: colors.text, marginBottom: spacing.sm }]}>{o.status === 'quoted' ? t('admin.requote') : t('admin.setQuote')}</Text>
             <TextField label={t('admin.amountLabel')} value={amount} onChangeText={(v) => setAmount(v.replace(/[^\d.]/g, ''))} keyboardType="decimal-pad" placeholder="0" valid={quoteValue > 0} />
             <Text style={[type.smallMedium, { color: colors.text, marginBottom: 6 }]}>{t('admin.billLabel')} *</Text>
-            <Tap accessibilityRole="button" onPress={pickBill} scaleTo={0.98} style={[s.billPick, bill && { borderColor: colors.green, backgroundColor: colors.greenBg }]}>
+            <View style={[s.billPick, bill && { borderColor: colors.green, backgroundColor: colors.greenBg, borderStyle: 'solid' }]}>
               <Icon name={bill ? 'document-attach' : 'cloud-upload-outline'} size={24} color={bill ? colors.green : colors.primary} />
               <View style={{ flex: 1 }}>
                 <Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={1}>{bill ? bill.name : t('admin.billAttach')}</Text>
                 <Text style={[type.small, { color: colors.secondary }]}>{bill ? t('admin.billChange') : t('admin.billHint')}</Text>
               </View>
-            </Tap>
+              {bill ? <Tap accessibilityRole="button" accessibilityLabel={t('upload.remove', { name: bill.name })} hitSlop={8} onPress={() => setBill(null)} haptic={false}><Icon name="close-circle" size={24} color={colors.muted} /></Tap> : null}
+            </View>
+            <View style={s.billOptions}>
+              <Button small variant="outline" icon="camera" title={t('upload.camera')} onPress={() => { void pickBill('camera'); }} style={{ flex: 1 }} />
+              <Button small variant="outline" icon="images" title={t('upload.gallery')} onPress={() => { void pickBill('gallery'); }} style={{ flex: 1 }} />
+              <Button small variant="outline" icon="document-text" title={t('upload.file')} onPress={() => { void pickBill('file'); }} style={{ flex: 1 }} />
+            </View>
             <Button title={t('admin.sendQuote')} icon="send" disabled={!(quoteValue > 0) || !bill} loading={busy === 'quote'} onPress={sendQuote} style={{ marginTop: spacing.md }} />
           </Card>
         </Enter>
@@ -923,6 +948,7 @@ const s = StyleSheet.create({
   moreRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   manageCard: { alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 92, padding: spacing.md, marginBottom: 12, backgroundColor: colors.white },
   storeCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.md },
+  billOptions: { flexDirection: 'row', gap: 8, marginTop: spacing.sm },
   billPick: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: radius.md, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.primary, backgroundColor: colors.card },
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: spacing.md },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },

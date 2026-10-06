@@ -24,7 +24,7 @@ const METHOD: Record<string, string> = { cod: 'Cash on delivery', razorpay: 'Onl
 export const INVOICE_STATUSES = ['ready_to_dispatch', 'out_for_delivery', 'delivered'];
 
 /** Streams a one-page A4 invoice (store header, customer, items, totals, payment, footer) to the response. */
-export function streamInvoice(res: Response, o: OrderData, store: StoreInfo) {
+export function streamInvoice(res: Response, o: OrderData, store: StoreInfo, prescriptionImages: Buffer[] = []) {
   const doc = new PDFDocument({ size: 'A4', margin: 40, info: { Title: `Invoice ${o.orderNumber}`, Author: store.name } });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="Invoice-${o.orderNumber}.pdf"`);
@@ -113,6 +113,27 @@ export function streamInvoice(res: Response, o: OrderData, store: StoreInfo) {
   const contact = [store.address, store.phone ? `Phone: ${store.phone}` : null, store.email].filter(Boolean).join('   |   ');
   if (contact) doc.font('Helvetica').fontSize(8.5).fillColor(MUTED).text(contact, L, fy + 30, { width: inner, align: 'center' });
   doc.font('Helvetica').fontSize(8).fillColor(MUTED).text('This is a computer-generated invoice and does not need a signature. Amount is inclusive of applicable taxes.', L, fy + 48, { width: inner, align: 'center' });
+
+  // The prescription the customer uploaded, so the invoice shows what the order was made from.
+  if (prescriptionImages.length) {
+    doc.addPage();
+    let py = 50;
+    doc.font('Helvetica-Bold').fontSize(8.5).fillColor(MUTED).text('PRESCRIPTION SUBMITTED WITH THIS ORDER', L, py);
+    doc.font('Helvetica').fontSize(10).fillColor(MUTED).text(`Order ${o.orderNumber} · ${o.address.recipientName}`, L, py + 14);
+    py += 40;
+    for (const buf of prescriptionImages) {
+      let img: { width: number; height: number };
+      try { img = (doc as unknown as { openImage(b: Buffer): { width: number; height: number } }).openImage(buf); } catch { continue; }
+      const maxH = 340;
+      if (py + 120 > doc.page.height - 50) { doc.addPage(); py = 50; }
+      const room = Math.min(maxH, doc.page.height - 50 - py);
+      const scale = Math.min(inner / img.width, room / img.height, 1.5);
+      const w = img.width * scale, h = img.height * scale;
+      doc.roundedRect(L + (inner - w) / 2 - 4, py - 4, w + 8, h + 8, 6).lineWidth(0.8).strokeColor(LINE).stroke();
+      doc.image(buf, L + (inner - w) / 2, py, { width: w, height: h });
+      py += h + 22;
+    }
+  }
 
   doc.end();
 }
