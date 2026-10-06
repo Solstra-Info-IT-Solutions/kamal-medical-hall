@@ -26,6 +26,8 @@ export const config = {
   corsOrigins: (env.CORS_ORIGINS ?? '').split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean),
   /** PEM text of the database's CA certificate. When set, the database connection is verified instead of merely encrypted. */
   databaseCa: (env.DATABASE_CA ?? '').replace(/\\n/g, '\n') || (env.DATABASE_SSL_VERIFY === 'on' ? bundledSupabaseCa() : ''),
+  /** 'socket': the API is reachable only through the app's live connection (plus webhooks, health and file-download links). */
+  socketOnly: env.API_TRANSPORT === 'socket',
   logRequests: env.LOG_REQUESTS ? env.LOG_REQUESTS === 'on' : env.NODE_ENV === 'production',
   minLeadMinutes: Number(env.MIN_LEAD_MINUTES ?? 60),
   quoteValidHours: Number(env.QUOTE_VALID_HOURS ?? 24),

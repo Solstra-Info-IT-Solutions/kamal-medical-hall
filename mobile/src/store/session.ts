@@ -62,14 +62,14 @@ export const useSession = create<SessionState>((set, get) => ({
   },
   async logout() {
     setMonitoringUser(null);
-    disconnectRealtime();
     await otpProvider.signOut();
+    disconnectRealtime(); // after the token is gone, so the connection carries on anonymously
     set({ status: 'out', user: null });
   },
   async deleteAccount() {
     await endpoints.deleteAccount();
-    disconnectRealtime();
     await otpProvider.signOut();
+    disconnectRealtime();
     set({ status: 'out', user: null });
   },
 }));

@@ -5,7 +5,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { observe } from './observability.js';
-import { cachePolicy, corsMiddleware, generalLimit, uploadSignLimit, writeLimit } from './security.js';
+import { cachePolicy, corsMiddleware, generalLimit, httpGate, uploadSignLimit, writeLimit } from './security.js';
 import { config } from './config.js';
 import { pool } from './db.js';
 import { errorHandler } from './http.js';
@@ -21,6 +21,7 @@ export function createApp() {
   const app = express();
   app.set('trust proxy', 1);
   app.use(observe); // first: request id, timing and database statistics for everything below
+  app.use(httpGate); // in socket-only mode, plain HTTP is limited to health, webhooks and download links
   app.use(helmet());
   app.use(corsMiddleware);
   app.use(compression());

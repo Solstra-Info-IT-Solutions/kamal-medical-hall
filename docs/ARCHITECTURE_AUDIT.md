@@ -181,3 +181,14 @@ See the bottom of this file after the work in this pass (appended below).
 - **Postgres CA verification**: needs the Supabase CA certificate (set `DATABASE_CA`).
 - **Play Integrity, certificate pinning, root/emulator detection**: assessed in section 7; deferred for the reasons given there.
 - **Audit log table, staging environment, E2E suite, component tests**: planned in sections 11–13.
+
+
+## Socket-only transport
+
+All API calls can travel over the app's one socket.io connection instead of HTTP.
+
+- **App:** `core/network/socketTransport.ts` is a `fetch`-shaped function that sends `{m, p, b, a, id}` as an `rpc` event and turns the acknowledgement `{s, b, h}` into a `Response`. The HTTP client above it (timeouts, retries, single-flight token refresh, safe error messages, schema checks) is unchanged. `core/network/socketClient.ts` owns the single connection, also used for pushed events; it connects anonymously before sign-in, reconnects once after sign-in so the server puts it in the user's rooms, and reconnects anonymously after sign-out. Build switch: `EXPO_PUBLIC_API_TRANSPORT=socket|http` (default `socket`).
+- **Server:** `src/rpc.ts` replays each `rpc` message against the same Express app over the loopback interface, so there is one implementation of every endpoint and the token is verified on every call, not once per connection. Per-connection token bucket (60 calls, refilled over 10 s), 100 kB message limit, strict method/path/header validation. Webhooks, exports, invoice PDFs and `/socket.io` are refused over the socket.
+- **Switching the server:** `API_TRANSPORT=socket` makes plain HTTP return 426 except `/health`, `/webhooks/*`, `/export/*` and the invoice PDF link (browsers open those). Old app versions stop working at that moment, so set it only after the new app is in users' hands.
+- **Still HTTP by design:** Cloudinary uploads (device to Cloudinary directly), file downloads, payment webhooks, health check.
+- **Not changed:** a free Render instance still takes about a minute to wake after idling; the socket reconnects by itself once it is up.

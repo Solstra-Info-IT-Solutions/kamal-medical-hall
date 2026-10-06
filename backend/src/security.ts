@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from 'express';
 import cors, { type CorsOptions } from 'cors';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { config } from './config.js';
+import { INTERNAL_HEADER, INTERNAL_SECRET } from './rpc.js';
 
 /**
  * Browsers may only call the API from the origins in CORS_ORIGINS (the web admin). Native apps send no Origin header
@@ -37,6 +38,18 @@ export const generalLimit = limiter(300);
 /** Actions that cost money or send messages to other people. */
 export const writeLimit = limiter(30);
 export const uploadSignLimit = limiter(30);
+
+/**
+ * With API_TRANSPORT=socket the JSON API refuses ordinary HTTP calls. Allowed over HTTP: the health check, provider
+ * webhooks, and the token-protected download links (invoice PDF, CSV exports), which a browser has to open. Requests
+ * made by the socket handler inside this process carry a secret header and are always let through.
+ */
+const HTTP_ALLOWED = [/^\/health$/, /^\/webhooks\//, /^\/export\//, /^\/orders\/[0-9a-f-]{36}\/invoice\.pdf$/i];
+export function httpGate(req: Request, res: Response, next: NextFunction) {
+  if (req.get(INTERNAL_HEADER) === INTERNAL_SECRET || !config.socketOnly) return next();
+  if (req.method === 'OPTIONS' || HTTP_ALLOWED.some((rx) => rx.test(req.path))) return next();
+  res.status(426).json({ error: { code: 'socket_only', message: 'Please update the app to continue.', requestId: res.locals.requestId } });
+}
 
 /**
  * Cache policy. Public store data may be reused for a few seconds (and revalidated with its ETag); everything else

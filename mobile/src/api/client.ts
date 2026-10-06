@@ -1,13 +1,12 @@
-import Constants from 'expo-constants';
+import { API_TRANSPORT, API_URL } from '../core/config';
 import { ApiError } from '../core/errors/ApiError';
 import { logger } from '../core/logging';
 import { createHttpClient, type RequestOptions } from '../core/network/httpClient';
+import { configureSocketAuth, getSocket } from '../core/network/socketClient';
+import { createSocketFetch } from '../core/network/socketTransport';
 import { setSlow } from '../core/network/status';
 
-export { ApiError };
-
-/** Set EXPO_PUBLIC_API_URL in .env (e.g. http://192.168.1.5:4000 for a phone on the same Wi-Fi). */
-export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? (Constants.expoConfig?.extra?.apiUrl as string | undefined) ?? 'http://localhost:4000').replace(/\/$/, '');
+export { ApiError, API_URL };
 
 let tokenProvider: () => Promise<string | null> = async () => null;
 let tokenRefresher: () => Promise<string | null> = async () => null;
@@ -16,10 +15,13 @@ export function configureApi(opts: { getToken: () => Promise<string | null>; ref
   tokenProvider = opts.getToken;
   tokenRefresher = opts.refreshToken ?? (async () => null);
   onUnauthorized = opts.onUnauthorized;
+  configureSocketAuth({ getToken: () => tokenProvider(), refreshToken: () => tokenRefresher() });
 }
 
 const http = createHttpClient({
   baseUrl: API_URL,
+  // Every request goes over the live socket; EXPO_PUBLIC_API_TRANSPORT=http switches back to plain HTTPS.
+  fetchImpl: API_TRANSPORT === 'socket' ? createSocketFetch({ baseUrl: API_URL, getSocket }) : undefined,
   getToken: () => tokenProvider(),
   refreshToken: () => tokenRefresher(),
   onUnauthorized: () => onUnauthorized(),
