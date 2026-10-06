@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { authed, deleteFirebaseUser, normalisePhone, signDevToken, verified } from '../auth.js';
+import { authed, deleteFirebaseUser, invalidateUser, normalisePhone, signDevToken, verified } from '../auth.js';
 import { config } from '../config.js';
 import { pool, tx } from '../db.js';
 import { HttpError, notFound, parse } from '../http.js';
@@ -75,6 +75,7 @@ general.patch('/me', authed, async (req, res) => {
        language = coalesce($4, language), updated_at = now() where id = $1 returning id, phone, role, name, email, language, avatar_public_id, avatar_resource_type`,
     [req.user!.id, body.name ?? null, body.email ?? null, body.language ?? null],
   );
+  invalidateUser(req.user!.phone);
   res.json({ user: userView(rows[0]) });
 });
 
@@ -149,11 +150,13 @@ general.put('/me/avatar', authed, async (req, res) => {
   const { rows } = await pool.query(
     'update users set avatar_public_id = $2, avatar_resource_type = $3, updated_at = now() where id = $1 returning id, phone, role, name, email, language, avatar_public_id, avatar_resource_type',
     [req.user!.id, b.publicId, b.resourceType]);
+  invalidateUser(req.user!.phone);
   res.json({ user: userView(rows[0]) });
 });
 general.delete('/me/avatar', authed, async (req, res) => {
   const { rows } = await pool.query(
     'update users set avatar_public_id = null, updated_at = now() where id = $1 returning id, phone, role, name, email, language, avatar_public_id, avatar_resource_type', [req.user!.id]);
+  invalidateUser(req.user!.phone);
   res.json({ user: userView(rows[0]) });
 });
 
@@ -226,6 +229,7 @@ general.delete('/me', authed, async (req, res) => {
     await c.query('delete from notifications where user_id = $1', [user.id]);
     await c.query(`update users set name = null, email = null, firebase_uid = null, phone = 'deleted-' || id::text, updated_at = now() where id = $1`, [user.id]);
   });
+  invalidateUser(user.phone);
   await deletePrescriptionFiles(files);
   await deleteFirebaseUser(uid);
   res.status(204).end();

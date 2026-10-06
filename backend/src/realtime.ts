@@ -2,6 +2,7 @@ import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
 import { verifyToken } from './auth.js';
 import { pool } from './db.js';
+import { isOriginAllowed } from './security.js';
 
 let io: Server | null = null;
 
@@ -10,7 +11,7 @@ let io: Server | null = null;
  * placed in a private room per user (plus an "admins" room), so events only reach the people they concern.
  */
 export function attachRealtime(server: HttpServer) {
-  io = new Server(server, { cors: { origin: '*' }, pingInterval: 20000, pingTimeout: 20000 });
+  io = new Server(server, { cors: { origin: (origin, cb) => cb(null, isOriginAllowed(origin)) }, pingInterval: 20000, pingTimeout: 20000, maxHttpBufferSize: 100_000 });
 
   io.use(async (socket, next) => {
     try {

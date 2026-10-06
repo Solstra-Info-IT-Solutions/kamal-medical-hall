@@ -6,7 +6,9 @@
     "start": "expo start --dev-client",
     "web": "expo start --web",
     "android": "expo run:android",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json"
   },
   "dependencies": {
     "@expo-google-fonts/noto-sans-devanagari": "^0.4.1",
@@ -68,6 +70,7 @@
   "devDependencies": {
     "@babel/core": "^7.20.0",
     "@types/react": "~19.2.10",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.3"
   },
   "private": true

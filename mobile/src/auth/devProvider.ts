@@ -9,6 +9,8 @@ export interface OtpProvider {
   /** Verifies the code and returns a bearer token for the backend. */
   confirmOtp(code: string): Promise<string>;
   getToken(): Promise<string | null>;
+  /** Forces a new token (used once after the server answers 401). Null when the session cannot be renewed. */
+  refreshToken(): Promise<string | null>;
   signOut(): Promise<void>;
 }
 
@@ -36,6 +38,7 @@ export const devProvider = (): OtpProvider => {
       }
     },
     getToken: () => secure.get(TOKEN_KEY),
+    refreshToken: async () => null, // dev tokens last 30 days and cannot be renewed
     signOut: () => secure.del(TOKEN_KEY),
   };
 };

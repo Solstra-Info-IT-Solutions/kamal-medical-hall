@@ -14,7 +14,8 @@
     "ok": "OK",
     "retry": "Try again",
     "done": "Done",
-    "warning": "Warning"
+    "warning": "Warning",
+    "waking": "The server is starting up. The first request after a quiet period can take up to a minute."
   },
   "tabs": {
     "home": "Home",

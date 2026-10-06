@@ -76,5 +76,6 @@ export const useSession = create<SessionState>((set, get) => ({
 
 configureApi({
   getToken: () => otpProvider.getToken(),
+  refreshToken: () => otpProvider.refreshToken(),
   onUnauthorized: () => { if (useSession.getState().status === 'in') void useSession.getState().logout(); },
 });

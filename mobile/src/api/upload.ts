@@ -45,8 +45,10 @@ export async function uploadPrescription(file: PrescriptionFile, sig: UploadSign
   const url = `https://api.cloudinary.com/v1_1/${encodeURIComponent(sig.cloudName.trim())}/auto/upload`;
 
   let status = 0; let text = ''; let cause = '';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 120_000); // uploads get their own, longer, policy
   try {
-    const res = await fetch(url, { method: 'POST', body: await build() });
+    const res = await fetch(url, { method: 'POST', body: await build(), signal: controller.signal });
     status = res.status; text = await res.text();
   } catch (e) {
     cause = (e as Error)?.message ?? 'unknown';
@@ -56,6 +58,8 @@ export async function uploadPrescription(file: PrescriptionFile, sig: UploadSign
     } catch (e2) {
       cause = `${cause}; ${(e2 as Error)?.message ?? ''}`;
     }
+  } finally {
+    clearTimeout(timer);
   }
   if (cause) throw new ApiError(0, 'network', `Upload failed (${cause.slice(0, 120)}). Check your internet connection and try again.`);
 

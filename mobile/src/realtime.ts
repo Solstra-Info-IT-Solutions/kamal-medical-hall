@@ -1,5 +1,6 @@
 import { io, type Socket } from 'socket.io-client';
 import { API_URL } from './api/client';
+import { logger } from './core/logging';
 import { otpProvider } from './auth/provider';
 
 type Handler = (payload: any) => void;
@@ -12,7 +13,7 @@ export function onRealtime(event: string, fn: Handler): () => void {
   handlers.get(event)!.add(fn);
   return () => { handlers.get(event)?.delete(fn); };
 }
-const fan = (event: string, payload?: unknown) => handlers.get(event)?.forEach((fn) => { try { fn(payload); } catch (e) { console.warn('realtime handler failed', e); } });
+const fan = (event: string, payload?: unknown) => handlers.get(event)?.forEach((fn) => { try { fn(payload); } catch (e) { logger.warn('realtime handler failed', e); } });
 
 /**
  * Opens the real-time channel. The token is read again on every (re)connect so it never goes stale.

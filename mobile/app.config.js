@@ -14,8 +14,9 @@ module.exports = ({ config }) => {
   const plugins = [...(config.plugins ?? [])];
   if (hasAndroid || hasIos) {
     plugins.push('@react-native-firebase/app', '@react-native-firebase/auth', '@react-native-firebase/messaging');
-    plugins.push(['expo-build-properties', { ios: { useFrameworks: 'static' } }]);
   }
+  // One entry for both platforms. Android never allows plain-HTTP traffic in a built app; iOS needs static frameworks for Firebase.
+  plugins.push(['expo-build-properties', { android: { usesCleartextTraffic: false }, ...(hasAndroid || hasIos ? { ios: { useFrameworks: 'static' } } : {}) }]);
   return {
     ...config,
     plugins,

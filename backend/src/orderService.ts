@@ -21,14 +21,18 @@ export async function loadOrder(id: string, viewer: AuthUser, db: Queryable = po
   if (!o) throw notFound('Order not found');
   const allowed = viewer.role === 'admin' || (viewer.role === 'customer' && o.customer_id === viewer.id) || (viewer.role === 'delivery_partner' && o.partner_id === viewer.id);
   if (!allowed) throw notFound('Order not found'); // do not reveal other users' orders
-  const [items, rx, history] = await Promise.all([
+  // One parallel batch: this used to be a batch followed by three more sequential queries (each a cross-region round trip).
+  const [items, rx, history, storeRow, reviewRow, partnerFlag] = await Promise.all([
     db.query('select id, name, quantity from order_items where order_id = $1 order by name', [o.id]),
     db.query('select id, public_id, mime_type, size_bytes, resource_type from prescriptions where order_id = $1', [o.id]),
     db.query('select status, reason, created_at from status_history where order_id = $1 order by created_at', [o.id]),
+    db.query('select address, phone from store_settings where id = 1'),
+    viewer.role === 'delivery_partner' ? Promise.resolve({ rows: [] as Array<Record<string, unknown>> }) : db.query('select id, rating, status from reviews where order_id = $1', [o.id]),
+    viewer.role === 'delivery_partner' ? db.query('select can_call_customer from delivery_partners where user_id = $1', [viewer.id]) : Promise.resolve({ rows: [] as Array<Record<string, unknown>> }),
   ]);
   const staffView = viewer.role !== 'customer';
-  const rv = viewer.role === 'delivery_partner' ? null : (await db.query('select id, rating, status from reviews where order_id = $1', [o.id])).rows[0] ?? null;
-  const store = (await db.query('select address, phone from store_settings where id = 1')).rows[0];
+  const rv = (reviewRow.rows[0] as { id: string; rating: number; status: string } | undefined) ?? null;
+  const store = storeRow.rows[0];
   const deliveredAt = history.rows.filter((h) => h.status === 'delivered').at(-1)?.created_at ?? null;
   const bill = o.bill_public_id && viewer.role !== 'delivery_partner'
     ? {
@@ -42,8 +46,7 @@ export async function loadOrder(id: string, viewer: AuthUser, db: Queryable = po
   let phoneVisible = viewer.role === 'admin';
   let canCallCustomer = viewer.role === 'admin';
   if (viewer.role === 'delivery_partner') {
-    const d = await db.query('select can_call_customer from delivery_partners where user_id = $1', [viewer.id]);
-    canCallCustomer = Boolean(d.rows[0]?.can_call_customer);
+    canCallCustomer = Boolean(partnerFlag.rows[0]?.can_call_customer);
     phoneVisible = canCallCustomer && Boolean(o.partner_accepted_at);
   }
   const address = phoneVisible || viewer.role === 'customer' ? o.address_snapshot : { ...o.address_snapshot, phone: null };

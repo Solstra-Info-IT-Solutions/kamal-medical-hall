@@ -375,68 +375,6 @@ export function PaymentScreen({ navigation, route }: NativeStackScreenProps<Cust
   );
 }
 
-export function NotificationsScreen() {
-  const { t } = useTranslation();
-  const nav = useNavigation<Nav>();
-  const { data, error, loading, reload, setData } = useLoad(() => endpoints.notifications(), ['notification']);
-  const [err, setErr] = useState('');
-  useErrorPopup(err);
-  if (loading && !data) return <ListSkeleton />;
-  if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
-  const list = data?.notifications ?? [];
-  if (!list.length) return <Message icon="notifications-off-outline" title={t('notifications.empty')} />;
-  const unread = list.filter((n) => !n.read).length;
-
-  /** Only the tapped notification is marked as read. */
-  const open = async (n: (typeof list)[number]) => {
-    if (!n.read) {
-      setData({ notifications: list.map((x) => (x.id === n.id ? { ...x, read: true } : x)) });
-      void endpoints.markRead(n.id).catch(() => undefined);
-    }
-    if (n.type.startsWith('chat')) nav.navigate('Chat', undefined);
-    else if (n.type.startsWith('review')) nav.navigate('MyReviews');
-    else if (n.orderId) nav.navigate('OrderDetail', { orderId: n.orderId });
-  };
-  const remove = async (n: (typeof list)[number]) => {
-    setData({ notifications: list.filter((x) => x.id !== n.id) });
-    try { await endpoints.deleteNotification(n.id); } catch (e) { setErr((e as Error).message); await reload(); }
-  };
-  const readAll = async () => {
-    setData({ notifications: list.map((x) => ({ ...x, read: true })) });
-    try { await endpoints.markAllRead(); } catch (e) { setErr((e as Error).message); await reload(); }
-  };
-  const clearAll = async () => {
-    const ok = await showDialog({ title: t('notifications.clearTitle'), message: t('notifications.clearMsg'), icon: 'trash', tone: 'danger', confirmLabel: t('notifications.clearAll'), cancelLabel: t('common.cancel') });
-    if (!ok) return;
-    setData({ notifications: [] });
-    try { await endpoints.clearNotifications(); } catch (e) { setErr((e as Error).message); await reload(); }
-  };
-
-  return (
-    <Screen>
-      <View style={s.noteActions}>
-        <Button small variant="outline" icon="checkmark-done" title={t('notifications.markAll')} onPress={() => { void readAll(); }} disabled={unread === 0} style={{ flex: 1 }} />
-        <Button small variant="danger" icon="trash-outline" title={t('notifications.clearAll')} onPress={() => { void clearAll(); }} style={{ flex: 1 }} />
-      </View>
-      {list.map((n) => (
-        <View key={n.id} style={[s.note, !n.read && { backgroundColor: colors.card }]}>
-          <Pressable accessibilityRole="button" onPress={() => { void open(n); }} style={s.noteMain}>
-            <View style={[s.noteDot, !n.read && { backgroundColor: colors.primary }]} />
-            <View style={{ flex: 1 }}>
-              <Text style={[type.bodyMedium, { color: colors.text }]}>{n.title}</Text>
-              <Text style={[type.small, { color: colors.secondary }]}>{n.body}</Text>
-              <Text style={[type.small, { color: colors.muted, marginTop: 4 }]}>{formatDateTime(n.createdAt)}</Text>
-            </View>
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={t('notifications.delete')} hitSlop={8} onPress={() => { void remove(n); }} style={s.noteTrash}>
-            <Icon name="close" size={20} color={colors.muted} />
-          </Pressable>
-        </View>
-      ))}
-    </Screen>
-  );
-}
-
 const s = StyleSheet.create({
   segWrap: { flexDirection: 'row', gap: 10, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   seg: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, height: 44, paddingHorizontal: 4, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },

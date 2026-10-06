@@ -25,6 +25,9 @@ const firebaseProvider = (): OtpProvider => {
     async getToken() {
       try { return (await auth().currentUser?.getIdToken()) ?? null; } catch { return null; }
     },
+    async refreshToken() {
+      try { return (await auth().currentUser?.getIdToken(true)) ?? null; } catch { return null; }
+    },
     signOut: async () => { try { await fb().signOut(auth()); } catch { /* already signed out */ } },
   };
 };

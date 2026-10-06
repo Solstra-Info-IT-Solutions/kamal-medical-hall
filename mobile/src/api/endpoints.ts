@@ -27,7 +27,7 @@ export const endpoints = {
 
   signUpload: (purpose: 'prescription' | 'bill' | 'avatar' | 'review' = 'prescription') => api<UploadSignature>('POST', '/uploads/sign', { purpose }),
   invoiceLink: (orderId: string) => api<{ url: string }>('GET', `/orders/${orderId}/invoice-link`),
-  createOrder: (b: NewOrderInput) => api<{ order: Order }>('POST', '/orders', b, { timeoutMs: 30000 }),
+  createOrder: (b: NewOrderInput) => api<{ order: Order }>('POST', '/orders', b, { timeoutMs: 30000, retry: 'always' /* safe: the idempotency key makes a repeat return the same order */ }),
   orders: (scope: 'completed' | 'cancelled' | 'active', offset = 0, range?: { from?: string; to?: string }) => api<{ orders: OrderSummary[]; hasMore: boolean }>('GET', `/orders?${new URLSearchParams({ scope, offset: String(offset), ...(range?.from ? { from: range.from } : {}), ...(range?.to ? { to: range.to } : {}) })}`),
   order: (id: string) => api<{ order: Order }>('GET', `/orders/${id}`),
   tracking: (id: string) => api<Tracking>('GET', `/orders/${id}/tracking`),

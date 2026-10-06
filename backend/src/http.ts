@@ -17,9 +17,10 @@ export function parse<T>(schema: ZodType<T>, data: unknown): T {
 }
 
 export function errorHandler(error: unknown, _req: Request, res: Response, _next: NextFunction) {
-  if (error instanceof HttpError) return res.status(error.status).json({ error: { code: error.code, message: error.message } });
-  if (error instanceof ZodError) return res.status(422).json({ error: { code: 'validation_failed', message: error.message } });
-  console.error(error);
+  const requestId = res.locals.requestId as string | undefined;
+  if (error instanceof HttpError) return res.status(error.status).json({ error: { code: error.code, message: error.message, requestId } });
+  if (error instanceof ZodError) return res.status(422).json({ error: { code: 'validation_failed', message: 'Some of the information sent was not valid.', requestId } });
+  console.error(JSON.stringify({ level: 'error', msg: 'unhandled', id: requestId, error: error instanceof Error ? error.message : String(error) }));
   reportError(error);
-  res.status(500).json({ error: { code: 'internal', message: 'Something went wrong. Please try again.' } });
+  res.status(500).json({ error: { code: 'internal', message: 'Something went wrong. Please try again.', requestId } });
 }

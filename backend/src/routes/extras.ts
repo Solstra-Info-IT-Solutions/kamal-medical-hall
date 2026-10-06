@@ -7,6 +7,7 @@ import { pool, tx } from '../db.js';
 import { HttpError, conflict, notFound, parse } from '../http.js';
 import { notify, notifyAdmins, notifyMany } from '../notify.js';
 import { isBlockedFile, signedPrescriptionUrl, type ResourceType } from '../services.js';
+import { latencySnapshot } from '../observability.js';
 import { queueSnapshot } from './chat.js';
 
 /** Customer side of reviews. */
@@ -77,6 +78,9 @@ adminExtras.post('/reviews/:id/decision', async (req, res) => {
 });
 
 // ============================================================ Analytics
+/** Slowest endpoints first (p50 / p95 / p99 in ms over the most recent requests since the server started). */
+adminExtras.get('/metrics', (_req, res) => { res.json({ routes: latencySnapshot() }); });
+
 adminExtras.get('/overview', async (_req, res) => {
   const [a, snap, rv] = await Promise.all([
     pool.query(`

@@ -14,7 +14,12 @@ export function LiveMap({ data, style }: { data: MapData; style?: StyleProp<View
   return (
     <View style={[s.box, style]}>
       <WebView
-        ref={ref} source={{ html: MAP_HTML, baseUrl: 'https://localhost' }} originWhitelist={['*']} javaScriptEnabled domStorageEnabled
+        ref={ref} source={{ html: MAP_HTML, baseUrl: 'https://localhost' }}
+        // The page only ever needs to be itself: no navigation elsewhere, no new windows, no local files, no mixed content.
+        originWhitelist={['about:blank', 'https://localhost']}
+        onShouldStartLoadWithRequest={(r) => r.url === 'about:blank' || r.url.startsWith('https://localhost')}
+        setSupportMultipleWindows={false} allowFileAccess={false} allowUniversalAccessFromFileURLs={false} mixedContentMode="never"
+        javaScriptEnabled domStorageEnabled
         onMessage={(e: WebViewMessageEvent) => { if (e.nativeEvent.data === 'ready') setReady(true); }}
         style={s.web} scrollEnabled={false} nestedScrollEnabled bounces={false} accessibilityLabel="Live delivery map"
       />

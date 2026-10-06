@@ -9,7 +9,7 @@ export interface MapData {
  * iframe on the web, and is driven by `window.update({ store, destination, rider })` / postMessage.
  */
 export const MAP_HTML = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 <style>
 html,body,#m{height:100%;margin:0;background:#EAF4FE;font-family:sans-serif}
 .leaflet-marker-icon{transition:transform .9s linear}
@@ -17,7 +17,7 @@ html,body,#m{height:100%;margin:0;background:#EAF4FE;font-family:sans-serif}
 .pulse{animation:p 1.6s ease-out infinite}@keyframes p{0%{box-shadow:0 0 0 0 rgba(11,95,219,.55)}100%{box-shadow:0 0 0 18px rgba(11,95,219,0)}}
 .msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#4F5D78;font-size:13px;text-align:center;padding:24px}
 </style></head><body><div id="m"></div><div class="msg" id="msg">Loading map…</div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 (function(){
   if(!window.L){document.getElementById('msg').textContent='Map unavailable offline';return}

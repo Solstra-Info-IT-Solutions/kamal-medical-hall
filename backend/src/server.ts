@@ -1,9 +1,11 @@
 import './monitoring.js'; // first, so the error reporter is ready before anything else runs
 import http from 'node:http';
-import cors from 'cors';
+import compression from 'compression';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
+import { observe } from './observability.js';
+import { cachePolicy, corsMiddleware, generalLimit, uploadSignLimit, writeLimit } from './security.js';
 import { config } from './config.js';
 import { pool } from './db.js';
 import { errorHandler } from './http.js';
@@ -18,12 +20,22 @@ import { adminRouter, partnerRouter } from './routes/staff.js';
 export function createApp() {
   const app = express();
   app.set('trust proxy', 1);
+  app.use(observe); // first: request id, timing and database statistics for everything below
   app.use(helmet());
-  app.use(cors());
+  app.use(corsMiddleware);
+  app.use(compression());
+  app.use(cachePolicy);
   // Razorpay webhook needs the raw body, so it is mounted before the JSON parser.
   app.use('/webhooks/razorpay', razorpayWebhook);
   app.use(express.json({ limit: '100kb' }));
   app.use('/auth', rateLimit({ windowMs: 60_000, limit: 30, standardHeaders: true, legacyHeaders: false }));
+  app.use(generalLimit);
+  app.post('/uploads/sign', uploadSignLimit);
+  app.post('/chat/messages', writeLimit);
+  app.post('/reviews', writeLimit);
+  app.post('/orders', writeLimit);
+  app.post('/admin/broadcast', writeLimit);
+  app.get('/admin/export-link', writeLimit);
   app.use('/', general);
   app.use('/orders', orders);
   app.use('/chat', chatRouter);

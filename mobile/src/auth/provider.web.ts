@@ -50,6 +50,10 @@ const firebaseWebProvider = (): OtpProvider => {
       await a.authStateReady();
       try { return (await a.currentUser?.getIdToken()) ?? null; } catch { return null; }
     },
+    async refreshToken() {
+      if (!config) return null;
+      try { return (await auth().currentUser?.getIdToken(true)) ?? null; } catch { return null; }
+    },
     signOut: async () => { try { await signOut(auth()); } catch { /* already signed out */ } },
   };
 };

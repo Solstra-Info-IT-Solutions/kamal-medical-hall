@@ -64,11 +64,25 @@ export async function verified(req: Request, _res: Response, next: NextFunction)
   next();
 }
 
+/**
+ * Short-lived cache of the signed-in user's row. The token is still verified on every request; only the database
+ * lookup is skipped, which saves a cross-region round trip per call. Writes that change the row call
+ * `invalidateUser`, and entries expire after 15 s, so a role or account change takes effect within that time.
+ */
+const USER_TTL_MS = 15_000;
+const userCache = new Map<string, { user: AuthUser; exp: number }>();
+export const invalidateUser = (phone?: string) => { if (phone) userCache.delete(phone); else userCache.clear(); };
+
 /** Verifies the token and loads the server-side user (and so the role). */
 export async function authed(req: Request, res: Response, next: NextFunction) {
   await verified(req, res, () => undefined); // throws 401 itself if the token is bad
-  const { rows } = await pool.query('select id, phone, role, name, email, avatar_public_id, avatar_resource_type from users where phone = $1', [req.verified!.phone]);
-  if (!rows[0]) throw new HttpError(401, 'no_account', 'Account not found. Please sign in again.');
+  const phone = req.verified!.phone;
+  const hit = userCache.get(phone);
+  if (hit && hit.exp > Date.now()) { req.user = hit.user; return next(); }
+  const { rows } = await pool.query('select id, phone, role, name, email, avatar_public_id, avatar_resource_type from users where phone = $1', [phone]);
+  if (!rows[0]) { userCache.delete(phone); throw new HttpError(401, 'no_account', 'Account not found. Please sign in again.'); }
+  if (userCache.size > 5000) userCache.clear();
+  userCache.set(phone, { user: rows[0], exp: Date.now() + USER_TTL_MS });
   req.user = rows[0];
   next();
 }
