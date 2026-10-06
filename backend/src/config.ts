@@ -1,6 +1,15 @@
 import 'dotenv/config';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 // Values pasted into a hosting dashboard often carry a trailing space or newline; trim them all.
+/** Supabase's public root CA, shipped with the API so verification needs nothing but DATABASE_SSL_VERIFY=on. */
+function bundledSupabaseCa() {
+  const file = fileURLToPath(new URL('../certs/supabase-prod-ca-2021.crt', import.meta.url));
+  if (!existsSync(file)) throw new Error('DATABASE_SSL_VERIFY=on but certs/supabase-prod-ca-2021.crt is missing');
+  return readFileSync(file, 'utf8');
+}
+
 const env: Record<string, string | undefined> = Object.fromEntries(Object.entries(process.env).map(([k, v]) => [k, v?.trim()]));
 export const config = {
   isProd: env.NODE_ENV === 'production',
@@ -16,7 +25,7 @@ export const config = {
   /** Origins allowed to call the API from a browser (the web admin). The mobile apps send no Origin header and are not affected. */
   corsOrigins: (env.CORS_ORIGINS ?? '').split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean),
   /** PEM text of the database's CA certificate. When set, the database connection is verified instead of merely encrypted. */
-  databaseCa: (env.DATABASE_CA ?? '').replace(/\\n/g, '\n'),
+  databaseCa: (env.DATABASE_CA ?? '').replace(/\\n/g, '\n') || (env.DATABASE_SSL_VERIFY === 'on' ? bundledSupabaseCa() : ''),
   logRequests: env.LOG_REQUESTS ? env.LOG_REQUESTS === 'on' : env.NODE_ENV === 'production',
   minLeadMinutes: Number(env.MIN_LEAD_MINUTES ?? 60),
   quoteValidHours: Number(env.QUOTE_VALID_HOURS ?? 24),

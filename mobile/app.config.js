@@ -16,7 +16,13 @@ module.exports = ({ config }) => {
     plugins.push('@react-native-firebase/app', '@react-native-firebase/auth', '@react-native-firebase/messaging');
   }
   // One entry for both platforms. Android never allows plain-HTTP traffic in a built app; iOS needs static frameworks for Firebase.
-  plugins.push(['expo-build-properties', { android: { usesCleartextTraffic: false }, ...(hasAndroid || hasIos ? { ios: { useFrameworks: 'static' } } : {}) }]);
+  // ENABLE_R8=true (the "hardened" EAS profile) shrinks and obfuscates the native code. The rules keep what Razorpay needs by reflection.
+  const r8 = process.env.ENABLE_R8 === 'true';
+  const razorpayRules = ['-keepattributes *Annotation*', '-dontwarn com.razorpay.**', '-keep class com.razorpay.** {*;}', '-optimizations !method/inlining/*', '-keepclasseswithmembers class * { public void onPayment*(...); }'].join('\n');
+  plugins.push(['expo-build-properties', {
+    android: { usesCleartextTraffic: false, ...(r8 ? { enableProguardInReleaseBuilds: true, enableShrinkResourcesInReleaseBuilds: true, extraProguardRules: razorpayRules } : {}) },
+    ...(hasAndroid || hasIos ? { ios: { useFrameworks: 'static' } } : {}),
+  }]);
   return {
     ...config,
     plugins,
