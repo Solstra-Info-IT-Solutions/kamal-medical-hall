@@ -204,6 +204,13 @@ general.post('/devices', authed, async (req, res) => {
   res.status(204).end();
 });
 
+/** Sign-out: this phone stops receiving the signed-out person's notifications. */
+general.delete('/devices', authed, async (req, res) => {
+  const { token } = parse(z.object({ token: z.string().min(10).max(4096) }), req.body);
+  await pool.query('delete from device_tokens where token = $1 and user_id = $2', [token, req.user!.id]);
+  res.status(204).end();
+});
+
 // ---- Account deletion ------------------------------------------------------
 const OPEN_STATUSES = "('requested','quoted','accepted','awaiting_payment','ready_to_dispatch','out_for_delivery')";
 

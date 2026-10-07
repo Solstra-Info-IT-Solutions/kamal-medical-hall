@@ -2,8 +2,10 @@ import '@expo/metro-runtime'; // Necessary for Fast Refresh on Web
 import { registerRootComponent } from 'expo';
 
 import { App } from './src/App';
+import { initPushBackgroundHandler } from './src/push';
 import { initMonitoring, withMonitoring } from './src/monitoring';
 
+initPushBackgroundHandler();
 initMonitoring(); // before anything else runs, so early crashes are caught
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);

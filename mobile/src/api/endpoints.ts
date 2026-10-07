@@ -54,6 +54,7 @@ export const endpoints = {
     mine: () => api<{ reviews: Review[] }>('GET', '/reviews/mine'),
   },
   registerDevice: (token: string, platform: 'android' | 'ios') => api<void>('POST', '/devices', { token, platform }),
+  unregisterDevice: (token: string) => api<void>('DELETE', '/devices', { token }),
 
   admin: {
     overview: () => api<Overview>('GET', '/admin/overview'),

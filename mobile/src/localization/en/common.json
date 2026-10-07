@@ -697,7 +697,8 @@
     "broadcastConfirmMsg": "All customers will get this notification right away.",
     "broadcastSend": "Send announcement",
     "broadcastDone": "Announcement sent",
-    "broadcastDoneMsg": "Sent to {{count}} customers."
+    "broadcastDoneMsg": "Sent to {{count}} customers.",
+    "cannotAssignTitle": "Can't assign to {{name}}"
   },
   "steps": {
     "address": "Address",

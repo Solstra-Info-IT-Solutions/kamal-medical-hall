@@ -697,7 +697,8 @@
     "broadcastConfirmMsg": "सभी ग्राहकों को यह सूचना तुरंत मिलेगी।",
     "broadcastSend": "घोषणा भेजें",
     "broadcastDone": "घोषणा भेज दी गई",
-    "broadcastDoneMsg": "{{count}} ग्राहकों को भेजा गया।"
+    "broadcastDoneMsg": "{{count}} ग्राहकों को भेजा गया।",
+    "cannotAssignTitle": "{{name}} को असाइन नहीं कर सकते"
   },
   "steps": {
     "address": "पता",

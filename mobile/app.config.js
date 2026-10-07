@@ -13,7 +13,7 @@ module.exports = ({ config }) => {
   const hasIos = fs.existsSync(ios);
   const plugins = [...(config.plugins ?? [])];
   if (hasAndroid || hasIos) {
-    plugins.push('@react-native-firebase/app', '@react-native-firebase/auth', '@react-native-firebase/messaging');
+    plugins.push('@react-native-firebase/app', '@react-native-firebase/auth', '@react-native-firebase/messaging', '@react-native-firebase/crashlytics');
   }
   // One entry for both platforms. Android never allows plain-HTTP traffic in a built app; iOS needs static frameworks for Firebase.
   // ENABLE_R8=true (the "hardened" EAS profile) shrinks and obfuscates the native code. The rules keep what Razorpay needs by reflection.

@@ -4,7 +4,7 @@ import { endpoints } from '../api/endpoints';
 import type { User } from '../api/types';
 import { otpProvider } from '../auth/provider';
 import { setLanguage } from '../localization';
-import { registerForPush } from '../push';
+import { registerForPush, unregisterPush } from '../push';
 import { setMonitoringUser } from '../monitoring';
 import { connectRealtime, disconnectRealtime } from '../realtime';
 
@@ -61,13 +61,14 @@ export const useSession = create<SessionState>((set, get) => ({
     set({ user });
   },
   async logout() {
+    await unregisterPush();
     setMonitoringUser(null);
     await otpProvider.signOut();
     disconnectRealtime(); // after the token is gone, so the connection carries on anonymously
     set({ status: 'out', user: null });
   },
   async deleteAccount() {
-    await endpoints.deleteAccount();
+    await endpoints.deleteAccount(); // the server already removed this phone's push token with the account
     await otpProvider.signOut();
     disconnectRealtime();
     set({ status: 'out', user: null });
