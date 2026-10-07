@@ -184,14 +184,14 @@ export const AllOrdersScreen = () => { const { t } = useTranslation(); return <O
 /** Why this partner cannot take the order right now, or null when they can. */
 function assignBlocker(t: (k: string, o?: Record<string, unknown>) => string, p: Partner, pincode: string): string | null {
   const covers = p.pincodes.length === 0 || p.pincodes.includes(pincode);
-  return !p.active ? t('admin.inactive') : p.state === 'off' ? t('admin.reasonAbsent') : p.state !== 'available' ? t('admin.partnerBusyReason') : !covers ? t('admin.notCoveredReason', { pincode }) : null;
+  return !p.active ? t('admin.inactive') : !['available', 'off', 'break'].includes(p.state) ? t('admin.partnerBusyReason') : !covers ? t('admin.notCoveredReason', { pincode }) : null;
 }
 
 function PartnerRow({ p, pincode, busy, canAssign, onAssign }: { p: Partner; pincode: string; busy: boolean; canAssign: boolean; onAssign: () => void }) {
   const { t } = useTranslation();
   const covers = p.pincodes.length === 0 || p.pincodes.includes(pincode);
   const ready = p.active && p.state === 'available' && covers;
-  const reason = assignBlocker(t, p, pincode);
+  const reason = assignBlocker(t, p, pincode) ?? (p.state === 'available' ? null : t('admin.offDutyHint'));
   return (
     <View style={[s.partnerRow, ready && s.partnerReady]}>
       <Avatar name={p.name} />
@@ -286,7 +286,8 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
       if (call) void Linking.openURL(`tel:${p.phone}`);
       return;
     }
-    const ok = await showDialog({ title: t('admin.assignConfirmTitle', { name: p.name }), message: t('admin.assignConfirmMsg', { order: o.orderNumber }), icon: 'bicycle', confirmLabel: t('admin.assignBtn'), cancelLabel: t('common.cancel') });
+    const offDuty = p.state !== 'available';
+    const ok = await showDialog({ title: t('admin.assignConfirmTitle', { name: p.name }), message: offDuty ? t('admin.assignOffDutyMsg', { order: o.orderNumber }) : t('admin.assignConfirmMsg', { order: o.orderNumber }), icon: 'bicycle', confirmLabel: t('admin.assignBtn'), cancelLabel: t('common.cancel') });
     if (ok) await run(`assign-${p.id}`, () => endpoints.admin.assign(o.id, p.id));
   };
 

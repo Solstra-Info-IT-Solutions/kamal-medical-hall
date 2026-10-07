@@ -86,8 +86,10 @@ describe('order lifecycle with partner duty, acceptance and return-to-shop', () 
     const partners = (await call('GET', '/admin/partners', admin.token)).body.partners;
     const p = partners.find((x: any) => x.phone === '9000000002');
     assert.equal(p.state, 'off');
-    // An absent partner cannot be assigned.
-    assert.equal((await call('POST', `/admin/orders/${id}/assign`, admin.token, { partnerId: p.id })).body.error.code, 'partner_unavailable');
+    // The admin may assign an absent (off duty) partner; taking the order back returns them to off duty.
+    assert.equal((await call('POST', `/admin/orders/${id}/assign`, admin.token, { partnerId: p.id })).status, 200);
+    assert.equal((await call('POST', `/admin/orders/${id}/unassign`, admin.token)).status, 200);
+    assert.equal((await call('GET', '/admin/partners', admin.token)).body.partners.find((x: any) => x.id === p.id).state, 'off');
 
     // Partner checks in -> available -> assigned (reserved) but the customer is not told until they accept.
     const partner = await login('9000000002');

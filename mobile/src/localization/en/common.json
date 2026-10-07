@@ -701,7 +701,9 @@
     "broadcastSend": "Send announcement",
     "broadcastDone": "Announcement sent",
     "broadcastDoneMsg": "Sent to {{count}} customers.",
-    "cannotAssignTitle": "Can't assign to {{name}}"
+    "cannotAssignTitle": "Can't assign to {{name}}",
+    "offDutyHint": "Currently off duty. You can still assign; they will see the request when they open the app.",
+    "assignOffDutyMsg": "{{order}} will be sent to this partner even though they are off duty or on a break. They will be asked to accept or reject it."
   },
   "steps": {
     "address": "Address",

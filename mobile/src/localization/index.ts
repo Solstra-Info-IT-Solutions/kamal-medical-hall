@@ -8,18 +8,18 @@ const LANGUAGE_KEY = 'kmh.language';
 
 const initialization = i18n.use(initReactI18next).init({
   resources: { en: { common: en }, hi: { common: hi } },
-  lng: 'hi',
+  lng: 'en',
   fallbackLng: 'en',
   defaultNS: 'common',
   interpolation: { escapeValue: false },
   compatibilityJSON: 'v4',
 });
 
-/** Hindi is the default (matches the supplied designs); the customer's saved choice wins. */
+/** English is the default; the customer's saved choice wins. */
 export async function restoreLanguage(): Promise<void> {
   await initialization;
   const saved = await AsyncStorage.getItem(LANGUAGE_KEY);
-  await i18n.changeLanguage(saved === 'en' ? 'en' : 'hi');
+  await i18n.changeLanguage(saved === 'hi' ? 'hi' : 'en');
 }
 
 export async function setLanguage(language: 'en' | 'hi'): Promise<void> {

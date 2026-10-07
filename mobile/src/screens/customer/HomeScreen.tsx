@@ -40,7 +40,12 @@ export function HomeScreen(_props: BottomTabScreenProps<CustomerTabParamList, 'H
     <SafeAreaView style={s.fill} edges={['top']}>
       <ScrollView contentContainerStyle={[s.body, content]} refreshControl={<RefreshControl refreshing={active.loading && !!active.data} onRefresh={refresh} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
         <View style={s.top}>
-          <Tap accessibilityRole="button" accessibilityLabel={placeText} onPress={retry} disabled={place.status === 'ready'} style={s.loc}><Icon name="location-sharp" size={22} color={colors.navy} /><Text numberOfLines={1} style={[type.bodyMedium, s.locText, { color: place.status === 'denied' || place.status === 'unavailable' ? colors.primary : colors.navy }]}>{placeText}</Text></Tap>
+          <View style={s.loc}>
+            <Text numberOfLines={1} style={[type.h3, { color: colors.navy }]}>{t('brand.name')}</Text>
+            <Tap accessibilityRole="button" accessibilityLabel={placeText} onPress={retry} disabled={place.status === 'ready'}>
+              <Text numberOfLines={1} style={[type.small, { color: place.status === 'denied' || place.status === 'unavailable' ? colors.primary : colors.secondary }]}>{placeText}</Text>
+            </Tap>
+          </View>
           <Bell unread={unread.data ?? 0} onPress={() => nav.navigate('Notifications')} label={t('home.notifications')} />
         </View>
         <Text style={[type.h2, { marginTop: spacing.lg, color: colors.text }]}>{user?.name ? t('home.greetingName', { name: user.name.split(' ')[0] }) : t('home.greeting')}</Text>
@@ -70,8 +75,7 @@ const s = StyleSheet.create({
   fill: { flex: 1, backgroundColor: colors.white },
   body: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  loc: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, marginRight: spacing.md },
-  locText: { flexShrink: 1 },
+  loc: { flex: 1, marginRight: spacing.md },
   bell: { padding: 4 },
   badge: { position: 'absolute', right: -2, top: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: colors.red, borderWidth: 2, borderColor: colors.white, alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: colors.white, fontSize: 10, lineHeight: 14, fontFamily: 'NotoSansDevanagari_700Bold' },

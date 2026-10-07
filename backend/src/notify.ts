@@ -42,6 +42,8 @@ async function push(userId: string, title: string, body: string, orderId: string
     android: { priority: 'high', ttl: 24 * 3600 * 1000, notification: { sound: 'default', defaultVibrateTimings: true } },
     apns: { headers: { 'apns-priority': '10' }, payload: { aps: { sound: 'default' } } },
   });
+  const failed = res.responses.filter((r) => !r.success);
+  if (failed.length) console.error(JSON.stringify({ level: 'error', msg: 'push not delivered', failed: failed.length, of: rows.length, codes: [...new Set(failed.map((r) => r.error?.code))] }));
   const dead = res.responses.flatMap((r, i) => (!r.success && ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token'].includes(r.error?.code ?? '') ? [rows[i].token] : []));
   if (dead.length) await pool.query('delete from device_tokens where token = any($1)', [dead]);
 }

@@ -115,7 +115,7 @@ adminRouter.post('/orders/:id/cancel', async (req, res) => {
   res.json({ order: await loadOrder(order.id, req.user!) });
 });
 
-/** Sends the order to an available, present partner who covers the pincode. They must accept before the customer is told. */
+/** Sends the order to a partner who covers the pincode, whether on duty or off duty (not one already on a delivery, or inactive). They must accept before the customer is told. */
 adminRouter.post('/orders/:id/assign', async (req, res) => {
   const { partnerId } = parse(z.object({ partnerId: z.string().uuid() }), req.body);
   const order = await loadOrder(String(req.params.id), req.user!);
@@ -124,8 +124,8 @@ adminRouter.post('/orders/:id/assign', async (req, res) => {
     const cover = await c.query('select pincode from partner_pincodes where partner_id = $1', [partnerId]);
     if (cover.rows.length && !cover.rows.some((r) => r.pincode === order.address.pincode)) throw conflict('That delivery partner does not cover this pincode.', 'out_of_coverage');
     const p = await c.query(`update delivery_partners d set state = 'reserved', is_available = false
-      where d.user_id = $1 and d.active and d.on_duty and d.on_duty_day = ${TODAY_IST} and d.state = 'available' returning d.user_id`, [partnerId]);
-    if (!p.rows[0]) throw conflict('That delivery partner is not available right now (absent, busy or inactive).', 'partner_unavailable');
+      where d.user_id = $1 and d.active and d.state in ('available', 'off', 'break') returning d.user_id`, [partnerId]);
+    if (!p.rows[0]) throw conflict('That delivery partner cannot take an order right now (busy with another delivery or inactive).', 'partner_unavailable');
     await setPartnerState(c, partnerId, 'reserved');
     await c.query("insert into assignments (order_id, partner_id) values ($1, $2)", [order.id, partnerId]);
     await transition(c, order.id, ['ready_to_dispatch'], 'ready_to_dispatch', req.user!.id, { partner_id: partnerId, partner_accepted_at: null }, 'Partner assigned');
