@@ -38,6 +38,7 @@ export type AdminStackParamList = {
   Terms: undefined;
   OrdersByStatus: { title: string; status: string };
   Revenue: undefined;
+  Cash: undefined;
   AdminReviews: undefined;
   AdminChats: undefined;
   AdminChat: { threadId: string; name: string };

@@ -20,6 +20,7 @@
     "@react-native-firebase/auth": "^26.4.0",
     "@react-native-firebase/crashlytics": "^26.4.0",
     "@react-native-firebase/messaging": "^26.4.0",
+    "@react-native-ml-kit/text-recognition": "^2.0.0",
     "@react-navigation/bottom-tabs": "^7.18.3",
     "@react-navigation/elements": "^2.9.26",
     "@react-navigation/native": "^7.3.4",

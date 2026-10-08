@@ -452,7 +452,14 @@
     "day_leave": "Leave",
     "day_paid_leave": "Paid leave",
     "day_absent": "Absent",
-    "st_break": "On a break"
+    "st_break": "On a break",
+    "proofTitle": "Payment screenshot",
+    "proofHelp": "Take or choose a screenshot of the customer's payment. The transaction ID is read from it automatically.",
+    "proofChange": "Choose a different screenshot",
+    "reading": "Reading the transaction ID…",
+    "txnLabel": "Transaction ID",
+    "idRead": "Transaction ID read from the screenshot. Please check it.",
+    "idNotFound": "Could not read the ID. Please type it from the screenshot."
   },
   "admin": {
     "dashboard": "Dashboard",
@@ -810,5 +817,31 @@
     "requiredMsg": "Order updates, quotes and delivery alerts reach you as notifications. Without them you may miss important updates. Please allow notifications for this app.",
     "openSettings": "Open settings",
     "later": "Later"
+  },
+  "cash": {
+    "title": "Cash to collect",
+    "collectedTitle": "How the customer paid",
+    "viewProof": "View payment screenshot",
+    "proofName": "Payment {{order}}",
+    "received": "Cash received {{time}}",
+    "withPartner": "Cash is with the delivery partner",
+    "markReceived": "Mark cash as received",
+    "confirmTitle": "Cash received from {{name}}?",
+    "confirmOne": "Confirm you received {{amount}} in cash for {{order}}.",
+    "paidOnline": "Paid by UPI / bank transfer",
+    "revenueToday": "Today's revenue",
+    "ordersCount": "{{count}} orders",
+    "online": "Online",
+    "onDelivery": "On delivery",
+    "nothing": "No cash is pending. Every partner has handed in what they collected.",
+    "fromPartner": "Collect from {{name}}",
+    "markAll": "Received {{amount}}",
+    "confirmAll": "Confirm you received {{amount}} in cash from {{name}} for {{count}} order(s).",
+    "done": "Marked as received",
+    "alarmTitle": "Store closes in 1 hour",
+    "alarmView": "Collect cash",
+    "alarmClose": "Later",
+    "totalLabel": "Total to collect",
+    "staffShort": "Staff"
   }
 }

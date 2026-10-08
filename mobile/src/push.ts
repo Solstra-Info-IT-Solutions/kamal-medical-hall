@@ -28,12 +28,12 @@ export function initPushBackgroundHandler() {
 }
 
 /** Waits for the navigator (the app may still be starting after a tap on a notification), then opens the order. */
-function openOrderWhenReady(orderId: string | undefined, tries = 0) {
-  if (!orderId) return;
+function openOrderWhenReady(data: { orderId?: unknown; type?: unknown } | undefined, tries = 0) {
+  if (!data?.orderId && !data?.type) return;
   // required lazily: the navigation module depends on the session store, which depends on this file
   const nav = require('./navigation/ref') as typeof import('./navigation/ref');
-  if (nav.navigationRef.isReady()) return nav.openOrderFromNotification(orderId);
-  if (tries < 40) setTimeout(() => openOrderWhenReady(orderId, tries + 1), 250);
+  if (nav.navigationRef.isReady()) return nav.openFromNotification({ orderId: data.orderId as string | undefined, type: data.type as string | undefined });
+  if (tries < 40) setTimeout(() => openOrderWhenReady(data, tries + 1), 250);
 }
 
 /** Are system notifications allowed for this app right now? (Always true on the web, where there is nothing to allow.) */
@@ -90,10 +90,10 @@ export async function registerForPush(): Promise<void> {
       // Back from the phone's settings with notifications now allowed: make sure this phone is registered.
       (() => { const sub = AppState.addEventListener('change', (st) => { if (st === 'active' && !currentToken) void registerForPush(); }); return () => sub.remove(); })(),
       m.onTokenRefresh(messaging, (fresh) => { currentToken = fresh; void endpoints.registerDevice(fresh, Platform.OS === 'ios' ? 'ios' : 'android').catch(() => undefined); }),
-      m.onNotificationOpenedApp(messaging, (msg) => openOrderWhenReady(msg.data?.orderId as string | undefined)),
+      m.onNotificationOpenedApp(messaging, (msg) => openOrderWhenReady(msg.data)),
     ];
     const first = await m.getInitialNotification(messaging); // the app was closed and a notification opened it
-    openOrderWhenReady(first?.data?.orderId as string | undefined);
+    openOrderWhenReady(first?.data);
   } catch (e) {
     logger.debug('push not available in this build', e); // Firebase not configured; push is optional
   }

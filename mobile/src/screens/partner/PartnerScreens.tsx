@@ -2,20 +2,24 @@ import { useErrorPopup } from '../../hooks';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Linking, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
+import { uploadPrescription } from '../../api/upload';
 import type { DutyStatus, Order, OrderSummary, PartnerState } from '../../api/types';
 import { Avatar, CallButton } from '../../components/CallButton';
 import { OrderCard } from '../../components/OrderCard';
 import { PaymentSheet, type PaymentInfo } from '../../components/PaymentSheet';
+import { SourceOptions } from '../../components/SourceOptions';
 import { NotificationsRow } from '../../components/NotificationsRow';
 import { CountUp, Enter, Skeleton, Tap, tick } from '../../components/motion';
 import { Button, Card, ErrorView, Icon, Message, Pill, Screen, type IconName } from '../../components/ui';
+import { extractTransactionId } from '../../core/txnId';
 import { notice, showDialog } from '../../dialog';
 import { useLoad } from '../../hooks';
 import { useContentStyle } from '../../layout';
@@ -253,6 +257,9 @@ export function JobScreen({ navigation, route }: NativeStackScreenProps<PartnerS
   const [ref, setRef] = useState('');
   const [received, setReceived] = useState(false);
   const [sheet, setSheet] = useState<PaymentInfo | null>(null);
+  const [proof, setProof] = useState<{ uri: string; name: string; mimeType: string; sizeBytes?: number } | null>(null);
+  const [reading, setReading] = useState(false);
+  const [readNote, setReadNote] = useState<'' | 'read' | 'missing'>('');
   if (loading && !data) return <ListSkeleton />;
   if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
   const o: Order = data!.order;
@@ -271,16 +278,41 @@ export function JobScreen({ navigation, route }: NativeStackScreenProps<PartnerS
   const showPayment = async () => {
     try { setSheet(await endpoints.partner.paymentDetails(o.id)); } catch (e) { setErr((e as Error).message); }
   };
+  /** Screenshot of the customer's payment: the transaction id is read from it on the phone, and the partner can correct it. */
+  const pickProof = async (source: 'camera' | 'gallery') => {
+    setErr(''); setReadNote('');
+    try {
+      if (source === 'camera') { const perm = await ImagePicker.requestCameraPermissionsAsync(); if (!perm.granted) { setErr(t('upload.permission')); return; } }
+      const res = source === 'camera' ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9 }) : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 });
+      if (res.canceled || !res.assets?.[0]) return;
+      const a = res.assets[0];
+      setProof({ uri: a.uri, name: a.fileName ?? `payment-${o.orderNumber}.jpg`, mimeType: a.mimeType ?? 'image/jpeg', sizeBytes: a.fileSize });
+      setReading(true);
+      try {
+        const TextRecognition = (require('@react-native-ml-kit/text-recognition') as { default: { recognize(uri: string): Promise<{ text: string }> } }).default;
+        const found = extractTransactionId((await TextRecognition.recognize(a.uri)).text);
+        if (found) { setRef(found); setReadNote('read'); } else setReadNote('missing');
+      } catch { setReadNote('missing'); } finally { setReading(false); }
+    } catch { setErr(t('admin.billPickFailed')); }
+  };
   const deliver = async () => {
     const ok = await showDialog({ title: t('partner.deliverTitle'), message: cod ? t('partner.deliverMsgCod', { amount: formatMoney(o.quotedAmount ?? 0), via: t(HOW.find((h) => h.key === via)?.label ?? 'partner.viaCash') }) : t('partner.deliverMsg'), icon: 'checkmark-done-circle', confirmLabel: t('partner.markDelivered'), cancelLabel: t('common.cancel') });
-    if (ok) await run('deliver', () => endpoints.partner.delivered(o.id, cod ? { collectedVia: via ?? undefined, reference: ref.trim() || undefined } : {}), () => navigation.goBack());
+    if (!ok) return;
+    await run('deliver', async () => {
+      if (!cod) return endpoints.partner.delivered(o.id, {});
+      if (via === 'cash') return endpoints.partner.delivered(o.id, { collectedVia: 'cash' });
+      const sig = await endpoints.signUpload('proof');
+      const up = await uploadPrescription({ id: 'proof', ...proof! }, sig);
+      return endpoints.partner.delivered(o.id, { collectedVia: via!, reference: ref.trim(), proof: { publicId: up.publicId, mimeType: up.mimeType, resourceType: up.resourceType, sizeBytes: up.sizeBytes } });
+    }, () => navigation.goBack());
   };
   const reject = async () => {
     const ok = await showDialog({ title: t('partner.rejectTitle'), message: t('partner.rejectMsg', { order: o.orderNumber }), icon: 'close-circle', tone: 'danger', confirmLabel: t('partner.reject'), cancelLabel: t('common.cancel') });
     if (ok) await run('reject', () => endpoints.partner.reject(o.id, 'Rejected by partner'), () => navigation.goBack());
   };
 
-  const canDeliver = riding && (!cod || (via !== null && received));
+  const proofOk = via === 'cash' || (!!proof && ref.trim().length >= 6);
+  const canDeliver = riding && (!cod || (via !== null && received && proofOk));
   const footer = pendingRequest ? (
     <View style={s.footerRow}>
       <Button title={t('partner.reject')} variant="outline" onPress={reject} disabled={!!busy} style={{ flex: 1 }} />
@@ -339,7 +371,18 @@ export function JobScreen({ navigation, route }: NativeStackScreenProps<PartnerS
                     </Tap>
                   ))}
                 </View>
-                {via && via !== 'cash' ? <TextInput value={ref} onChangeText={setRef} maxLength={60} placeholder={t('partner.refPlaceholder')} placeholderTextColor={colors.muted} accessibilityLabel={t('partner.refPlaceholder')} style={[type.body, s.refInput]} /> : null}
+                {via && via !== 'cash' ? (
+                  <View style={{ marginTop: spacing.md }}>
+                    <Text style={[type.bodyMedium, { color: colors.text }]}>{t('partner.proofTitle')}</Text>
+                    <Text style={[type.small, { color: colors.secondary }]}>{t('partner.proofHelp')}</Text>
+                    {proof ? <Image source={{ uri: proof.uri }} style={s.proofImg} resizeMode="contain" accessibilityLabel={t('partner.proofTitle')} /> : null}
+                    <SourceOptions options={[{ icon: 'images', label: proof ? t('partner.proofChange') : t('upload.gallery'), onPress: () => { void pickProof('gallery'); } }, { icon: 'camera', label: t('upload.camera'), onPress: () => { void pickProof('camera'); } }]} />
+                    {reading ? <View style={s.reading}><ActivityIndicator color={colors.primary} /><Text style={[type.small, { color: colors.secondary }]}>{t('partner.reading')}</Text></View> : null}
+                    <Text style={[type.smallMedium, { color: colors.text, marginTop: spacing.md }]}>{t('partner.txnLabel')} *</Text>
+                    <TextInput value={ref} onChangeText={(v) => setRef(v.replace(/[^A-Za-z0-9._\-/]/g, ''))} maxLength={40} autoCapitalize="characters" placeholder={t('partner.refPlaceholder')} placeholderTextColor={colors.muted} accessibilityLabel={t('partner.txnLabel')} style={[type.body, s.refInput, { marginTop: 6 }]} />
+                    {readNote ? <Text style={[type.small, { color: readNote === 'read' ? colors.green : colors.amber, marginTop: 4 }]}>{readNote === 'read' ? t('partner.idRead') : t('partner.idNotFound')}</Text> : null}
+                  </View>
+                ) : null}
                 <Tap accessibilityRole="checkbox" accessibilityState={{ checked: received }} onPress={() => setReceived((v) => !v)} scaleTo={0.98} style={s.ack}>
                   <Icon name={received ? 'checkbox' : 'square-outline'} size={26} color={received ? colors.green : colors.muted} />
                   <Text style={[type.small, { color: colors.text, flex: 1 }]}>{t('partner.receivedAck', { amount: formatMoney(o.quotedAmount ?? 0) })}</Text>
@@ -435,6 +478,8 @@ const s = StyleSheet.create({
   howRow: { flexDirection: 'row', gap: 10 },
   how: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
   howOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  proofImg: { width: '100%', height: 220, borderRadius: radius.md, backgroundColor: colors.card, marginTop: spacing.sm },
+  reading: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.sm },
   refInput: { marginTop: spacing.md, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, color: colors.text },
   ack: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.border },
   footerRow: { flexDirection: 'row', gap: 12 },

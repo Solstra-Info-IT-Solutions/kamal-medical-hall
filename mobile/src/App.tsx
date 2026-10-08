@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnimatedSplash } from './components/AnimatedSplash';
 import { DialogHost } from './components/DialogHost';
 import { FileViewerHost } from './components/FileViewer';
+import { ClosingAlarm } from './components/ClosingAlarm';
 import { NotificationToast } from './components/NotificationToast';
 import { warmUp } from './core/network/socketClient';
 import i18n, { restoreLanguage } from './localization';
@@ -48,6 +49,7 @@ export function App() {
         <StatusBar style="dark" />
         <Navigation />
         <NotificationToast />
+        <ClosingAlarm />
         <DialogHost />
         <FileViewerHost />
         {showSplash ? <AnimatedSplash tagline={i18n.t('brand.tagline')} /> : null}

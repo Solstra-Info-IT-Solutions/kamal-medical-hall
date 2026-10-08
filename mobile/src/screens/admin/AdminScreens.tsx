@@ -133,7 +133,7 @@ export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Das
           <Text style={[type.h3, s.sec]}>{t('admin.secManage')}</Text>
           <ResponsiveGrid columns={tileColumns}>
             {([
-              ['bar-chart', 'admin.revenue', 'Revenue'], ['download', 'admin.exports', 'Exports'], ['megaphone', 'admin.broadcast', 'Broadcast'],
+              ['bar-chart', 'admin.revenue', 'Revenue'], ['wallet', 'cash.title', 'Cash'], ['download', 'admin.exports', 'Exports'], ['megaphone', 'admin.broadcast', 'Broadcast'],
               ['card', 'admin.paymentDetails', 'PaymentDetails'], ['location', 'admin.pincodes', 'Pincodes'], ['calendar', 'admin.attendance', 'Attendance'],
               ['document-text', 'admin.terms', 'Terms'], ['settings', 'admin.settings', 'StoreSettings'],
             ] as const).map(([icon, label, route]) => (
@@ -336,6 +336,22 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
           {o.rejectionReason || o.cancelReason ? <Text style={[type.body, { color: colors.red, marginTop: spacing.sm }]}>{o.rejectionReason ?? o.cancelReason}</Text> : null}
         </Card>
       </Enter>
+
+      {o.collection ? (
+        <Enter index={3}>
+          <Card style={s.block}>
+            <Text style={[type.h3, { color: colors.text }]}>{t('cash.collectedTitle')}</Text>
+            <Text style={[type.body, { color: colors.text, marginTop: 4 }]}>{t(`partner.via${o.collection.via === 'cash' ? 'Cash' : o.collection.via === 'upi' ? 'Upi' : 'Bank'}`)} · {formatMoney(o.quotedAmount ?? 0)}{o.collection.collectedBy ? ` · ${o.collection.collectedBy}` : ''}</Text>
+            {o.collection.reference ? <Text style={[type.bodyMedium, { color: colors.primary, marginTop: 4 }]} selectable>{t('partner.txnLabel')}: {o.collection.reference}</Text> : null}
+            {o.collection.proof?.url ? <Button small variant="outline" icon="image" title={t('cash.viewProof')} style={{ marginTop: spacing.sm }} onPress={() => { void openFile({ title: t('cash.proofName', { order: o.orderNumber }), urls: [o.collection!.proof!.url!], fallbackUrl: o.collection!.proof!.url }); }} /> : null}
+            {o.collection.via === 'cash' ? (
+              o.collection.cashSettledAt
+                ? <Pill text={t('cash.received', { time: formatDateTime(o.collection.cashSettledAt) })} tone="green" />
+                : <><Pill text={t('cash.withPartner')} tone="amber" />{o.partner ? <Button title={t('cash.markReceived')} icon="checkmark-done" style={{ marginTop: spacing.sm }} loading={busy === 'settle'} onPress={async () => { const ok = await showDialog({ title: t('cash.confirmTitle', { name: o.collection!.collectedBy ?? '' }), message: t('cash.confirmOne', { amount: formatMoney(o.quotedAmount ?? 0), order: o.orderNumber }), icon: 'cash', confirmLabel: t('cash.markReceived'), cancelLabel: t('common.cancel') }); if (ok) await run('settle', async () => { await endpoints.admin.settleCash(o.partner!.id, [o.id]); return endpoints.order(o.id); }); }} /> : null}</>
+            ) : <Pill text={t('cash.paidOnline')} tone="green" />}
+          </Card>
+        </Enter>
+      ) : null}
 
       {o.partner ? (
         <Enter index={3}>
@@ -748,6 +764,7 @@ export function MoreScreen(_p: BottomTabScreenProps<AdminTabParamList, 'More'>) 
         {row('chatbubbles-outline', t('admin.chats'), () => nav.navigate('AdminChats'))}
         {row('star-outline', t('admin.reviews'), () => nav.navigate('AdminReviews'))}
         {row('bar-chart-outline', t('admin.revenue'), () => nav.navigate('Revenue'))}
+        {row('wallet-outline', t('cash.title'), () => nav.navigate('Cash'))}
         {row('download-outline', t('admin.exports'), () => nav.navigate('Exports'))}
         {row('megaphone-outline', t('admin.broadcast'), () => nav.navigate('Broadcast'))}
         {row('card-outline', t('admin.paymentDetails'), () => nav.navigate('PaymentDetails'))}

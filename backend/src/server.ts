@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { observe } from './observability.js';
 import { cachePolicy, corsMiddleware, generalLimit, httpGate, uploadSignLimit, writeLimit } from './security.js';
+import { closingAlertTick } from './cash.js';
 import { config } from './config.js';
 import { pool } from './db.js';
 import { errorHandler } from './http.js';
@@ -13,6 +14,7 @@ import { sweepDuty } from './partnerState.js';
 import { attachRealtime } from './realtime.js';
 import { chatAdmin, chatRouter } from './routes/chat.js';
 import { adminExtras, exportDownload, reviewsRouter } from './routes/extras.js';
+import { otpRouter } from './otp.js';
 import { general } from './routes/general.js';
 import { orders, razorpayWebhook } from './routes/orders.js';
 import { adminRouter, partnerRouter } from './routes/staff.js';
@@ -37,6 +39,7 @@ export function createApp() {
   app.post('/orders', writeLimit);
   app.post('/admin/broadcast', writeLimit);
   app.get('/admin/export-link', writeLimit);
+  app.use('/auth/otp', otpRouter);
   app.use('/', general);
   app.use('/orders', orders);
   app.use('/chat', chatRouter);
@@ -74,6 +77,7 @@ export async function bootstrap() {
 if (process.argv[1]?.endsWith('server.ts') || process.argv[1]?.endsWith('server.js')) {
   await bootstrap();
   await sweepDuty().catch((e) => console.error('duty sweep failed', e));
+  setInterval(() => { void closingAlertTick().catch((e) => console.error('closing alert failed', e)); }, 60 * 1000).unref();
   setInterval(() => { void sweepDuty().catch((e) => console.error('duty sweep failed', e)); }, 10 * 60 * 1000).unref();
   createServer().listen(config.port, () => console.log(`API listening on :${config.port} (auth: ${config.authMode})`));
 }

@@ -33,7 +33,7 @@ export function normalisePhone(raw: string): string {
 }
 
 export async function verifyToken(token: string): Promise<{ uid: string; phone: string }> {
-  if (config.authMode === 'dev') {
+  if (config.authMode === 'dev' || config.authMode === 'twilio') { // both issue our own signed session tokens
     const payload = jwt.verify(token, config.jwtSecret) as { sub: string; phone: string };
     return { uid: payload.sub, phone: payload.phone };
   }
@@ -46,6 +46,11 @@ export async function verifyToken(token: string): Promise<{ uid: string; phone: 
 export async function deleteFirebaseUser(uid: string | null) {
   if (!uid || config.authMode !== 'firebase' || uid.startsWith('dev-')) return;
   try { await getAuth(firebase()).deleteUser(uid); } catch (e) { console.error('firebase deleteUser failed', e); }
+}
+
+/** Session token issued after Twilio confirmed the OTP. Lasts 30 days. */
+export function signSessionToken(phone: string) {
+  return jwt.sign({ sub: `tw-${phone}`, phone }, config.jwtSecret, { expiresIn: '30d' });
 }
 
 export function signDevToken(phone: string) {

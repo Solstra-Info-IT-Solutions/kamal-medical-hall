@@ -4,7 +4,7 @@ import { endpoints } from '../api/endpoints';
 import { ApiError } from '../api/client';
 
 export interface OtpProvider {
-  mode: 'dev' | 'firebase';
+  mode: 'dev' | 'firebase' | 'twilio';
   sendOtp(phone: string): Promise<void>;
   /** Verifies the code and returns a bearer token for the backend. */
   confirmOtp(code: string): Promise<string>;
@@ -15,7 +15,7 @@ export interface OtpProvider {
 }
 
 const TOKEN_KEY = 'kmh.devToken';
-const secure = {
+export const secure = {
   get: (k: string) => (Platform.OS === 'web' ? Promise.resolve(globalThis.localStorage?.getItem(k) ?? null) : SecureStore.getItemAsync(k)),
   set: (k: string, v: string) => (Platform.OS === 'web' ? Promise.resolve(void globalThis.localStorage?.setItem(k, v)) : SecureStore.setItemAsync(k, v)),
   del: (k: string) => (Platform.OS === 'web' ? Promise.resolve(void globalThis.localStorage?.removeItem(k)) : SecureStore.deleteItemAsync(k)),

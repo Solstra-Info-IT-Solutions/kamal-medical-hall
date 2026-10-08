@@ -7,6 +7,7 @@ import { Platform, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { Icon, type IconName } from '../components/ui';
 import { LoginScreen, OtpScreen, SignupScreen, WelcomeScreen } from '../screens/auth/AuthScreens';
+import { CashScreen } from '../screens/admin/CashScreen';
 import { AdminChatScreen, AdminChatsScreen, AdminReviewsScreen, BroadcastScreen, CustomerDetailScreen, ExportsScreen, RevenueScreen } from '../screens/admin/AdminMore';
 import { AllOrdersScreen, AttendanceScreen, CustomersScreen, DashboardScreen, MoreScreen, OrderReviewScreen, OrdersByStatusScreen, PartnerAreasScreen, PaymentDetailsScreen, PincodesScreen, ReportsScreen, RequestsScreen, StoreSettingsScreen, TeamScreen, TermsScreen } from '../screens/admin/AdminScreens';
 import { AddressFormScreen, AddressesScreen } from '../screens/customer/AddressScreens';
@@ -161,6 +162,7 @@ function AdminNavigator() {
       <AStack.Screen name="PartnerAreas" component={PartnerAreasScreen} options={({ route }) => ({ title: route.params.name })} />
       <AStack.Screen name="OrdersByStatus" component={OrdersByStatusScreen} options={({ route }) => ({ title: route.params.title })} />
       <AStack.Screen name="Revenue" component={RevenueScreen} options={{ title: t('admin.revenue') }} />
+      <AStack.Screen name="Cash" component={CashScreen} options={{ title: t('cash.title') }} />
       <AStack.Screen name="AdminReviews" component={AdminReviewsScreen} options={{ title: t('admin.reviews') }} />
       <AStack.Screen name="AdminChats" component={AdminChatsScreen} options={{ title: t('admin.chats') }} />
       <AStack.Screen name="AdminChat" component={AdminChatScreen} options={({ route }) => ({ title: route.params.name })} />

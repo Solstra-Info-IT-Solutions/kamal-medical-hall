@@ -10,7 +10,7 @@ import { uploadPrescription } from '../../api/upload';
 import { StarRating, ReviewCard } from '../../components/ReviewParts';
 import { SourceOptions } from '../../components/SourceOptions';
 import { tick } from '../../components/motion';
-import { Button, Card, ErrorView, Icon, Message, Screen, TextField } from '../../components/ui';
+import { Button, Card, ErrorView, Icon, Loading, Message, Screen, TextField } from '../../components/ui';
 import { notice, showDialog } from '../../dialog';
 import { guessMime } from '../../fileKinds';
 import { useErrorPopup, useLoad } from '../../hooks';
@@ -64,7 +64,7 @@ export function ChatScreen({ navigation, route }: NativeStackScreenProps<Custome
     try { await endpoints.chat.close(); await reload(); } catch (e) { setErr((e as Error).message); }
   };
 
-  if (loading && !data) return <Message icon="chatbubbles-outline" title={t('chat.loading')} />;
+  if (loading && !data) return <Loading />;
   if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
   return (
     <SafeAreaView style={s.fill} edges={['bottom', 'left', 'right']}>
@@ -168,7 +168,7 @@ export function WriteReviewScreen({ navigation, route }: NativeStackScreenProps<
 export function MyReviewsScreen() {
   const { t } = useTranslation();
   const { data, error, loading, reload } = useLoad(() => endpoints.reviews.mine(), ['notification']);
-  if (loading && !data) return <Message icon="star-outline" title={t('reviews.loading')} />;
+  if (loading && !data) return <Loading />;
   if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
   const all = data?.reviews ?? [];
   const approved = all.filter((r) => r.status === 'approved');

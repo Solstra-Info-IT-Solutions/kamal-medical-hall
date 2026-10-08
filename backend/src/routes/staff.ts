@@ -4,6 +4,7 @@ import { authed, normalisePhone, requireRole } from '../auth.js';
 import { config } from '../config.js';
 import { pool, tx } from '../db.js';
 import { bad, bad as bad_, conflict, notFound, parse } from '../http.js';
+import { cashToCollect, closingMessage, closingSummary, settleCash } from '../cash.js';
 import { notify, notifyAdmins } from '../notify.js';
 import { CANCELLABLE, loadOrder, transition } from '../orderService.js';
 import { closeStore, reopenStore, setDutyStatus, type DutyStatus } from '../dutyService.js';
@@ -41,6 +42,19 @@ const DUTY_STATUS = `case when a.status in ('leave','paid_leave') then 'leave' w
   when (${EFFECTIVE_STATE}) = 'break' then 'on_break' when d.on_duty and d.on_duty_day = ${TODAY_IST} then 'on_duty' else 'off_duty' end`;
 
 // ============================================================ Admin
+/** Cash that delivery partners collected and still have to hand over, per partner. */
+adminRouter.get('/cash', async (_req, res) => { res.json(await cashToCollect()); });
+/** Admin received the cash from a partner (all of it, or only the listed orders). */
+adminRouter.post('/cash/settle', async (req, res) => {
+  const b = parse(z.object({ partnerId: z.string().uuid(), orderIds: z.array(z.string().uuid()).max(200).optional() }), req.body);
+  const r = await settleCash(req.user!.id, b.partnerId, b.orderIds);
+  if (!r.settled) throw conflict('There is no cash to collect from this partner.', 'nothing_to_settle');
+  emitAdmins('cash:update', { partnerId: b.partnerId });
+  res.json({ ...r, ...(await cashToCollect()) });
+});
+/** What the "store closes in one hour" alert shows, available on demand too. */
+adminRouter.get('/closing-summary', async (_req, res) => { const s = await closingSummary(); res.json({ ...s, message: closingMessage(s) }); });
+
 adminRouter.get('/dashboard', async (_req, res) => {
   const { rows } = await pool.query(`
     select count(*) filter (where status = 'requested') as requested,
@@ -537,22 +551,41 @@ partnerRouter.get('/orders/:id/payment-details', async (req, res) => {
  * The partner then rides back; they become available again automatically once they reach the shop.
  */
 partnerRouter.post('/orders/:id/delivered', async (req, res) => {
-  const b = parse(z.object({ collectedVia: z.enum(['cash', 'upi', 'bank']).optional(), reference: z.string().trim().max(60).optional() }), req.body ?? {});
+  const b = parse(z.object({
+    collectedVia: z.enum(['cash', 'upi', 'bank']).optional(),
+    /** UPI / bank transaction id read from the payment screenshot. */
+    reference: z.string().trim().min(6).max(40).regex(/^[A-Za-z0-9._\-/]+$/, 'Transaction id has unexpected characters').optional(),
+    proof: z.object({ publicId: z.string().max(300), mimeType: z.string().max(100), resourceType: z.enum(['image', 'raw', 'video']).default('image'), sizeBytes: z.number().int().max(15_000_000).optional() }).optional(),
+  }), req.body ?? {});
   const order = await loadOrder(String(req.params.id), req.user!);
   const cod = order.paymentMethod === 'cod';
   if (cod && !b.collectedVia) throw bad('Record how the customer paid before completing the delivery.', 'payment_required');
+  // Online payment (UPI / bank transfer) needs the transaction id and the screenshot of the payment.
+  const online = cod && b.collectedVia !== 'cash';
+  if (online && (!b.reference || !b.proof)) throw bad('Add the payment screenshot and its transaction id.', 'payment_proof_required');
+  if (b.proof && !b.proof.publicId.startsWith(`proofs/${req.user!.id}/`)) throw bad('That file does not belong to you.', 'bad_proof');
   const store = await storeLocation();
   await tx(async (c) => {
-    await transition(c, order.id, ['out_for_delivery'], 'delivered', req.user!.id, cod ? { payment_status: 'cod_collected' } : {});
-    if (cod) await c.query("update payments set status = 'cod_collected', collected_by = $2, collected_via = $3, collection_ref = $4, collected_at = now() where order_id = $1 and method = 'cod'", [order.id, req.user!.id, b.collectedVia, b.reference ?? null]);
+    // UPI / bank with a transaction id is already in the shop's account: fully paid. Cash stays "collected" until the admin receives it from the partner.
+    await transition(c, order.id, ['out_for_delivery'], 'delivered', req.user!.id, cod ? { payment_status: online ? 'paid' : 'cod_collected' } : {});
+    if (cod) {
+      await c.query("update payments set status = $5, collected_by = $2, collected_via = $3, collection_ref = $4, collected_at = now(), proof_public_id = $6, proof_mime = $7, proof_resource_type = $8 where order_id = $1 and method = 'cod'",
+        [order.id, req.user!.id, b.collectedVia, b.reference ?? null, online ? 'paid' : 'cod_collected', b.proof?.publicId ?? null, b.proof?.mimeType ?? null, b.proof?.resourceType ?? null]);
+    }
     await c.query("update assignments set status = 'completed', completed_at = now() where order_id = $1 and partner_id = $2 and status = 'accepted'", [order.id, req.user!.id]);
     // With a known shop location the partner rides back and is freed on arrival; without one they are freed immediately.
     if (store) await setPartnerState(c, req.user!.id, 'returning'); else await releasePartner(c, req.user!.id);
     await notify(order.customer!.id, order.id, 'delivered', 'Order delivered', `${order.orderNumber} has been delivered. Thank you!`, c);
-    await notifyAdmins(order.id, 'delivered', 'Order delivered', `${order.orderNumber} delivered${cod ? ` (paid by ${b.collectedVia})` : ''}`, c);
+    const who = req.user!.name ?? 'The delivery partner';
+    const amount = `₹${Math.round(order.quotedAmount ?? 0).toLocaleString('en-IN')}`;
+    if (cod && b.collectedVia === 'cash') await notifyAdmins(order.id, 'cash_to_collect', 'Collect cash from delivery partner', `${who} collected ${amount} cash for ${order.orderNumber}. Please collect it from them.`, c);
+    else await notifyAdmins(order.id, 'delivered', 'Order delivered', `${order.orderNumber} delivered${cod ? ` (paid by ${b.collectedVia}, ref ${b.reference})` : ''}`, c);
   });
   res.json({ order: await loadOrder(order.id, req.user!) });
 });
+
+/** Partner uploads the payment screenshot to their own folder (signed upload, like other files). */
+
 
 /**
  * The partner app reports its position while a delivery or the ride back is in progress.

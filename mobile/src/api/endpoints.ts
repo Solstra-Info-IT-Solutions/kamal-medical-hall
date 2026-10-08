@@ -1,5 +1,6 @@
 import { api } from './client';
-import type { Address, AddressInput, AppNotification, AdminChatThread, Attendance, ChatMessage, ChatQueue, CustomerDetail, DutyStatus, ExportKind, Order, OrderSummary, Overview, Partner, PartnerAttendance, Review, Revenue, PartnerState, PaymentDetails, PaymentMethod, StoreConfig, StoreSettings, Terms, Tracking, User } from './types';
+import type {
+  CashSummary, ClosingSummary, Address, AddressInput, AppNotification, AdminChatThread, Attendance, ChatMessage, ChatQueue, CustomerDetail, DutyStatus, ExportKind, Order, OrderSummary, Overview, Partner, PartnerAttendance, Review, Revenue, PartnerState, PaymentDetails, PaymentMethod, StoreConfig, StoreSettings, Terms, Tracking, User } from './types';
 
 export interface RazorpayIntent { orderId: string; amount: number; currency: string; keyId: string }
 export interface UploadSignature { cloudName: string; apiKey: string; signature: string; timestamp: number; folder: string; type: string }
@@ -25,7 +26,7 @@ export const endpoints = {
   updateAddress: (id: string, b: AddressInput) => api<{ address: Address }>('PUT', `/addresses/${id}`, b),
   deleteAddress: (id: string) => api<void>('DELETE', `/addresses/${id}`),
 
-  signUpload: (purpose: 'prescription' | 'bill' | 'avatar' | 'review' = 'prescription') => api<UploadSignature>('POST', '/uploads/sign', { purpose }),
+  signUpload: (purpose: 'prescription' | 'bill' | 'avatar' | 'review' | 'proof' = 'prescription') => api<UploadSignature>('POST', '/uploads/sign', { purpose }),
   invoiceLink: (orderId: string) => api<{ url: string }>('GET', `/orders/${orderId}/invoice-link`),
   createOrder: (b: NewOrderInput) => api<{ order: Order }>('POST', '/orders', b, { timeoutMs: 30000, retry: 'always' /* safe: the idempotency key makes a repeat return the same order */ }),
   orders: (scope: 'completed' | 'cancelled' | 'active', offset = 0, range?: { from?: string; to?: string }) => api<{ orders: OrderSummary[]; hasMore: boolean }>('GET', `/orders?${new URLSearchParams({ scope, offset: String(offset), ...(range?.from ? { from: range.from } : {}), ...(range?.to ? { to: range.to } : {}) })}`),
@@ -59,6 +60,9 @@ export const endpoints = {
   admin: {
     overview: () => api<Overview>('GET', '/admin/overview'),
     revenue: (days = 30) => api<Revenue>('GET', `/admin/revenue?days=${days}`),
+    cash: () => api<CashSummary>('GET', '/admin/cash'),
+    settleCash: (partnerId: string, orderIds?: string[]) => api<CashSummary & { settled: number; amount: number }>('POST', '/admin/cash/settle', { partnerId, orderIds }),
+    closingSummary: () => api<ClosingSummary>('GET', '/admin/closing-summary'),
     customer: (id: string) => api<CustomerDetail>('GET', `/admin/customers/${id}`),
     broadcast: (title: string, body: string) => api<{ sent: number }>('POST', '/admin/broadcast', { title, body }),
     exportLink: (kind: ExportKind, days = 30) => api<{ url: string }>('GET', `/admin/export-link?kind=${kind}&days=${days}`),
@@ -105,7 +109,7 @@ export const endpoints = {
     accept: (id: string) => api<{ order: Order }>('POST', `/partner/orders/${id}/accept`),
     reject: (id: string, reason?: string) => api<{ ok: boolean }>('POST', `/partner/orders/${id}/reject`, { reason }),
     outForDelivery: (id: string) => api<{ order: Order }>('POST', `/partner/orders/${id}/out-for-delivery`),
-    delivered: (id: string, b: { collectedVia?: 'cash' | 'upi' | 'bank'; reference?: string }) => api<{ order: Order }>('POST', `/partner/orders/${id}/delivered`, b),
+    delivered: (id: string, b: { collectedVia?: 'cash' | 'upi' | 'bank'; reference?: string; proof?: { publicId: string; mimeType: string; resourceType: string; sizeBytes?: number } }) => api<{ order: Order }>('POST', `/partner/orders/${id}/delivered`, b),
     paymentDetails: (id: string) => api<PaymentDetails & { amount: number; orderNumber: string; upiUri: string | null; configured: boolean }>('GET', `/partner/orders/${id}/payment-details`),
     location: (lat: number, lng: number) => api<{ state: PartnerState; arrived: boolean }>('POST', '/partner/location', { lat, lng }, { timeoutMs: 10000 }),
     arrived: () => api<{ state: PartnerState }>('POST', '/partner/arrived'),

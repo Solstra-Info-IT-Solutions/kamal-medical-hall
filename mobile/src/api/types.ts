@@ -26,6 +26,8 @@ export interface Order {
   deliveryDate: string; deliverySlot: string; quotedAmount: number | null; quoteExpiresAt: string | null;
   paymentMethod: PaymentMethod | null; paymentStatus: string | null; rejectionReason: string | null; cancelReason: string | null;
   createdAt: string;
+  /** Staff only: how a cash-on-delivery order was paid, with the proof the partner uploaded. */
+  collection?: { via: 'cash' | 'upi' | 'bank'; reference: string | null; collectedAt: string; collectedBy: string | null; cashSettledAt: string | null; proof: { url: string | null; mimeType: string } | null } | null;
   items: { id: string; name: string; quantity: number }[];
   prescriptions: { id: string; mimeType: string; sizeBytes: number | null; url: string | null; name?: string; previewUrls?: string[] }[];
   history: { status: OrderStatus; reason: string | null; created_at: string }[];
@@ -112,3 +114,7 @@ export interface CustomerDetail {
   orders: { id: string; orderNumber: string; status: OrderStatus; amount: number | null; createdAt: string }[];
 }
 export type ExportKind = 'orders' | 'revenue' | 'customers' | 'payments' | 'attendance' | 'reviews';
+
+export interface CashPartner { partnerId: string; name: string; phone: string; total: number; orders: { orderId: string; orderNumber: string; amount: number; collectedAt: string }[] }
+export interface CashSummary { total: number; partners: CashPartner[] }
+export interface ClosingSummary { closingTime: string; isOpen: boolean; revenue: { orders: number; total: number; online: number; cod: number }; cash: CashSummary; message: string }

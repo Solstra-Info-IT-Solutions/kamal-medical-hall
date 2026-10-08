@@ -7,7 +7,7 @@ import Animated, { FadeIn, FadeInDown, interpolate, interpolateColor, useAnimate
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useContentStyle, useLayout } from '../layout';
 import { colors, radius, spacing, type } from '../theme';
-import { Float, Ripples, Tap, useShake } from './motion';
+import { Float, Ripples, Skeleton, Tap, useShake } from './motion';
 
 export type IconName = keyof typeof Ionicons.glyphMap;
 export const Icon = ({ name, size = 24, color = colors.primary }: { name: IconName; size?: number; color?: string }) => <Ionicons name={name} size={size} color={color} />;
@@ -110,7 +110,8 @@ const PILL = {
 export const Pill = ({ text, tone = 'blue' }: { text: string; tone?: keyof typeof PILL }) =>
   <Animated.View entering={FadeIn.duration(300)} style={{ backgroundColor: PILL[tone].bg, paddingHorizontal: 12, paddingVertical: 3, borderRadius: radius.md }}><Text style={[type.smallMedium, { color: PILL[tone].fg }]}>{text}</Text></Animated.View>;
 
-export const Loading = () => <View style={s.center}><View style={s.loadWrap}><Ripples size={90} count={2} /><Float amplitude={4} duration={900}><Icon name="medkit" size={36} /></Float></View></View>;
+/** Shown while a page loads: shimmering placeholder blocks instead of a spinner. */
+export const Loading = () => <View style={{ flex: 1, padding: spacing.lg, gap: 12 }}><Skeleton h={28} w="55%" r={10} />{[0, 1, 2, 3].map((i) => <Skeleton key={i} h={84} r={16} />)}</View>;
 
 export function Message({ icon = 'information-circle-outline', title, text, actionLabel, onAction }: { icon?: IconName; title: string; text?: string; actionLabel?: string; onAction?: () => void }) {
   return (

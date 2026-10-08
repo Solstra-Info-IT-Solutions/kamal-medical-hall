@@ -138,8 +138,15 @@ describe('order lifecycle with partner duty, acceptance and return-to-shop', () 
     assert.match(pay.upiUri, /^upi:\/\/pay\?pa=kamalmedical%40upi/);
     assert.equal(pay.bankIfsc, 'SBIN0001234');
     assert.equal((await call('POST', `/partner/orders/${id}/delivered`, partner.token, {})).body.error.code, 'payment_required');
-    const done = await call('POST', `/partner/orders/${id}/delivered`, partner.token, { collectedVia: 'upi', reference: 'UTR12345' });
+    // UPI needs the transaction id and the payment screenshot (uploaded into the partner's own folder).
+    assert.equal((await call('POST', `/partner/orders/${id}/delivered`, partner.token, { collectedVia: 'upi', reference: 'UTR12345' })).body.error.code, 'payment_proof_required');
+    assert.equal((await call('POST', `/partner/orders/${id}/delivered`, partner.token, { collectedVia: 'upi', reference: 'UTR12345', proof: { publicId: 'proofs/someone-else/shot', mimeType: 'image/jpeg' } })).body.error.code, 'bad_proof');
+    const me = (await call('GET', '/me', partner.token)).body.user;
+    const done = await call('POST', `/partner/orders/${id}/delivered`, partner.token, { collectedVia: 'upi', reference: 'UTR12345', proof: { publicId: `proofs/${me.id}/shot-1`, mimeType: 'image/jpeg' } });
     assert.equal(done.body.order.status, 'delivered');
+    assert.equal(done.body.order.paymentStatus, 'paid', 'UPI with a transaction id is paid straight away');
+    const seen = (await call('GET', `/orders/${id}`, admin.token)).body.order.collection;
+    assert.equal(seen.via, 'upi'); assert.equal(seen.reference, 'UTR12345'); assert.equal(seen.collectedBy, me.name);
 
     // Back to the shop: stays "returning" until the partner is actually at the shop, then becomes available by itself.
     assert.equal((await call('GET', '/partner/me', partner.token)).body.state, 'returning');

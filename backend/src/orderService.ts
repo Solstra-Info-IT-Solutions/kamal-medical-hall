@@ -22,14 +22,16 @@ export async function loadOrder(id: string, viewer: AuthUser, db: Queryable = po
   const allowed = viewer.role === 'admin' || (viewer.role === 'customer' && o.customer_id === viewer.id) || (viewer.role === 'delivery_partner' && o.partner_id === viewer.id);
   if (!allowed) throw notFound('Order not found'); // do not reveal other users' orders
   // One parallel batch: this used to be a batch followed by three more sequential queries (each a cross-region round trip).
-  const [items, rx, history, storeRow, reviewRow, partnerFlag] = await Promise.all([
+  const [items, rx, history, storeRow, reviewRow, partnerFlag, collectionRow] = await Promise.all([
     db.query('select id, name, quantity from order_items where order_id = $1 order by name', [o.id]),
     db.query('select id, public_id, mime_type, size_bytes, resource_type from prescriptions where order_id = $1', [o.id]),
     db.query('select status, reason, created_at from status_history where order_id = $1 order by created_at', [o.id]),
     db.query('select address, phone from store_settings where id = 1'),
     viewer.role === 'delivery_partner' ? Promise.resolve({ rows: [] as Array<Record<string, unknown>> }) : db.query('select id, rating, status from reviews where order_id = $1', [o.id]),
     viewer.role === 'delivery_partner' ? db.query('select can_call_customer from delivery_partners where user_id = $1', [viewer.id]) : Promise.resolve({ rows: [] as Array<Record<string, unknown>> }),
+    viewer.role === 'customer' ? Promise.resolve({ rows: [] as Array<Record<string, any>> }) : db.query("select p.collected_via, p.collection_ref, p.collected_at, p.cash_settled_at, p.proof_public_id, p.proof_mime, p.proof_resource_type, u.name as collector from payments p left join users u on u.id = p.collected_by where p.order_id = $1 and p.collected_via is not null limit 1", [o.id]),
   ]);
+  const col = collectionRow.rows[0] as Record<string, any> | undefined;
   const staffView = viewer.role !== 'customer';
   const rv = (reviewRow.rows[0] as { id: string; rating: number; status: string } | undefined) ?? null;
   const store = storeRow.rows[0];
@@ -59,6 +61,10 @@ export async function loadOrder(id: string, viewer: AuthUser, db: Queryable = po
     items: items.rows,
     // Partners never see prescriptions.
     prescriptions: viewer.role === 'delivery_partner' ? [] : rx.rows.map((r) => ({ id: r.id, mimeType: r.mime_type, sizeBytes: r.size_bytes, name: String(r.public_id).split('/').pop(), url: signedPrescriptionUrl(r.public_id, r.mime_type, r.resource_type), previewUrls: previewUrls(r.public_id, r.mime_type, r.resource_type as ResourceType) })),
+    collection: col ? {
+      via: col.collected_via, reference: col.collection_ref, collectedAt: col.collected_at, collectedBy: col.collector, cashSettledAt: col.cash_settled_at,
+      proof: col.proof_public_id ? { url: signedPrescriptionUrl(col.proof_public_id, col.proof_mime, col.proof_resource_type), mimeType: col.proof_mime } : null,
+    } : null,
     history: history.rows, deliveredAt, bill, review: rv ? { id: rv.id, rating: rv.rating, status: rv.status } : null,
     store: { name: 'Kamal Medical Hall', address: store?.address ?? null, phone: store?.phone ?? null },
     reviewedBy: staffView ? o.reviewed_by : undefined,

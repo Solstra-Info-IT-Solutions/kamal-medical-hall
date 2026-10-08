@@ -11,3 +11,10 @@ export function openOrderFromNotification(orderId: string | null) {
   else if (role === 'delivery_partner') navigationRef.navigate('Job', { orderId });
   else navigationRef.navigate('OrderDetail', { orderId });
 }
+
+/** Where a tapped notification leads: cash notifications open the admin's cash screen, everything else the order. */
+export function openFromNotification(n: { orderId?: string | null; type?: string | null }) {
+  if (!navigationRef.isReady()) return;
+  if (useSession.getState().user?.role === 'admin' && (n.type === 'closing_alert' || n.type === 'cash_to_collect')) { navigationRef.navigate('Cash'); return; }
+  openOrderFromNotification(n.orderId ?? null);
+}

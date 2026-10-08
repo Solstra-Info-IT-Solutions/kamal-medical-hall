@@ -135,10 +135,10 @@ general.delete('/addresses/:id', authed, async (req, res) => {
 
 // ---- Uploads, notifications, devices ---------------------------------------
 general.post('/uploads/sign', authed, (req, res) => {
-  const { purpose } = parse(z.object({ purpose: z.enum(['prescription', 'bill', 'avatar', 'review']).default('prescription') }), req.body ?? {});
-  // Customers upload prescriptions and review photos, only the store admin uploads bills, anyone can set a profile picture.
+  const { purpose } = parse(z.object({ purpose: z.enum(['prescription', 'bill', 'avatar', 'review', 'proof']).default('prescription') }), req.body ?? {});
+  // Customers upload prescriptions and review photos, only the store admin uploads bills, delivery partners upload payment screenshots, anyone can set a profile picture.
   const role = req.user!.role;
-  const allowed = purpose === 'bill' ? role === 'admin' : purpose === 'avatar' ? true : role === 'customer';
+  const allowed = purpose === 'bill' ? role === 'admin' : purpose === 'proof' ? role === 'delivery_partner' : purpose === 'avatar' ? true : role === 'customer';
   if (!allowed) throw new HttpError(403, 'forbidden', 'Not allowed');
   res.json(signUpload(req.user!.id, purpose));
 });

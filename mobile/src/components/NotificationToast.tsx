@@ -5,11 +5,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { onRealtime } from '../realtime';
 import { useSession } from '../store/session';
 import { colors, radius, spacing, type } from '../theme';
-import { openOrderFromNotification } from '../navigation/ref';
+import { openFromNotification } from '../navigation/ref';
 import { Tap, tick } from './motion';
 import { Icon } from './ui';
 
-interface Toast { id: string; title: string; body: string; orderId: string | null }
+interface Toast { id: string; type?: string; title: string; body: string; orderId: string | null }
 
 /** Slide-down banner for notifications that arrive over the live socket while the app is open. */
 export function NotificationToast() {
@@ -32,7 +32,7 @@ export function NotificationToast() {
   if (!toast) return null;
   return (
     <Animated.View key={toast.id} entering={SlideInUp.duration(380).springify().damping(15)} exiting={SlideOutUp.duration(250)} style={[s.wrap, { top: insets.top + spacing.sm }]}>
-      <Tap accessibilityRole="alert" onPress={() => { setToast(null); openOrderFromNotification(toast.orderId); }} scaleTo={0.98} style={s.card}>
+      <Tap accessibilityRole="alert" onPress={() => { setToast(null); openFromNotification(toast); }} scaleTo={0.98} style={s.card}>
         <View style={s.icon}><Icon name="notifications" size={20} color={colors.white} /></View>
         <View style={{ flex: 1 }}>
           <Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={1}>{toast.title}</Text>

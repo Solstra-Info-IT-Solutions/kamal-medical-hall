@@ -16,7 +16,7 @@ export function configureSocketAuth(next: Auth) { auth = next; }
 
 type Handler = (payload: any) => void;
 const handlers = new Map<string, Set<Handler>>();
-export const EVENTS = ['notification', 'order:update', 'partner:update', 'store:update', 'chat:message', 'chat:queue', 'chat:update'] as const;
+export const EVENTS = ['notification', 'order:update', 'partner:update', 'store:update', 'chat:message', 'chat:queue', 'chat:update', 'closing:alert', 'cash:update'] as const;
 
 /** Subscribes to a server event ("notification", "order:update", "partner:update", "connect"). Returns an unsubscribe fn. */
 export function onRealtime(event: string, fn: Handler): () => void {

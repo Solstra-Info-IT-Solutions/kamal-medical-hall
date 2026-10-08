@@ -1,4 +1,5 @@
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
 import type { ExportKind } from '../../api/types';
 import { Avatar, CallButton } from '../../components/CallButton';
+import { AreaChart, Donut } from '../../components/charts';
 import { ReviewCard } from '../../components/ReviewParts';
 import { Skeleton, Tap, tick } from '../../components/motion';
 import { Button, Card, ErrorView, Icon, Message, Pill, Screen, TextField, type IconName } from '../../components/ui';
@@ -62,49 +64,49 @@ export function RevenueScreen() {
   if (loading && !data) return <Skel />;
   if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
   const r = data!;
-  const max = Math.max(1, ...r.daily.map((d) => d.sales));
-  const totalSplit = Math.max(1, r.paymentSplit.reduce((n, x) => n + x.sales, 0));
+  const topQty = Math.max(1, ...r.topItems.map((i) => i.quantity));
+  const palette = [colors.primary, colors.amber, colors.green, colors.navy];
   return (
     <Screen wide>
       <RangeChips value={days} onChange={change} />
-      <View style={s.statGrid}>
-        <Stat icon="cash" label={t('admin.revSales')} value={formatMoney(r.sales)} tone="green" />
-        <Stat icon="checkmark-done" label={t('admin.revDelivered')} value={String(r.delivered)} />
-        <Stat icon="pricetag" label={t('admin.revAvg')} value={formatMoney(r.avgOrder)} tone="amber" />
-        <Stat icon="close-circle" label={t('admin.revLost')} value={`${r.ordersLost}/${r.ordersPlaced}`} tone="red" />
-      </View>
+
+      <LinearGradient colors={[colors.navy, colors.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.hero}>
+        <Text style={[type.small, { color: 'rgba(255,255,255,0.8)' }]}>{t('admin.revSales')} · {t('admin.lastDays', { count: days })}</Text>
+        <Text style={[type.h1, { color: colors.white, fontSize: 38, lineHeight: 48 }]} numberOfLines={1} adjustsFontSizeToFit>{formatMoney(r.sales)}</Text>
+        <View style={s.heroRow}>
+          <View style={s.heroStat}><Text style={s.heroNum}>{r.delivered}</Text><Text style={s.heroLabel}>{t('admin.revDelivered')}</Text></View>
+          <View style={s.heroDivider} />
+          <View style={s.heroStat}><Text style={s.heroNum} numberOfLines={1} adjustsFontSizeToFit>{formatMoney(r.avgOrder)}</Text><Text style={s.heroLabel}>{t('admin.revAvg')}</Text></View>
+          <View style={s.heroDivider} />
+          <View style={s.heroStat}><Text style={s.heroNum}>{r.ordersLost}/{r.ordersPlaced}</Text><Text style={s.heroLabel}>{t('admin.revLost')}</Text></View>
+        </View>
+      </LinearGradient>
 
       <Text style={[type.h3, s.sec]}>{t('admin.revDaily')}</Text>
       <Card>
         {r.daily.length === 0 ? <Text style={[type.small, { color: colors.secondary }]}>{t('admin.noSales')}</Text> : (
-          <>
-            <View style={s.chart}>
-              {r.daily.map((d) => (
-                <View key={d.day} style={s.barCol} accessibilityLabel={`${formatDate(d.day)} ${formatMoney(d.sales)}`}>
-                  <View style={[s.bar, { height: Math.max(4, Math.round((d.sales / max) * 120)) }]} />
-                </View>
-              ))}
-            </View>
-            <View style={s.chartLabels}><Text style={[type.small, { color: colors.secondary }]}>{formatDate(r.daily[0].day)}</Text><Text style={[type.small, { color: colors.secondary }]}>{formatDate(r.daily[r.daily.length - 1].day)}</Text></View>
-            <Text style={[type.small, { color: colors.secondary, marginTop: 6 }]}>{t('admin.revBest', { amount: formatMoney(max) })}</Text>
-          </>
+          <AreaChart data={r.daily.map((d) => ({ label: formatDate(d.day), value: d.sales }))} format={formatMoney} />
         )}
       </Card>
 
       <Text style={[type.h3, s.sec]}>{t('admin.revSplit')}</Text>
       <Card>
-        {r.paymentSplit.length === 0 ? <Text style={[type.small, { color: colors.secondary }]}>{t('admin.noSales')}</Text> : r.paymentSplit.map((p) => (
-          <View key={p.method ?? 'x'} style={{ marginBottom: spacing.sm }}>
-            <View style={s.rowBetween}><Text style={[type.bodyMedium, { color: colors.text }]}>{p.method ? t(`pay.${p.method}`) : '—'}</Text><Text style={[type.bodyMedium, { color: colors.text }]}>{formatMoney(p.sales)} · {p.orders}</Text></View>
-            <View style={s.track}><View style={[s.trackFill, { width: `${Math.round((p.sales / totalSplit) * 100)}%` }]} /></View>
-          </View>
-        ))}
+        {r.paymentSplit.length === 0 ? <Text style={[type.small, { color: colors.secondary }]}>{t('admin.noSales')}</Text> : (
+          <Donut centerLabel={t('admin.revSales')} centerValue={formatMoney(r.paymentSplit.reduce((n, x) => n + x.sales, 0))} format={formatMoney}
+            segments={r.paymentSplit.map((p, i) => ({ label: `${p.method ? t(`pay.${p.method}`) : '—'} · ${p.orders}`, value: p.sales, color: palette[i % palette.length]! }))} />
+        )}
       </Card>
 
       <Text style={[type.h3, s.sec]}>{t('admin.revTop')}</Text>
       <Card>
         {r.topItems.length === 0 ? <Text style={[type.small, { color: colors.secondary }]}>{t('admin.noSales')}</Text> : r.topItems.map((i, n) => (
-          <View key={i.name} style={s.topRow}><Text style={[type.bodyMedium, { color: colors.primary, width: 24 }]}>{n + 1}</Text><Text style={[type.body, { color: colors.text, flex: 1 }]} numberOfLines={1}>{i.name}</Text><Text style={[type.small, { color: colors.secondary }]}>{t('admin.revQty', { count: i.quantity })}</Text></View>
+          <View key={i.name} style={s.topItem}>
+            <View style={[s.rank, n === 0 && { backgroundColor: colors.amber }]}><Text style={[type.smallMedium, { color: colors.white }]}>{n + 1}</Text></View>
+            <View style={{ flex: 1 }}>
+              <View style={s.rowBetween}><Text style={[type.bodyMedium, { color: colors.text, flex: 1 }]} numberOfLines={1}>{i.name}</Text><Text style={[type.smallMedium, { color: colors.secondary }]}>{t('admin.revQty', { count: i.quantity })}</Text></View>
+              <View style={s.track}><LinearGradient colors={[colors.primary, '#7AB8F5']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[s.trackFill, { width: `${Math.max(6, Math.round((i.quantity / topQty) * 100))}%` }]} /></View>
+            </View>
+          </View>
         ))}
       </Card>
 
@@ -354,12 +356,20 @@ const s = StyleSheet.create({
   statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: spacing.md },
   stat: { flexGrow: 1, flexBasis: '45%', padding: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.white, gap: 2 },
   statIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  hero: { marginTop: spacing.md, borderRadius: 24, padding: spacing.lg, gap: 6 },
+  heroRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.25)' },
+  heroStat: { flex: 1, alignItems: 'center', gap: 2 },
+  heroNum: { ...type.bodyMedium, color: colors.white, fontSize: 17 },
+  heroLabel: { ...type.small, color: 'rgba(255,255,255,0.75)', textAlign: 'center' },
+  heroDivider: { width: 1, height: 34, backgroundColor: 'rgba(255,255,255,0.25)' },
+  topItem: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: spacing.md },
+  rank: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   chart: { flexDirection: 'row', alignItems: 'flex-end', height: 130, gap: 2 },
   barCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
   bar: { width: '80%', maxWidth: 18, minWidth: 3, borderTopLeftRadius: 3, borderTopRightRadius: 3, backgroundColor: colors.primary },
   chartLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  track: { height: 8, borderRadius: 4, backgroundColor: colors.border, marginTop: 4, overflow: 'hidden' },
+  track: { height: 8, borderRadius: 4, backgroundColor: colors.card, marginTop: 6, overflow: 'hidden' },
   trackFill: { height: 8, borderRadius: 4, backgroundColor: colors.primary },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
   btnRow: { flexDirection: 'row', gap: 10 },
