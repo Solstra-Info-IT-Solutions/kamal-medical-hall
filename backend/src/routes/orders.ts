@@ -176,7 +176,13 @@ orders.post('/:id/accept-quote', authed, requireRole('customer'), async (req, re
   type RzOrder = { id: string; amount: number; currency: string };
   let razorpayOrder = null as RzOrder | null;
   if (paymentMethod === 'razorpay') {
-    razorpayOrder = await razorpayClient().orders.create({ amount: Math.round(order.quotedAmount * 100), currency: 'INR', receipt: order.orderNumber }) as unknown as RzOrder;
+    try {
+      razorpayOrder = await razorpayClient().orders.create({ amount: Math.round(order.quotedAmount * 100), currency: 'INR', receipt: order.orderNumber }) as unknown as RzOrder;
+    } catch (e) {
+      if (e instanceof HttpError) throw e;
+      console.error(JSON.stringify({ level: 'error', msg: 'razorpay order not created', status: (e as { statusCode?: number }).statusCode, reason: (e as { error?: { description?: string } }).error?.description }));
+      throw new HttpError(502, 'payment_provider_error', 'Online payment is not available right now. Please try again or choose cash on delivery.');
+    }
   }
   await tx(async (c) => {
     await transition(c, order.id, ['quoted', 'awaiting_payment'], paymentMethod === 'cod' ? 'ready_to_dispatch' : 'awaiting_payment', req.user!.id,
@@ -193,11 +199,12 @@ orders.post('/:id/accept-quote', authed, requireRole('customer'), async (req, re
   });
 });
 
-async function markPaid(c: pg.PoolClient, razorpayOrderId: string, paymentId: string, signature: string | null) {
+async function markPaid(c: pg.PoolClient, razorpayOrderId: string, paymentId: string, signature: string | null, paidPaise?: number) {
   const pay = await c.query('select * from payments where razorpay_order_id = $1 for update', [razorpayOrderId]);
   const p = pay.rows[0];
   if (!p) throw notFound('Payment not found');
   if (p.status === 'paid') return p.order_id as string; // idempotent: verify call + webhook may both arrive
+  if (paidPaise !== undefined && paidPaise !== Math.round(Number(p.amount) * 100)) throw conflict('Paid amount does not match the order.', 'amount_mismatch');
   await c.query("update payments set status = 'paid', razorpay_payment_id = $2, razorpay_signature = $3 where id = $1", [p.id, paymentId, signature]);
   const { rows } = await c.query("select status from orders where id = $1 for update", [p.order_id]);
   if (rows[0].status === 'awaiting_payment') {
@@ -226,10 +233,16 @@ orders.post('/:id/payment/verify', authed, requireRole('customer'), async (req, 
 razorpayWebhook.post('/', express.raw({ type: '*/*', limit: '1mb' }), async (req, res) => {
   const signature = String(req.headers['x-razorpay-signature'] ?? '');
   if (!Buffer.isBuffer(req.body) || !verifyWebhookSignature(req.body, signature)) throw new HttpError(400, 'bad_signature', 'Invalid signature');
-  const event = JSON.parse(req.body.toString('utf8')) as { event: string; payload?: { payment?: { entity?: { id: string; order_id: string } } } };
+  const event = JSON.parse(req.body.toString('utf8')) as { event: string; payload?: { payment?: { entity?: { id: string; order_id: string; amount?: number } } } };
   const entity = event.payload?.payment?.entity;
   if ((event.event === 'payment.captured' || event.event === 'order.paid') && entity) {
-    await tx((c) => markPaid(c, entity.order_id, entity.id, null));
+    try {
+      await tx((c) => markPaid(c, entity.order_id, entity.id, null, entity.amount));
+    } catch (e) {
+      // An order of ours that cannot be matched (or a wrong amount) will never succeed on retry: answer 200 so Razorpay stops retrying, and leave it for manual review.
+      if (e instanceof HttpError && [404, 409].includes(e.status)) console.error(JSON.stringify({ level: 'error', msg: 'razorpay webhook not applied', code: e.code, event: event.event, razorpayOrder: entity.order_id }));
+      else throw e;
+    }
   }
   res.json({ ok: true });
 });

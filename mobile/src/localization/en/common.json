@@ -307,7 +307,10 @@
     "notConfigured": "The store has not added payment details yet. Ask the store admin, or collect cash.",
     "payeeName": "Payee name",
     "scanAnyUpi": "Scan with any UPI app",
-    "upiId": "UPI ID"
+    "upiId": "UPI ID",
+    "failedWith": "Payment failed: {{reason}}. You can try again.",
+    "confirmingTitle": "Payment received",
+    "confirmingMsg": "We are confirming your payment. Your order will update in a moment. You do not need to pay again."
   },
   "notifications": {
     "empty": "No notifications yet",

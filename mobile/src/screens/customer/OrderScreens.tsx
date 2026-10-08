@@ -349,10 +349,18 @@ export function PaymentScreen({ navigation, route }: NativeStackScreenProps<Cust
         let result;
         try {
           result = await Razorpay.open({ key: res.razorpay.keyId, amount: res.razorpay.amount, currency: res.razorpay.currency, order_id: res.razorpay.orderId, name: 'Kamal Medical Hall', description: `#${o.orderNumber}`, prefill: { contact: phone }, theme: { color: colors.primary } });
-        } catch {
-          throw new Error(t('pay.cancelledByUser')); // order stays "awaiting payment"; customer can retry from order details
+        } catch (e) {
+          // Razorpay code 2 = the customer closed the sheet; anything else is a real failure worth showing. Either way the order stays "awaiting payment" and can be paid again.
+          const f = e as { code?: number; description?: string; error?: { description?: string } };
+          const detail = f.description ?? f.error?.description;
+          throw new Error(f.code === 2 || !detail ? t('pay.cancelledByUser') : t('pay.failedWith', { reason: detail }));
         }
-        await endpoints.verifyPayment(o.id, { razorpayOrderId: result.razorpay_order_id, razorpayPaymentId: result.razorpay_payment_id, razorpaySignature: result.razorpay_signature });
+        try {
+          await endpoints.verifyPayment(o.id, { razorpayOrderId: result.razorpay_order_id, razorpayPaymentId: result.razorpay_payment_id, razorpaySignature: result.razorpay_signature });
+        } catch {
+          // The money was taken but we could not confirm it right now (e.g. the connection dropped). Razorpay also tells our server directly, so the order updates by itself.
+          await notice(t('pay.confirmingTitle'), t('pay.confirmingMsg'), t('common.ok'));
+        }
       }
       tick('success');
       navigation.replace('OrderDetail', { orderId: o.id });
