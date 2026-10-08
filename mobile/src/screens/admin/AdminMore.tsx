@@ -103,7 +103,7 @@ export function RevenueScreen() {
           <View key={i.name} style={s.topItem}>
             <View style={[s.rank, n === 0 && { backgroundColor: colors.amber }]}><Text style={[type.smallMedium, { color: colors.white }]}>{n + 1}</Text></View>
             <View style={{ flex: 1 }}>
-              <View style={s.rowBetween}><Text style={[type.bodyMedium, { color: colors.text, flex: 1 }]} numberOfLines={1}>{i.name}</Text><Text style={[type.smallMedium, { color: colors.secondary }]}>{t('admin.revQty', { count: i.quantity })}</Text></View>
+              <View style={s.rowBetween}><Text style={[type.bodyMedium, { color: colors.text, flex: 1 }]} numberOfLines={2}>{i.name}</Text><Text style={[type.smallMedium, { color: colors.secondary }]}>{t('admin.revQty', { count: i.quantity })}</Text></View>
               <View style={s.track}><LinearGradient colors={[colors.primary, '#7AB8F5']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[s.trackFill, { width: `${Math.max(6, Math.round((i.quantity / topQty) * 100))}%` }]} /></View>
             </View>
           </View>
@@ -211,8 +211,8 @@ export function AdminChatsScreen() {
             <Pressable key={th.id} accessibilityRole="button" onPress={() => nav.navigate('AdminChat', { threadId: th.id, name: th.customerName ?? th.customerPhone })} style={s.threadRow}>
               <Avatar name={th.customerName} />
               <View style={{ flex: 1 }}>
-                <View style={s.rowBetween}><Text style={[type.bodyMedium, { color: colors.text, flex: 1 }]} numberOfLines={1}>{th.customerName ?? th.customerPhone}</Text><Text style={[type.small, { color: colors.muted }]}>{clock(th.lastMessageAt)}</Text></View>
-                <Text style={[type.small, { color: colors.secondary }]} numberOfLines={1}>{th.lastBody}</Text>
+                <View style={s.rowBetween}><Text style={[type.bodyMedium, { color: colors.text, flex: 1 }]} numberOfLines={2}>{th.customerName ?? th.customerPhone}</Text><Text style={[type.small, { color: colors.muted }]}>{clock(th.lastMessageAt)}</Text></View>
+                <Text style={[type.small, { color: colors.secondary }]} numberOfLines={2}>{th.lastBody}</Text>
                 <View style={s.pillRow}>
                   {th.status === 'open' ? <Pill text={th.state === 'active' ? t('admin.chatActive') : t('admin.chatWaiting', { position: th.position })} tone={th.state === 'active' ? 'green' : 'amber'} /> : <Pill text={t('admin.chat_closed')} tone="blue" />}
                   {th.orderNumber ? <Pill text={`#${th.orderNumber}`} tone="blue" /> : null}
@@ -274,7 +274,7 @@ export function AdminChatScreen({ navigation, route }: NativeStackScreenProps<Ad
         </ScrollView>
         {open ? (
           <>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.quickRow} style={{ flexGrow: 0 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.quickRow} style={{ flexGrow: 0, flexShrink: 0 }}>
               {quick.map((q) => <Tap key={q} accessibilityRole="button" onPress={() => { void send(q); }} style={s.quickChip}><Text style={[type.small, { color: colors.navy }]}>{q}</Text></Tap>)}
             </ScrollView>
             <View style={s.composer}>
@@ -372,7 +372,7 @@ const s = StyleSheet.create({
   track: { height: 8, borderRadius: 4, backgroundColor: colors.card, marginTop: 6, overflow: 'hidden' },
   trackFill: { height: 8, borderRadius: 4, backgroundColor: colors.primary },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
-  btnRow: { flexDirection: 'row', gap: 10 },
+  btnRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
   exportRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   threadRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, marginBottom: spacing.sm, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.white },
   pillRow: { flexDirection: 'row', gap: 6, marginTop: 4, flexWrap: 'wrap' },

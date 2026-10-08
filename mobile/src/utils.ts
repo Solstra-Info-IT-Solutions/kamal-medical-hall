@@ -14,7 +14,7 @@ export const formatDayChip = (value: string, index: number) => ({
   top: index === 0 ? i18n.t('time.today') : index === 1 ? i18n.t('time.tomorrow') : toDate(value).toLocaleDateString(locale(), { weekday: 'short' }),
   bottom: toDate(value).toLocaleDateString(locale(), { day: 'numeric', month: 'short' }),
 });
-export const formatMoney = (amount: number) => `₹${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+export const formatMoney = (amount: number) => `₹${amount.toLocaleString('en-IN', Number.isInteger(amount) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export const statusTone = (s: OrderStatus): 'green' | 'red' | 'amber' | 'blue' =>
   s === 'delivered' ? 'green' : s === 'rejected' || s === 'cancelled' ? 'red' : s === 'quoted' || s === 'awaiting_payment' ? 'amber' : 'blue';

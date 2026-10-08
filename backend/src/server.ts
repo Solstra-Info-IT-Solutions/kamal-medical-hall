@@ -15,6 +15,7 @@ import { attachRealtime } from './realtime.js';
 import { chatAdmin, chatRouter } from './routes/chat.js';
 import { adminExtras, exportDownload, reviewsRouter } from './routes/extras.js';
 import { otpRouter } from './otp.js';
+import { shopAdmin, shopPublic } from './routes/shop.js';
 import { general } from './routes/general.js';
 import { orders, razorpayWebhook } from './routes/orders.js';
 import { adminRouter, partnerRouter } from './routes/staff.js';
@@ -40,6 +41,8 @@ export function createApp() {
   app.post('/admin/broadcast', writeLimit);
   app.get('/admin/export-link', writeLimit);
   app.use('/auth/otp', otpRouter);
+  app.use('/', shopPublic);
+  app.use('/admin', shopAdmin);
   app.use('/', general);
   app.use('/orders', orders);
   app.use('/chat', chatRouter);

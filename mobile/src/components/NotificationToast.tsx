@@ -35,7 +35,7 @@ export function NotificationToast() {
       <Tap accessibilityRole="alert" onPress={() => { setToast(null); openFromNotification(toast); }} scaleTo={0.98} style={s.card}>
         <View style={s.icon}><Icon name="notifications" size={20} color={colors.white} /></View>
         <View style={{ flex: 1 }}>
-          <Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={1}>{toast.title}</Text>
+          <Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={2}>{toast.title}</Text>
           <Text style={[type.small, { color: colors.secondary }]} numberOfLines={2}>{toast.body}</Text>
         </View>
         <Tap onPress={() => setToast(null)} hitSlop={10} haptic={false} accessibilityRole="button" accessibilityLabel="Dismiss"><Icon name="close" size={18} color={colors.muted} /></Tap>

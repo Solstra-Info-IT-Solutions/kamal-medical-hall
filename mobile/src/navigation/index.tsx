@@ -3,11 +3,13 @@ import { NavigationContainer, type LinkingOptions } from '@react-navigation/nati
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Platform, View } from 'react-native';
+import { Platform, View, useWindowDimensions } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { Icon, type IconName } from '../components/ui';
 import { LoginScreen, OtpScreen, SignupScreen, WelcomeScreen } from '../screens/auth/AuthScreens';
 import { CashScreen } from '../screens/admin/CashScreen';
+import { ShopDetailsScreen } from '../screens/admin/ShopDetails';
+import { ShopScreen } from '../screens/customer/ShopScreen';
 import { AdminChatScreen, AdminChatsScreen, AdminReviewsScreen, BroadcastScreen, CustomerDetailScreen, ExportsScreen, RevenueScreen } from '../screens/admin/AdminMore';
 import { AllOrdersScreen, AttendanceScreen, CustomersScreen, DashboardScreen, MoreScreen, OrderReviewScreen, OrdersByStatusScreen, PartnerAreasScreen, PaymentDetailsScreen, PincodesScreen, ReportsScreen, RequestsScreen, StoreSettingsScreen, TeamScreen, TermsScreen } from '../screens/admin/AdminScreens';
 import { AddressFormScreen, AddressesScreen } from '../screens/customer/AddressScreens';
@@ -55,8 +57,10 @@ const tabBase = {
 function useTabOptions() {
   const insets = useSafeAreaInsets();
   const bottom = Math.max(insets.bottom, 8);
+  const narrow = useWindowDimensions().width < 360;
   return {
     ...tabBase,
+    tabBarLabelStyle: { ...tabBase.tabBarLabelStyle, fontSize: narrow ? 10.5 : 12 },
     sceneStyle: { paddingLeft: insets.left, paddingRight: insets.right },
     tabBarStyle: { height: 58 + bottom, paddingTop: 6, paddingBottom: bottom, paddingLeft: insets.left, paddingRight: insets.right, borderTopColor: colors.border },
   };
@@ -122,6 +126,7 @@ function CustomerNavigator() {
       <CStack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: t('profile.edit') }} />
       <CStack.Screen name="Language" component={LanguageScreen} options={{ title: t('profile.language') }} />
       <CStack.Screen name="Help" component={HelpScreen} options={{ title: t('profile.help') }} />
+      <CStack.Screen name="Shop" component={ShopScreen} options={{ title: t('shop.title') }} />
       <CStack.Screen name="Legal" component={LegalScreen} options={{ title: t('legal.title') }} />
       <CStack.Screen name="Chat" component={ChatScreen} options={{ title: t('chat.title') }} />
       <CStack.Screen name="WriteReview" component={WriteReviewScreen} options={{ title: t('reviews.writeTitle') }} />
@@ -139,10 +144,10 @@ function AdminTabs() {
   const sidebar = isDesktop ? { tabBarPosition: 'left' as const, tabBarVariant: 'material' as const, tabBarLabelPosition: 'beside-icon' as const, tabBarStyle: { width: 230 + insets.left, paddingLeft: insets.left, paddingBottom: insets.bottom, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.white } } : null;
   return (
     <ATabs.Navigator screenOptions={{ ...tabOptions, ...(sidebar ?? {}) }}>
-      <ATabs.Screen name="Dashboard" component={DashboardScreen} options={{ title: t('admin.dashboard'), tabBarIcon: tabIcon('grid-outline', 'grid') }} />
-      <ATabs.Screen name="Requests" component={RequestsScreen} options={{ title: t('admin.newRequests'), tabBarIcon: tabIcon('mail-unread-outline', 'mail-unread') }} />
-      <ATabs.Screen name="Orders" component={AllOrdersScreen} options={{ title: t('tabs.orders'), tabBarIcon: tabIcon('document-text-outline', 'document-text') }} />
-      <ATabs.Screen name="Team" component={TeamScreen} options={{ title: t('admin.team'), tabBarIcon: tabIcon('people-outline', 'people') }} />
+      <ATabs.Screen name="Dashboard" component={DashboardScreen} options={{ title: t('admin.dashboard'), tabBarLabel: t('admin.tabHome'), tabBarIcon: tabIcon('grid-outline', 'grid') }} />
+      <ATabs.Screen name="Requests" component={RequestsScreen} options={{ title: t('admin.newRequests'), tabBarLabel: t('admin.tabRequests'), tabBarIcon: tabIcon('mail-unread-outline', 'mail-unread') }} />
+      <ATabs.Screen name="Orders" component={AllOrdersScreen} options={{ title: t('tabs.orders'), tabBarLabel: t('admin.tabOrders'), tabBarIcon: tabIcon('document-text-outline', 'document-text') }} />
+      <ATabs.Screen name="Team" component={TeamScreen} options={{ title: t('admin.team'), tabBarLabel: t('admin.tabTeam'), tabBarIcon: tabIcon('people-outline', 'people') }} />
       <ATabs.Screen name="More" component={MoreScreen} options={{ title: t('admin.more'), tabBarIcon: tabIcon('menu-outline', 'menu') }} />
     </ATabs.Navigator>
   );
@@ -163,6 +168,7 @@ function AdminNavigator() {
       <AStack.Screen name="OrdersByStatus" component={OrdersByStatusScreen} options={({ route }) => ({ title: route.params.title })} />
       <AStack.Screen name="Revenue" component={RevenueScreen} options={{ title: t('admin.revenue') }} />
       <AStack.Screen name="Cash" component={CashScreen} options={{ title: t('cash.title') }} />
+      <AStack.Screen name="ShopDetails" component={ShopDetailsScreen} options={{ title: t('shop.adminTitle') }} />
       <AStack.Screen name="AdminReviews" component={AdminReviewsScreen} options={{ title: t('admin.reviews') }} />
       <AStack.Screen name="AdminChats" component={AdminChatsScreen} options={{ title: t('admin.chats') }} />
       <AStack.Screen name="AdminChat" component={AdminChatScreen} options={({ route }) => ({ title: route.params.name })} />

@@ -1,5 +1,6 @@
 import { api } from './client';
 import type {
+  ShopDetails, ShopPublic,
   CashSummary, ClosingSummary, Address, AddressInput, AppNotification, AdminChatThread, Attendance, ChatMessage, ChatQueue, CustomerDetail, DutyStatus, ExportKind, Order, OrderSummary, Overview, Partner, PartnerAttendance, Review, Revenue, PartnerState, PaymentDetails, PaymentMethod, StoreConfig, StoreSettings, Terms, Tracking, User } from './types';
 
 export interface RazorpayIntent { orderId: string; amount: number; currency: string; keyId: string }
@@ -54,12 +55,15 @@ export const endpoints = {
     create: (b: { orderId: string; rating: number; comment?: string; images: { publicId: string; mimeType: string; sizeBytes?: number }[] }) => api<{ review: Review }>('POST', '/reviews', b),
     mine: () => api<{ reviews: Review[] }>('GET', '/reviews/mine'),
   },
+  shop: () => api<ShopPublic>('GET', '/shop', undefined, { auth: false }),
   registerDevice: (token: string, platform: 'android' | 'ios') => api<void>('POST', '/devices', { token, platform }),
   unregisterDevice: (token: string) => api<void>('DELETE', '/devices', { token }),
 
   admin: {
     overview: () => api<Overview>('GET', '/admin/overview'),
     revenue: (days = 30) => api<Revenue>('GET', `/admin/revenue?days=${days}`),
+    shop: () => api<{ details: ShopDetails; legacy: { address: string | null; phone: string | null; email: string | null; latitude: number | null; longitude: number | null } }>('GET', '/admin/shop'),
+    saveShop: (d: ShopDetails) => api<{ details: ShopDetails }>('PUT', '/admin/shop', d),
     cash: () => api<CashSummary>('GET', '/admin/cash'),
     settleCash: (partnerId: string, orderIds?: string[]) => api<CashSummary & { settled: number; amount: number }>('POST', '/admin/cash/settle', { partnerId, orderIds }),
     closingSummary: () => api<ClosingSummary>('GET', '/admin/closing-summary'),

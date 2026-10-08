@@ -63,7 +63,7 @@ export function Button({ title, onPress, variant = 'primary', loading, disabled,
     <Tap accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ disabled: !!off, busy: !!loading }} disabled={off} onPress={onPress} haptic={!off}
       style={[s.btn, small && s.btnSmall, variant === 'primary' && s.btnPrimary, variant === 'outline' && s.btnOutline, variant === 'danger' && s.btnDanger, variant === 'ghost' && s.btnGhost, off && { opacity: 0.5 }, style]}>
       {loading ? <ActivityIndicator color={fg} /> : <>
-        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={[type.button, small && { fontSize: 15, lineHeight: 22 }, { color: fg, flexShrink: 1 }]}>{title}</Text>
+        <Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8} style={[type.button, small && { fontSize: 15, lineHeight: 22 }, { color: fg, flexShrink: 1, textAlign: 'center' }]}>{title}</Text>
         {icon ? <Icon name={icon} size={small ? 18 : 20} color={fg} /> : null}
       </>}
     </Tap>
@@ -108,7 +108,7 @@ const PILL = {
   amber: { bg: colors.amberBg, fg: colors.amber }, blue: { bg: colors.card, fg: colors.primary },
 } as const;
 export const Pill = ({ text, tone = 'blue' }: { text: string; tone?: keyof typeof PILL }) =>
-  <Animated.View entering={FadeIn.duration(300)} style={{ backgroundColor: PILL[tone].bg, paddingHorizontal: 12, paddingVertical: 3, borderRadius: radius.md }}><Text style={[type.smallMedium, { color: PILL[tone].fg }]}>{text}</Text></Animated.View>;
+  <Animated.View entering={FadeIn.duration(300)} style={{ backgroundColor: PILL[tone].bg, paddingHorizontal: 12, paddingVertical: 3, borderRadius: radius.md, alignSelf: 'flex-start', flexShrink: 1, maxWidth: '100%' }}><Text style={[type.smallMedium, { color: PILL[tone].fg, flexShrink: 1 }]}>{text}</Text></Animated.View>;
 
 /** Shown while a page loads: shimmering placeholder blocks instead of a spinner. */
 export const Loading = () => <View style={{ flex: 1, padding: spacing.lg, gap: 12 }}><Skeleton h={28} w="55%" r={10} />{[0, 1, 2, 3].map((i) => <Skeleton key={i} h={84} r={16} />)}</View>;
@@ -166,8 +166,8 @@ const s = StyleSheet.create({
   pad: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xxl },
   footer: { paddingTop: spacing.sm, paddingBottom: spacing.md, backgroundColor: colors.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   back: { padding: 4, marginLeft: 4 },
-  btn: { height: BUTTON_HEIGHT, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing.lg },
-  btnSmall: { height: BUTTON_HEIGHT_SMALL, borderRadius: radius.sm, paddingHorizontal: 14 },
+  btn: { minWidth: 128, minHeight: BUTTON_HEIGHT, paddingVertical: 6, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing.lg },
+  btnSmall: { minHeight: BUTTON_HEIGHT_SMALL, borderRadius: radius.sm, paddingHorizontal: 14 },
   btnPrimary: { backgroundColor: colors.primary, boxShadow: '0px 6px 16px rgba(11,95,219,0.28)' },
   btnOutline: { borderWidth: 1.5, borderColor: colors.primary, backgroundColor: colors.white },
   btnDanger: { borderWidth: 1.5, borderColor: colors.red, backgroundColor: colors.white },

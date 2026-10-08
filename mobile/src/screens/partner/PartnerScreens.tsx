@@ -136,7 +136,7 @@ export function PartnerHomeScreen(_p: BottomTabScreenProps<PartnerTabParamList, 
                 return (
                   <Tap key={o.key} accessibilityRole="button" accessibilityState={{ selected: on, disabled: locked }} onPress={() => { if (!on && !locked) void choose(o.key); }} scaleTo={0.95} style={[s.opt, on && s.optOn, locked && !on && { opacity: 0.45 }]}>
                     <Icon name={o.icon} size={18} color={on ? colors.white : colors.navy} />
-                    <Text style={[type.smallMedium, { color: on ? colors.white : colors.navy }]} numberOfLines={1}>{t(o.label)}</Text>
+                    <Text style={[type.smallMedium, { color: on ? colors.white : colors.navy }]} numberOfLines={2}>{t(o.label)}</Text>
                   </Tap>
                 );
               })}
@@ -473,7 +473,7 @@ const s = StyleSheet.create({
   rejected: { marginBottom: spacing.md, backgroundColor: colors.white, borderLeftWidth: 5, borderLeftColor: colors.red },
   block: { marginBottom: spacing.md, backgroundColor: colors.white, boxShadow: '0px 4px 14px rgba(15,33,71,0.07)' },
   person: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  btnRow: { flexDirection: 'row', gap: 12, marginTop: spacing.md },
+  btnRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: spacing.md },
   noCall: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.md, padding: spacing.sm, borderRadius: radius.sm, backgroundColor: colors.tint },
   howRow: { flexDirection: 'row', gap: 10 },
   how: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
@@ -482,7 +482,7 @@ const s = StyleSheet.create({
   reading: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.sm },
   refInput: { marginTop: spacing.md, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, color: colors.text },
   ack: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.border },
-  footerRow: { flexDirection: 'row', gap: 12 },
+  footerRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   menuIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
 });

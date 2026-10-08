@@ -3,7 +3,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
 import { OrderCard } from '../../components/OrderCard';
@@ -31,14 +31,19 @@ export function HomeScreen(_props: BottomTabScreenProps<CustomerTabParamList, 'H
   const user = useSession((st) => st.user);
   const active = useLoad(() => endpoints.orders('active'), ['order:update']);
   const unread = useLoad(async () => (await endpoints.notifications()).notifications.filter((n) => !n.read).length, ['notification']);
+  const shop = useLoad(() => endpoints.shop());
+  const shopPhone = shop.data?.phones?.find((p) => p.number)?.number ?? shop.data?.legacy.phone ?? null;
   const refresh = () => { void active.reload(); void unread.reload(); };
 
   return (
     <SafeAreaView style={s.fill} edges={['top']}>
       <ScrollView contentContainerStyle={[s.body, content]} refreshControl={<RefreshControl refreshing={active.loading && !!active.data} onRefresh={refresh} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
         <View style={s.top}>
-          <View style={s.loc}><Text numberOfLines={1} style={[type.h2, { color: colors.navy }]}>{t('brand.name')}</Text></View>
-          <Bell unread={unread.data ?? 0} onPress={() => nav.navigate('Notifications')} label={t('home.notifications')} />
+          <View style={s.loc}><Text numberOfLines={2} style={[type.h2, { color: colors.navy }]}>{t('brand.name')}</Text></View>
+          <View style={s.topActions}>
+            {shopPhone ? <Tap accessibilityRole="button" accessibilityLabel={t('shop.callShop')} onPress={() => { void Linking.openURL(`tel:${shopPhone}`); }} hitSlop={10} style={s.callIcon}><Icon name="call" size={22} color={colors.green} /></Tap> : null}
+            <Bell unread={unread.data ?? 0} onPress={() => nav.navigate('Notifications')} label={t('home.notifications')} />
+          </View>
         </View>
         <Text style={[type.h2, { marginTop: spacing.lg, color: colors.text }]}>{user?.name ? t('home.greetingName', { name: user.name.split(' ')[0] }) : t('home.greeting')}</Text>
         <Text style={[type.body, { color: colors.secondary, marginBottom: spacing.lg }]}>{t('home.help')}</Text>
@@ -68,6 +73,8 @@ const s = StyleSheet.create({
   body: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   loc: { flex: 1, marginRight: spacing.md },
+  topActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  callIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.greenBg, alignItems: 'center', justifyContent: 'center' },
   bell: { padding: 4 },
   badge: { position: 'absolute', right: -2, top: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: colors.red, borderWidth: 2, borderColor: colors.white, alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: colors.white, fontSize: 10, lineHeight: 14, fontFamily: 'NotoSansDevanagari_700Bold' },

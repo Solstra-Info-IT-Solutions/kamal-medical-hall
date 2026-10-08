@@ -133,7 +133,7 @@ export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Das
           <Text style={[type.h3, s.sec]}>{t('admin.secManage')}</Text>
           <ResponsiveGrid columns={tileColumns}>
             {([
-              ['bar-chart', 'admin.revenue', 'Revenue'], ['wallet', 'cash.title', 'Cash'], ['download', 'admin.exports', 'Exports'], ['megaphone', 'admin.broadcast', 'Broadcast'],
+              ['storefront', 'shop.adminTitle', 'ShopDetails'], ['bar-chart', 'admin.revenue', 'Revenue'], ['wallet', 'cash.title', 'Cash'], ['download', 'admin.exports', 'Exports'], ['megaphone', 'admin.broadcast', 'Broadcast'],
               ['card', 'admin.paymentDetails', 'PaymentDetails'], ['location', 'admin.pincodes', 'Pincodes'], ['calendar', 'admin.attendance', 'Attendance'],
               ['document-text', 'admin.terms', 'Terms'], ['settings', 'admin.settings', 'StoreSettings'],
             ] as const).map(([icon, label, route]) => (
@@ -168,7 +168,7 @@ function OrderList({ status, title, search, embedded }: { status?: string; title
       {embedded ? null : <Header title={title} />}
       {search ? <>
         <Enter><View style={s.search}><Icon name="search" size={20} color={colors.secondary} /><TextInput value={q} onChangeText={setQ} placeholder={t('admin.search')} placeholderTextColor={colors.muted} accessibilityLabel={t('admin.search')} style={[type.body, s.searchInput]} /></View></Enter>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filters} style={{ flexGrow: 0 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filters} style={{ flexGrow: 0, flexShrink: 0 }}>
           {filters.map((f) => <Tap key={f ?? 'all'} accessibilityRole="button" onPress={() => setFilter(f)} scaleTo={0.93} style={[s.chip, filter === f && s.chipOn]}><Text style={[type.smallMedium, { color: filter === f ? colors.white : colors.navy }]}>{f ? t(`status.${f.split(',')[0]}`) : t('admin.all')}</Text></Tap>)}
         </ScrollView></> : null}
       {loading && !data ? <ListSkeleton /> : error && !data ? <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} /> : !data?.orders.length ? <Message icon="file-tray-outline" title={t('admin.noOrders')} /> : (
@@ -383,7 +383,7 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
             <View style={[s.billPick, bill && { borderColor: colors.green, backgroundColor: colors.greenBg, borderStyle: 'solid' }]}>
               <Icon name={bill ? 'document-attach' : 'cloud-upload-outline'} size={24} color={bill ? colors.green : colors.primary} />
               <View style={{ flex: 1 }}>
-                <Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={1}>{bill ? bill.name : t('admin.billAttach')}</Text>
+                <Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={2}>{bill ? bill.name : t('admin.billAttach')}</Text>
                 <Text style={[type.small, { color: colors.secondary }]}>{bill ? t('admin.billChange') : t('admin.billHint')}</Text>
               </View>
               {bill ? <Tap accessibilityRole="button" accessibilityLabel={t('upload.remove', { name: bill.name })} hitSlop={8} onPress={() => setBill(null)} haptic={false}><Icon name="close-circle" size={24} color={colors.muted} /></Tap> : null}
@@ -594,7 +594,7 @@ export function AttendanceScreen() {
           <View style={s.gridHead}><View style={{ flex: 1.4 }} />{a.dates.map((d) => <Text key={d} style={[type.small, s.gridCell, { color: colors.secondary }]}>{dayLetter(d)}</Text>)}</View>
           {a.history.map((h) => (
             <View key={h.id} style={s.gridRow}>
-              <Text style={[type.small, { flex: 1.4, color: colors.text }]} numberOfLines={1}>{h.name}</Text>
+              <Text style={[type.small, { flex: 1.4, color: colors.text }]} numberOfLines={2}>{h.name}</Text>
               {h.days.map((st, i) => {
                 const closed = a.closedDays.includes(a.dates[i]);
                 const color = st ? DAY_COLOR[st] : undefined;
@@ -764,6 +764,7 @@ export function MoreScreen(_p: BottomTabScreenProps<AdminTabParamList, 'More'>) 
         {row('chatbubbles-outline', t('admin.chats'), () => nav.navigate('AdminChats'))}
         {row('star-outline', t('admin.reviews'), () => nav.navigate('AdminReviews'))}
         {row('bar-chart-outline', t('admin.revenue'), () => nav.navigate('Revenue'))}
+        {row('storefront-outline', t('shop.adminTitle'), () => nav.navigate('ShopDetails'))}
         {row('wallet-outline', t('cash.title'), () => nav.navigate('Cash'))}
         {row('download-outline', t('admin.exports'), () => nav.navigate('Exports'))}
         {row('megaphone-outline', t('admin.broadcast'), () => nav.navigate('Broadcast'))}
@@ -861,7 +862,7 @@ export function StoreSettingsScreen({ navigation }: NativeStackScreenProps<Admin
     }
     setBusy(true); setErr('');
     try {
-      await endpoints.admin.saveSettings({ isOpen: f.isOpen, openingTime: f.openingTime, closingTime: f.closingTime, address: f.address || null, phone: f.phone || null, email: f.email || null, latitude: lat, longitude: lng, geofenceM: Number(f.geofenceM) || 150 });
+      await endpoints.admin.saveSettings({ isOpen: f.isOpen, openingTime: f.openingTime, closingTime: f.closingTime, latitude: lat, longitude: lng, geofenceM: Number(f.geofenceM) || 150 });
       tick('success'); navigation.goBack();
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
@@ -870,9 +871,7 @@ export function StoreSettingsScreen({ navigation }: NativeStackScreenProps<Admin
       <Enter><Card style={[s.block, s.personRow]}><View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]}>{t('admin.storeOpen')}</Text><Text style={[type.small, { color: f.isOpen ? colors.green : colors.red }]}>{f.isOpen ? t('admin.storeOpenOn') : t('admin.storeOpenOff')}</Text></View><Switch accessibilityLabel={t('admin.storeOpen')} value={f.isOpen} onValueChange={(v) => setF({ ...f, isOpen: v })} /></Card></Enter>
       <Enter index={1}><TextField label={t('admin.opening')} value={f.openingTime} onChangeText={set('openingTime')} placeholder="09:00" /></Enter>
       <Enter index={2}><TextField label={t('admin.closing')} value={f.closingTime} onChangeText={set('closingTime')} placeholder="21:00" /></Enter>
-      <Enter index={3}><TextField label={t('admin.storeAddress')} value={f.address} onChangeText={set('address')} multiline /></Enter>
-      <Enter index={4}><TextField label={t('address.phone')} value={f.phone} onChangeText={set('phone')} keyboardType="phone-pad" /></Enter>
-      <Enter index={5}><TextField label={t('signup.email')} value={f.email} onChangeText={set('email')} keyboardType="email-address" autoCapitalize="none" /></Enter>
+      <Enter index={3}><Button title={t('shop.editDetails')} icon="storefront" variant="outline" onPress={() => navigation.navigate('ShopDetails')} style={{ marginBottom: spacing.md }} /></Enter>
       <Enter index={6}>
         <Card style={s.block}>
           <View style={s.personRow}><Icon name="storefront" size={22} /><Text style={[type.h3, { color: colors.text, flex: 1 }]}>{t('admin.shopLocation')}</Text></View>
@@ -955,7 +954,7 @@ const s = StyleSheet.create({
   block: { marginBottom: spacing.md, backgroundColor: colors.white, boxShadow: '0px 4px 14px rgba(15,33,71,0.07)' },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
   personRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  btnRow: { flexDirection: 'row', gap: 12, marginTop: spacing.md },
+  btnRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: spacing.md },
   pillRow: { flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' },
   rxRow: { flexDirection: 'row', gap: 10, marginTop: spacing.sm },
   rx: { width: 72, height: 90, borderRadius: radius.sm, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },

@@ -50,7 +50,7 @@ export function CashScreen() {
             <Avatar name={p.name} size={46} />
             <View style={{ flex: 1 }}>
               <Text style={[type.small, { color: colors.secondary }]}>{t('cash.staffShort')}</Text>
-              <Text style={[type.h3, { color: colors.text }]} numberOfLines={1}>{p.name}</Text>
+              <Text style={[type.h3, { color: colors.text }]} numberOfLines={2}>{p.name}</Text>
             </View>
             <Text style={[type.h2, { color: colors.amber }]}>{formatMoney(p.total)}</Text>
           </View>
@@ -85,5 +85,5 @@ const s = StyleSheet.create({
   card: { marginTop: spacing.md, gap: spacing.sm },
   head: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   orderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: spacing.sm },
+  actions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: spacing.sm },
 });

@@ -355,7 +355,7 @@ adminRouter.put('/settings', async (req, res) => {
   const s = parse(settingsSchema, req.body);
   await tx(async (c) => {
   const before = (await c.query('select is_open from store_settings where id = 1 for update')).rows[0]?.is_open as boolean | undefined;
-  await c.query('update store_settings set is_open=$1, opening_time=$2, closing_time=$3, address=$4, phone=$5, email=$6, latitude=$7, longitude=$8, geofence_m=coalesce($9, geofence_m) where id = 1',
+  await c.query('update store_settings set is_open=$1, opening_time=$2, closing_time=$3, address=coalesce($4, address), phone=coalesce($5, phone), email=coalesce($6, email), latitude=$7, longitude=$8, geofence_m=coalesce($9, geofence_m) where id = 1',
     [s.isOpen, s.openingTime, s.closingTime, s.address ?? null, s.phone ?? null, s.email ?? null, s.latitude ?? null, s.longitude ?? null, s.geofenceM ?? null]);
   if (before && !s.isOpen) await closeStore(c);
   else if (before === false && s.isOpen) await reopenStore(c);

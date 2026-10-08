@@ -7,6 +7,7 @@ export type CustomerStackParamList = {
   Tabs: NavigatorScreenParams<CustomerTabParamList> | undefined;
   Upload: undefined;
   TypeMedicines: undefined;
+  Shop: undefined;
   Addresses: { select?: boolean } | undefined;
   AddressForm: { addressId?: string } | undefined;
   DeliveryTime: undefined;
@@ -39,6 +40,7 @@ export type AdminStackParamList = {
   OrdersByStatus: { title: string; status: string };
   Revenue: undefined;
   Cash: undefined;
+  ShopDetails: undefined;
   AdminReviews: undefined;
   AdminChats: undefined;
   AdminChat: { threadId: string; name: string };

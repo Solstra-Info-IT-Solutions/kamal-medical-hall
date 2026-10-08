@@ -110,7 +110,7 @@ export function Donut({ segments, centerLabel, centerValue, format, size = 150 }
           <View key={seg.label} style={s.legend}>
             <View style={[s.dot, { backgroundColor: seg.color }]} />
             <View style={{ flex: 1 }}>
-              <Text style={[type.smallMedium, { color: colors.text }]} numberOfLines={1}>{seg.label}</Text>
+              <Text style={[type.smallMedium, { color: colors.text }]} numberOfLines={2}>{seg.label}</Text>
               <Text style={[type.small, { color: colors.secondary }]}>{format(seg.value)} · {total ? Math.round((seg.value / total) * 100) : 0}%</Text>
             </View>
           </View>

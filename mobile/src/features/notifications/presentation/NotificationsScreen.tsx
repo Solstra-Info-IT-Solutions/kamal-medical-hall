@@ -67,7 +67,7 @@ export function NotificationsScreen() {
 }
 
 const s = StyleSheet.create({
-  actions: { flexDirection: 'row', gap: 10, marginBottom: spacing.md },
+  actions: { flexDirection: 'row', gap: 10, flexWrap: 'wrap', marginBottom: spacing.md },
   note: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.sm, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: radius.lg },
   main: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: spacing.md },
   trash: { padding: spacing.md },

@@ -107,7 +107,7 @@ function TimelineStep({ i, idx, label }: { i: number; idx: number; label: string
           {done || (on && idx === 4) ? <Icon name="checkmark" size={15} color={colors.white} /> : <Icon name={STEP_ICON[i]} size={14} color={on ? colors.white : colors.muted} />}
         </View>
       </Animated.View>
-      <Text style={[type.small, { color: i <= idx ? colors.text : colors.muted, textAlign: 'center' }]}>{label}</Text>
+      <Text style={[type.small, s.stepLabel, { color: i <= idx ? colors.text : colors.muted }]}>{label}</Text>
     </View>
   );
 }
@@ -206,7 +206,7 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
         <LinearGradient colors={o.status === 'cancelled' || o.status === 'rejected' ? [colors.white, colors.redBg] : o.status === 'delivered' ? [colors.white, colors.greenBg] : [colors.white, colors.card]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.hero}>
           <View style={s.heroTop}>
             <View style={[s.heroIcon, o.status === 'delivered' && { backgroundColor: colors.green }, (o.status === 'cancelled' || o.status === 'rejected') && { backgroundColor: colors.red }]}><Icon name={HERO_ICON[o.status]} size={30} color={colors.white} /></View>
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, minWidth: 130 }}>
               <Pressable accessibilityRole="button" onPress={async () => { await Clipboard.setStringAsync(o.orderNumber).catch(() => undefined); tick(); }}>
                 <Text style={[type.h2, { color: colors.text }]}>#{o.orderNumber}</Text>
               </Pressable>
@@ -406,7 +406,8 @@ const s = StyleSheet.create({
   timeline: { flexDirection: 'row', marginTop: spacing.xl, marginBottom: spacing.sm },
   line: { position: 'absolute', top: 16, left: '10%', right: '10%', height: 4, borderRadius: 2, backgroundColor: colors.border, overflow: 'hidden' },
   lineFill: { height: 4, backgroundColor: colors.primary, borderRadius: 2 },
-  step: { flex: 1, alignItems: 'center', gap: 6 },
+  step: { flex: 1, alignItems: 'center', gap: 6, minWidth: 0 },
+  stepLabel: { textAlign: 'center', fontSize: 11, lineHeight: 14, alignSelf: 'stretch' },
   dotWrap: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
   dot: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   dotOn: { backgroundColor: colors.primary },
@@ -424,7 +425,7 @@ const s = StyleSheet.create({
   noteTrash: { padding: spacing.md },
   noteActions: { flexDirection: 'row', gap: 10, marginBottom: spacing.md },
   hero: { padding: spacing.lg, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.cardBorder },
-  heroTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  heroTop: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12 },
   heroIcon: { width: 56, height: 56, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   amountRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: spacing.md },
   quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: spacing.md },
@@ -436,7 +437,7 @@ const s = StyleSheet.create({
   sectionBody: { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
   itemDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },
-  btnPair: { flexDirection: 'row', gap: 10, marginTop: spacing.md },
+  btnPair: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: spacing.md },
   photoBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
   photoFull: { width: '100%', height: '85%' },
   photoClose: { position: 'absolute', top: 48, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },

@@ -63,6 +63,7 @@ export function ProfileScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Pr
         {row('notifications-outline', t('home.notifications'), () => nav.navigate('Notifications'))}
         <NotificationsRow />
         {row('language-outline', t('profile.language'), () => nav.navigate('Language'))}
+        {row('storefront-outline', t('shop.title'), () => nav.navigate('Shop'))}
         {row('help-circle-outline', t('profile.help'), () => nav.navigate('Help'))}
         {row('document-text-outline', t('profile.legal'), () => nav.navigate('Legal'))}
         {row('log-out-outline', t('profile.logout'), logOut, true)}

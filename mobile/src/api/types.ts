@@ -118,3 +118,15 @@ export type ExportKind = 'orders' | 'revenue' | 'customers' | 'payments' | 'atte
 export interface CashPartner { partnerId: string; name: string; phone: string; total: number; orders: { orderId: string; orderNumber: string; amount: number; collectedAt: string }[] }
 export interface CashSummary { total: number; partners: CashPartner[] }
 export interface ClosingSummary { closingTime: string; isOpen: boolean; revenue: { orders: number; total: number; online: number; cod: number }; cash: CashSummary; message: string }
+
+export interface ShopBranch { name?: string; address?: string; city?: string; pincode?: string; phone?: string; hours?: string; mapsUrl?: string; latitude?: number | null; longitude?: number | null }
+export interface ShopDetails {
+  name?: string; tagline?: string; about?: string; ownerName?: string; establishedYear?: number;
+  address?: { line1?: string; line2?: string; area?: string; landmark?: string; city?: string; state?: string; pincode?: string };
+  latitude?: number | null; longitude?: number | null; mapsUrl?: string;
+  phones?: { label?: string; number?: string }[]; whatsapp?: string; email?: string; website?: string; hoursNote?: string;
+  licence?: { drugLicense1?: string; drugLicense2?: string; drugLicenseValidTill?: string; gstin?: string; pan?: string; fssai?: string; pharmacistName?: string; pharmacistRegNo?: string };
+  services?: string[]; paymentModes?: string[]; social?: { facebook?: string; instagram?: string }; branches?: ShopBranch[];
+}
+/** What customers see (the PAN is never included), plus today's opening hours and the older settings as a fallback. */
+export type ShopPublic = ShopDetails & { isOpen: boolean; openingTime: string; closingTime: string; legacy: { address: string | null; phone: string | null; email: string | null; latitude: number | null; longitude: number | null } };
