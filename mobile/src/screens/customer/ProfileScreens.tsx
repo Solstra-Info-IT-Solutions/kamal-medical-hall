@@ -12,6 +12,8 @@ import { endpoints } from '../../api/endpoints';
 import { uploadPrescription } from '../../api/upload';
 import { Avatar } from '../../components/CallButton';
 import { guessMime } from '../../fileKinds';
+import { SourceOptions } from '../../components/SourceOptions';
+import { NotificationsRow } from '../../components/NotificationsRow';
 import { Enter, Tap } from '../../components/motion';
 import { Button, Card, ErrorView, Icon, Loading, Message, Screen, TextField, type IconName } from '../../components/ui';
 import { formatDate } from '../../utils';
@@ -59,6 +61,7 @@ export function ProfileScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Pr
         {row('star-outline', t('reviews.title'), () => nav.navigate('MyReviews'))}
         {row('chatbubbles-outline', t('chat.title'), () => nav.navigate('Chat'))}
         {row('notifications-outline', t('home.notifications'), () => nav.navigate('Notifications'))}
+        <NotificationsRow />
         {row('language-outline', t('profile.language'), () => nav.navigate('Language'))}
         {row('help-circle-outline', t('profile.help'), () => nav.navigate('Help'))}
         {row('document-text-outline', t('profile.legal'), () => nav.navigate('Legal'))}
@@ -113,10 +116,10 @@ export function EditProfileScreen({ navigation }: { navigation: Nav }) {
     <Screen footer={<Button title={t('address.save')} onPress={save} loading={busy} />}>
       <View style={s.photoBlock}>
         <Avatar name={user?.name} uri={user?.avatarUrl} size={110} />
-        <View style={s.photoBtns}>
-          <Button small variant="outline" icon="camera" title={t('upload.camera')} onPress={() => { void changePhoto('camera'); }} disabled={photoBusy} style={{ flex: 1 }} />
-          <Button small variant="outline" icon="images" title={t('upload.gallery')} onPress={() => { void changePhoto('gallery'); }} disabled={photoBusy} loading={photoBusy} style={{ flex: 1 }} />
-        </View>
+        <View style={{ alignSelf: 'stretch' }}><SourceOptions disabled={photoBusy} options={[
+          { icon: 'camera', label: t('upload.camera'), onPress: () => { void changePhoto('camera'); } },
+          { icon: 'images', label: t('upload.gallery'), onPress: () => { void changePhoto('gallery'); } },
+        ]} /></View>
         {user?.avatarUrl ? <Button small variant="ghost" icon="trash-outline" title={t('profile.removePhoto')} onPress={() => { void removePhoto(); }} disabled={photoBusy} /> : null}
       </View>
       <TextField label={t('signup.name')} value={name} onChangeText={setName} error={errors.name} autoCapitalize="words" />

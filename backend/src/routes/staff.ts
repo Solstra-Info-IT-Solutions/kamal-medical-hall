@@ -134,17 +134,19 @@ adminRouter.post('/orders/:id/assign', async (req, res) => {
   res.json({ order: await loadOrder(order.id, req.user!) });
 });
 
-/** Takes the order back from a partner who has not started the ride (e.g. no response). */
+/** Takes the order back from its delivery partner at any point before delivery (no response, wrong partner, partner out of reach) so it can be assigned again. */
 adminRouter.post('/orders/:id/unassign', async (req, res) => {
   const order = await loadOrder(String(req.params.id), req.user!);
   await tx(async (c) => {
     const prev = await c.query('select partner_id from orders where id = $1 for update', [order.id]);
     const partnerId = prev.rows[0]?.partner_id as string | null;
     if (!partnerId) throw conflict('No delivery partner is assigned.', 'not_assigned');
-    await transition(c, order.id, ['ready_to_dispatch'], 'ready_to_dispatch', req.user!.id, { partner_id: null, partner_accepted_at: null }, 'Partner unassigned');
+    const wasOut = order.status === 'out_for_delivery';
+    await transition(c, order.id, ['ready_to_dispatch', 'out_for_delivery'], 'ready_to_dispatch', req.user!.id, { partner_id: null, partner_accepted_at: null }, 'Partner unassigned');
     await c.query("update assignments set status = 'cancelled', responded_at = coalesce(responded_at, now()) where order_id = $1 and status in ('pending','accepted')", [order.id]);
     await releasePartner(c, partnerId);
     await notify(partnerId, order.id, 'unassigned', 'Delivery removed', `${order.orderNumber} was taken back by the store`, c);
+    if (wasOut) await notify(order.customer!.id, order.id, 'reassigning', 'Delivery being reassigned', `${order.orderNumber} will be handed to another delivery partner shortly.`, c);
   });
   res.json({ order: await loadOrder(order.id, req.user!) });
 });

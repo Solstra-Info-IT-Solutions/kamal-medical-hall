@@ -16,6 +16,8 @@ import { uploadPrescription } from '../../api/upload';
 import type { Order, OrderSummary, Partner, PartnerState } from '../../api/types';
 import { Avatar, CallButton } from '../../components/CallButton';
 import { openFile } from '../../components/FileViewer';
+import { SourceOptions } from '../../components/SourceOptions';
+import { NotificationsRow } from '../../components/NotificationsRow';
 import { OrderCard } from '../../components/OrderCard';
 import { CountUp, Enter, Skeleton, Tap, tick } from '../../components/motion';
 import { Button, Card, ErrorView, Icon, Message, Pill, ResponsiveGrid, Screen, TextField, type IconName } from '../../components/ui';
@@ -350,7 +352,7 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
             <View style={[s.pillRow, { marginTop: spacing.md }]}>
               <Pill text={o.status === 'out_for_delivery' ? t('admin.st_busy') : o.partnerAccepted ? t('admin.accepted') : t('admin.waitingResponse')} tone={o.status === 'out_for_delivery' ? 'blue' : o.partnerAccepted ? 'green' : 'amber'} />
             </View>
-            {o.status === 'ready_to_dispatch' ? <Button title={t('admin.unassign')} variant="outline" icon="swap-horizontal" loading={busy === 'unassign'} style={{ marginTop: spacing.md }}
+            {['ready_to_dispatch', 'out_for_delivery'].includes(o.status) ? <Button title={t('admin.unassign')} variant="outline" icon="swap-horizontal" loading={busy === 'unassign'} style={{ marginTop: spacing.md }}
               onPress={async () => { const ok = await showDialog({ title: t('admin.unassignTitle', { name: o.partner!.name }), message: t('admin.unassignMsg'), icon: 'swap-horizontal', confirmLabel: t('admin.unassign'), cancelLabel: t('common.cancel') }); if (ok) await run('unassign', () => endpoints.admin.unassign(o.id)); }} /> : null}
           </Card>
         </Enter>
@@ -370,11 +372,11 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
               </View>
               {bill ? <Tap accessibilityRole="button" accessibilityLabel={t('upload.remove', { name: bill.name })} hitSlop={8} onPress={() => setBill(null)} haptic={false}><Icon name="close-circle" size={24} color={colors.muted} /></Tap> : null}
             </View>
-            <View style={s.billOptions}>
-              <Button small variant="outline" icon="camera" title={t('upload.camera')} onPress={() => { void pickBill('camera'); }} style={{ flex: 1 }} />
-              <Button small variant="outline" icon="images" title={t('upload.gallery')} onPress={() => { void pickBill('gallery'); }} style={{ flex: 1 }} />
-              <Button small variant="outline" icon="document-text" title={t('upload.file')} onPress={() => { void pickBill('file'); }} style={{ flex: 1 }} />
-            </View>
+            <SourceOptions options={[
+              { icon: 'camera', label: t('upload.camera'), onPress: () => { void pickBill('camera'); } },
+              { icon: 'images', label: t('upload.gallery'), onPress: () => { void pickBill('gallery'); } },
+              { icon: 'document-text', label: t('upload.file'), onPress: () => { void pickBill('file'); } },
+            ]} />
             <Button title={t('admin.sendQuote')} icon="send" disabled={!(quoteValue > 0) || !bill} loading={busy === 'quote'} onPress={sendQuote} style={{ marginTop: spacing.md }} />
           </Card>
         </Enter>
@@ -755,6 +757,7 @@ export function MoreScreen(_p: BottomTabScreenProps<AdminTabParamList, 'More'>) 
         {row('people-outline', t('admin.customers'), () => nav.navigate('Customers'))}
         {row('bar-chart-outline', t('admin.reports'), () => nav.navigate('Reports'))}
         {row('settings-outline', t('admin.settings'), () => nav.navigate('StoreSettings'))}
+        <NotificationsRow />
         {row('language-outline', t('profile.language'), () => nav.navigate('Language'))}
         {row('log-out-outline', t('profile.logout'), signOut, true)}
       </ScrollView>

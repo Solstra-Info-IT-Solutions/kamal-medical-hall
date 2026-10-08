@@ -99,10 +99,7 @@
     "pastOrders": "My past orders",
     "viewAll": "View all",
     "noPast": "No completed orders yet.",
-    "rxNotice": "Prescription medicines are checked by the pharmacy before fulfilment.",
-    "locating": "Finding your location…",
-    "allowLocation": "Allow location access",
-    "locationUnavailable": "Location unavailable. Tap to retry"
+    "rxNotice": "Prescription medicines are checked by the pharmacy before fulfilment."
   },
   "upload": {
     "cardTitle": "Upload photo",
@@ -801,5 +798,14 @@
     "page": "Page {{n}}",
     "download": "Download",
     "close": "Close"
+  },
+  "notif": {
+    "row": "Notifications",
+    "on": "On. You will get order updates.",
+    "offTap": "Off. Tap to turn on",
+    "requiredTitle": "Turn on notifications",
+    "requiredMsg": "Order updates, quotes and delivery alerts reach you as notifications. Without them you may miss important updates. Please allow notifications for this app.",
+    "openSettings": "Open settings",
+    "later": "Later"
   }
 }

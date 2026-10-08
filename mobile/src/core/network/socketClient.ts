@@ -89,3 +89,9 @@ export function disconnectRealtime() {
   want = 'out';
   if (socket?.connected && personal) { personal = false; socket.disconnect().connect(); }
 }
+
+/** Called once at app start: wakes a sleeping server and opens the connection while the person is still typing their number. */
+export function warmUp() {
+  try { void fetch(`${API_URL}/health`).catch(() => undefined); } catch { /* best effort */ }
+  getSocket();
+}

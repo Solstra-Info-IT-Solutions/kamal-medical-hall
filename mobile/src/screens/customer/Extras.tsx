@@ -8,6 +8,7 @@ import { endpoints } from '../../api/endpoints';
 import type { ChatMessage, ChatQueue } from '../../api/types';
 import { uploadPrescription } from '../../api/upload';
 import { StarRating, ReviewCard } from '../../components/ReviewParts';
+import { SourceOptions } from '../../components/SourceOptions';
 import { tick } from '../../components/motion';
 import { Button, Card, ErrorView, Icon, Message, Screen, TextField } from '../../components/ui';
 import { notice, showDialog } from '../../dialog';
@@ -128,7 +129,7 @@ export function WriteReviewScreen({ navigation, route }: NativeStackScreenProps<
       const uploaded = [];
       if (photos.length) {
         const sig = await endpoints.signUpload('review');
-        for (const p of photos) uploaded.push(await uploadPrescription(p, sig));
+        uploaded.push(...await Promise.all(photos.map((p) => uploadPrescription(p, sig))));
       }
       await endpoints.reviews.create({ orderId: route.params.orderId, rating, comment: comment.trim() || undefined, images: uploaded.map((u) => ({ publicId: u.publicId, mimeType: u.mimeType, sizeBytes: u.sizeBytes })) });
       tick('success');
@@ -153,10 +154,10 @@ export function WriteReviewScreen({ navigation, route }: NativeStackScreenProps<
         ))}
       </View>
       {photos.length < 3 ? (
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Button small variant="outline" icon="camera" title={t('upload.camera')} onPress={() => { void addPhotos('camera'); }} style={{ flex: 1 }} />
-          <Button small variant="outline" icon="images" title={t('upload.gallery')} onPress={() => { void addPhotos('gallery'); }} style={{ flex: 1 }} />
-        </View>
+        <SourceOptions options={[
+          { icon: 'camera', label: t('upload.camera'), onPress: () => { void addPhotos('camera'); } },
+          { icon: 'images', label: t('upload.gallery'), onPress: () => { void addPhotos('gallery'); } },
+        ]} />
       ) : null}
       <Text style={[type.small, { color: colors.secondary, marginTop: spacing.md }]}>{t('reviews.moderationNote')}</Text>
     </Screen>

@@ -121,11 +121,12 @@ export function ReviewScreen({ navigation }: NativeStackScreenProps<CustomerStac
       const files: UploadedFile[] = [];
       setStep(t('review.uploading'));
       const sig = await endpoints.signUpload();
-      for (const f of prescriptions) {
+      // all files at once; ones already uploaded by an earlier attempt are reused
+      files.push(...await Promise.all(prescriptions.map(async (f) => {
         let u = uploaded.get(f.id);
         if (!u) { u = await uploadPrescription(f, sig); uploaded.set(f.id, u); }
-        files.push(u);
-      }
+        return u;
+      })));
       setStep(t('review.sending'));
       const { order } = await endpoints.createOrder({
         kind: 'prescription', items: medicines.map((m) => ({ name: m.name, quantity: m.quantity })),

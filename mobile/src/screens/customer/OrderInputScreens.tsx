@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SourceOptions } from '../../components/SourceOptions';
 import { Tap } from '../../components/motion';
 import { Button, Card, Icon, Screen } from '../../components/ui';
 import { useAutoFocus } from '../../hooks';
@@ -92,13 +93,7 @@ export function UploadScreen({ navigation }: NativeStackScreenProps<CustomerStac
     <Screen footer={<Button title={t('common.next')} onPress={next} disabled={busy} />}>
       <Text style={[type.h3, { color: colors.text }]}>{t('upload.cardTitle')}</Text>
       <Text style={[type.small, { color: colors.secondary, marginBottom: spacing.md }]}>{t('upload.cardSub')}</Text>
-      {files.length < MAX_FILES ? options.map((o) => (
-        <Tap key={o.label} accessibilityRole="button" accessibilityLabel={o.label} onPress={o.onPress} disabled={busy} style={s.option}>
-          <View style={s.optionIcon}><Icon name={o.icon} size={24} color={colors.primary} /></View>
-          <Text style={[type.bodyMedium, { color: colors.text, flex: 1 }]}>{o.label}</Text>
-          <Icon name="chevron-forward" size={20} color={colors.muted} />
-        </Tap>
-      )) : null}
+      {files.length < MAX_FILES ? <SourceOptions disabled={busy} options={options} /> : null}
 
       {files.length > 0 ? (
         <View style={s.strip}>

@@ -13,6 +13,7 @@ import type { DutyStatus, Order, OrderSummary, PartnerState } from '../../api/ty
 import { Avatar, CallButton } from '../../components/CallButton';
 import { OrderCard } from '../../components/OrderCard';
 import { PaymentSheet, type PaymentInfo } from '../../components/PaymentSheet';
+import { NotificationsRow } from '../../components/NotificationsRow';
 import { CountUp, Enter, Skeleton, Tap, tick } from '../../components/motion';
 import { Button, Card, ErrorView, Icon, Message, Pill, Screen, type IconName } from '../../components/ui';
 import { notice, showDialog } from '../../dialog';
@@ -186,6 +187,7 @@ export function PartnerHomeScreen(_p: BottomTabScreenProps<PartnerTabParamList, 
         {active.map((o, i) => <OrderCard key={o.id} order={o} index={i + 7} onPress={() => nav.navigate('Job', { orderId: o.id })} subtitle={`${o.customerName ?? ''} · ${o.deliverySlot ?? ''}`} />)}
 
         <Enter index={12}>
+          <NotificationsRow />
           <Tap accessibilityRole="button" onPress={() => nav.navigate('Language')} scaleTo={0.98} style={s.menuRow}><View style={s.menuIcon}><Icon name="language-outline" size={22} color={colors.navy} /></View><Text style={[type.bodyMedium, { color: colors.text, flex: 1 }]}>{t('profile.language')}</Text><Icon name="chevron-forward" size={20} color={colors.muted} /></Tap>
           <Tap accessibilityRole="button" onPress={signOut} scaleTo={0.98} style={s.menuRow}><View style={[s.menuIcon, { backgroundColor: colors.redBg }]}><Icon name="log-out-outline" size={22} color={colors.red} /></View><Text style={[type.bodyMedium, { color: colors.red, flex: 1 }]}>{t('profile.logout')}</Text></Tap>
         </Enter>

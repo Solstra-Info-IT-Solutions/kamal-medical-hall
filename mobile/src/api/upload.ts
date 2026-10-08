@@ -1,4 +1,5 @@
-import { Platform } from 'react-native';
+import * as ImageManipulator from 'expo-image-manipulator';
+import { Image, Platform } from 'react-native';
 import { ApiError } from './client';
 import type { UploadSignature } from './endpoints';
 import type { PrescriptionFile } from '../store/cart';
@@ -26,8 +27,27 @@ function postWithXhr(url: string, form: FormData): Promise<{ status: number; bod
   });
 }
 
+const MAX_SIDE = 1600;       // plenty to read a prescription or bill, a fraction of a 12 MP camera photo
+const SKIP_BELOW = 350_000;  // already small: send as is
+
+const imageSize = (uri: string) => new Promise<{ width: number; height: number }>((resolve, reject) => Image.getSize(uri, (width, height) => resolve({ width, height }), reject));
+
+/** Camera photos are 3-6 MB; resized and re-encoded they are ~250 KB, which is what makes uploads on mobile data fast. Falls back to the original on any problem. */
+async function shrinkImage(file: PrescriptionFile): Promise<PrescriptionFile> {
+  if (Platform.OS === 'web' || !/^image\/(jpe?g|png|webp|heic|heif)$/i.test(file.mimeType) || (file.sizeBytes ?? Infinity) < SKIP_BELOW) return file;
+  try {
+    const { width, height } = await imageSize(file.uri);
+    const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
+    const out = await ImageManipulator.manipulateAsync(file.uri, scale < 1 ? [{ resize: width >= height ? { width: MAX_SIDE } : { height: MAX_SIDE } }] : [], { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG });
+    return { ...file, uri: out.uri, mimeType: 'image/jpeg', name: file.name.replace(/\.[^.]+$/, '') + '.jpg', sizeBytes: undefined };
+  } catch {
+    return file;
+  }
+}
+
 /** Direct signed upload to Cloudinary; the API secret never leaves the backend. */
-export async function uploadPrescription(file: PrescriptionFile, sig: UploadSignature): Promise<UploadedFile> {
+export async function uploadPrescription(original: PrescriptionFile, sig: UploadSignature): Promise<UploadedFile> {
+  const file = await shrinkImage(original);
   const build = async () => {
     const form = new FormData();
     if (Platform.OS === 'web') {

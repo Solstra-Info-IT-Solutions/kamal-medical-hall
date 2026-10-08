@@ -8,6 +8,7 @@ import { AnimatedSplash } from './components/AnimatedSplash';
 import { DialogHost } from './components/DialogHost';
 import { FileViewerHost } from './components/FileViewer';
 import { NotificationToast } from './components/NotificationToast';
+import { warmUp } from './core/network/socketClient';
 import i18n, { restoreLanguage } from './localization';
 import { Navigation } from './navigation';
 import { useSession } from './store/session';
@@ -30,6 +31,7 @@ export function App() {
   const [langReady, setLangReady] = useState(false);
   const [minElapsed, setMinElapsed] = useState(false);
   const sessionStatus = useSession((s) => s.status);
+  useEffect(() => { warmUp(); }, []);
   useEffect(() => { void restoreLanguage().finally(() => setLangReady(true)); }, []);
   const ready = (fontsLoaded || !!fontError) && langReady;
   useEffect(() => {

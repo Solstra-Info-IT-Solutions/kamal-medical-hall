@@ -12,7 +12,6 @@ import { Icon, ResponsiveGrid } from '../../components/ui';
 import { useContentStyle } from '../../layout';
 import { useLoad } from '../../hooks';
 import type { CustomerStackParamList, CustomerTabParamList } from '../../navigation/types';
-import { useCurrentPlace } from '../../currentPlace';
 import { useSession } from '../../store/session';
 import { colors, radius, spacing, type } from '../../theme';
 
@@ -32,20 +31,13 @@ export function HomeScreen(_props: BottomTabScreenProps<CustomerTabParamList, 'H
   const user = useSession((st) => st.user);
   const active = useLoad(() => endpoints.orders('active'), ['order:update']);
   const unread = useLoad(async () => (await endpoints.notifications()).notifications.filter((n) => !n.read).length, ['notification']);
-  const { place, retry } = useCurrentPlace();
-  const placeText = place.status === 'ready' ? place.label : place.status === 'loading' ? t('home.locating') : place.status === 'denied' ? t('home.allowLocation') : t('home.locationUnavailable');
   const refresh = () => { void active.reload(); void unread.reload(); };
 
   return (
     <SafeAreaView style={s.fill} edges={['top']}>
       <ScrollView contentContainerStyle={[s.body, content]} refreshControl={<RefreshControl refreshing={active.loading && !!active.data} onRefresh={refresh} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
         <View style={s.top}>
-          <View style={s.loc}>
-            <Text numberOfLines={1} style={[type.h3, { color: colors.navy }]}>{t('brand.name')}</Text>
-            <Tap accessibilityRole="button" accessibilityLabel={placeText} onPress={retry} disabled={place.status === 'ready'}>
-              <Text numberOfLines={1} style={[type.small, { color: place.status === 'denied' || place.status === 'unavailable' ? colors.primary : colors.secondary }]}>{placeText}</Text>
-            </Tap>
-          </View>
+          <View style={s.loc}><Text numberOfLines={1} style={[type.h2, { color: colors.navy }]}>{t('brand.name')}</Text></View>
           <Bell unread={unread.data ?? 0} onPress={() => nav.navigate('Notifications')} label={t('home.notifications')} />
         </View>
         <Text style={[type.h2, { marginTop: spacing.lg, color: colors.text }]}>{user?.name ? t('home.greetingName', { name: user.name.split(' ')[0] }) : t('home.greeting')}</Text>
