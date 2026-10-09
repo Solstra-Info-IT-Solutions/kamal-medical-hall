@@ -70,9 +70,9 @@ function AnnouncementsCard() {
           <View key={a.id} style={s.annRow}>
             <View style={{ flex: 1, gap: 2 }}>
               <Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={2}>{a.title}</Text>
-              <Text style={[type.small, { color: a.expired ? colors.red : colors.secondary }]}>{a.expired ? t('ann.expiredOn', { date: formatDateTime(a.expiresAt) }) : t('ann.expiresOn', { date: formatDateTime(a.expiresAt) })}</Text>
+              <Text style={[type.small, { color: a.status === 'active' ? colors.secondary : a.status === 'expired' ? colors.red : colors.amber }]}>{a.status === 'inactive' ? t('ann.inactive') : !a.expiresAt ? t('ann.noExpiryLine') : a.expired ? t('ann.expiredOn', { date: formatDateTime(a.expiresAt) }) : t('ann.expiresOn', { date: formatDateTime(a.expiresAt) })}</Text>
             </View>
-            <Button small variant="outline" icon="send" title={t('ann.sendAgain')} onPress={() => again(a.id)} loading={busy === a.id} disabled={a.expired || !!busy} />
+            <Button small variant="outline" icon="send" title={t('ann.pushReminder')} onPress={() => again(a.id)} loading={busy === a.id} disabled={a.status !== 'active' || !!busy} />
           </View>
         ))}
         <Button small variant="ghost" icon="megaphone" title={t('ann.manage')} onPress={() => nav.navigate('Announcements')} />

@@ -94,10 +94,33 @@ describe('announcements', () => {
 
   it('validates input and only accepts pictures from the admin\'s own folder', async () => {
     assert.equal((await call('POST', '/admin/announcements', admin, { items: [{ title: 'x', body: 'hello there', expiresAt: inDays(1) }] })).status, 422, 'title too short');
-    assert.equal((await call('POST', '/admin/announcements', admin, { items: [{ title: 'Empty one', body: '', expiresAt: inDays(1) }] })).status, 422, 'needs text or a picture');
     assert.equal((await call('POST', '/admin/announcements', admin, { items: [{ title: 'Past one', body: 'text here', expiresAt: inDays(-1) }] })).status, 422, 'expiry in the past');
+    assert.equal((await call('POST', '/admin/announcements', admin, { items: [{ title: 'Missing title', body: 'text here' }, { title: '', body: 'x' }] })).status, 422, 'the title is required');
     assert.equal((await call('POST', '/admin/announcements', admin, { items: [{ title: 'Bad file', body: '', images: [{ publicId: 'announcements/someone-else/x', mimeType: 'image/jpeg' }], expiresAt: inDays(1) }] })).status, 400);
     assert.equal((await call('POST', '/admin/announcements', admin, { items: Array.from({ length: 11 }, () => ({ title: 'Many', body: 'text here', expiresAt: inDays(1) })) })).status, 422, 'at most 10 at once');
+  });
+
+  it('only the title is required; without an expiry date it stays live until the admin switches it off', async () => {
+    const r = await send([{ title: 'Just a title' }]);
+    assert.equal(r.status, 201);
+    const [id] = r.body.ids as string[];
+    const row = (await call('GET', '/admin/announcements', admin)).body.announcements.find((x: any) => x.id === id);
+    assert.equal(row.expiresAt, null); assert.equal(row.status, 'active'); assert.equal(row.expired, false);
+    assert.ok(((await call('GET', '/announcements', a)).body.announcements as any[]).some((x) => x.id === id));
+    assert.equal((await mine(a)).filter((n) => n.announcementId === id).length, 1);
+
+    // switched off: gone for customers, no reminder possible
+    assert.equal((await call('PATCH', `/admin/announcements/${id}`, admin, { isActive: false })).body.announcement.status, 'inactive');
+    assert.ok(!((await call('GET', '/announcements', a)).body.announcements as any[]).some((x) => x.id === id));
+    assert.equal((await call('GET', `/announcements/${id}`, a)).status, 404);
+    const refused = await call('POST', `/admin/announcements/${id}/send`, admin);
+    assert.equal(refused.status, 409); assert.equal(refused.body.error.code, 'inactive');
+    // switched on again: back, and a reminder works
+    assert.equal((await call('PATCH', `/admin/announcements/${id}`, admin, { isActive: true })).status, 200);
+    assert.equal((await call('POST', `/admin/announcements/${id}/send`, admin)).status, 200);
+    // an expiry can be added later and removed again
+    assert.equal((await call('PATCH', `/admin/announcements/${id}`, admin, { expiresAt: inDays(2) })).body.announcement.expiresAt !== null, true);
+    assert.equal((await call('PATCH', `/admin/announcements/${id}`, admin, { expiresAt: null })).body.announcement.expiresAt, null);
   });
 
   it('deleting removes it everywhere', async () => {

@@ -14,6 +14,7 @@ import { colors, radius, spacing, type } from '../../theme';
 import { formatDateTime } from '../../utils';
 
 const DAYS = [1, 3, 7, 14, 30];
+const NONE = 0; // "no expiry": stays live until the admin switches it off
 const MAX_IMAGES = 6;
 /** End of the day, `n` days from now, as an ISO timestamp. */
 const endOfDay = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); d.setHours(23, 59, 59, 0); return d.toISOString(); };
@@ -21,21 +22,26 @@ const endOfDay = (n: number) => { const d = new Date(); d.setDate(d.getDate() + 
 const parseDay = (v: string) => { if (!/^\d{4}-\d{2}-\d{2}$/.test(v.trim())) return null; const d = new Date(`${v.trim()}T23:59:59`); return Number.isNaN(d.getTime()) || d.getTime() <= Date.now() ? null : d.toISOString(); };
 
 interface Draft { key: number; title: string; body: string; images: { uri: string; name: string; mimeType: string }[]; days: number | null; custom: string }
-const blank = (key: number): Draft => ({ key, title: '', body: '', images: [], days: 7, custom: '' });
+const blank = (key: number): Draft => ({ key, title: '', body: '', images: [], days: NONE, custom: '' });
 
-function ExpiryPicker({ days, custom, onDays, onCustom }: { days: number | null; custom: string; onDays: (n: number | null) => void; onCustom: (v: string) => void }) {
+function ExpiryPicker({ days, custom, onDays, onCustom, allowNone = true }: { days: number | null; custom: string; onDays: (n: number | null) => void; onCustom: (v: string) => void; allowNone?: boolean }) {
   const { t } = useTranslation();
   return (
     <View>
-      <Text style={[type.smallMedium, { color: colors.text, marginBottom: 6 }]}>{t('ann.expiresIn')} *</Text>
+      <Text style={[type.smallMedium, { color: colors.text, marginBottom: 6 }]}>{t('ann.expiresIn')}</Text>
       <View style={s.chips}>
+        {allowNone ? (
+          <Tap accessibilityRole="radio" accessibilityState={{ selected: days === NONE }} onPress={() => { onDays(NONE); onCustom(''); }} style={[s.chip, days === NONE && s.chipOn]}>
+            <Text style={[type.smallMedium, { color: days === NONE ? colors.white : colors.navy }]}>{t('ann.noExpiry')}</Text>
+          </Tap>
+        ) : null}
         {DAYS.map((n) => (
           <Tap key={n} accessibilityRole="radio" accessibilityState={{ selected: days === n }} onPress={() => { onDays(n); onCustom(''); }} style={[s.chip, days === n && s.chipOn]}>
             <Text style={[type.smallMedium, { color: days === n ? colors.white : colors.navy }]}>{t('ann.days', { count: n })}</Text>
           </Tap>
         ))}
       </View>
-      <TextField label={t('ann.orDate')} value={custom} onChangeText={(v) => { onCustom(v); onDays(null); }} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" hint={t('ann.dateHint')} />
+      <TextField label={t('ann.orDate')} value={custom} onChangeText={(v) => { onCustom(v); onDays(null); }} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" hint={days === NONE ? t('ann.noExpiryHint') : t('ann.dateHint')} />
     </View>
   );
 }
@@ -62,8 +68,9 @@ export function AnnouncementsScreen() {
     } catch { setErr(t('admin.billPickFailed')); }
   };
 
-  const expiryOf = (d: { days: number | null; custom: string }) => (d.days ? endOfDay(d.days) : parseDay(d.custom));
-  const valid = (d: Draft) => d.title.trim().length >= 2 && (d.body.trim().length >= 2 || d.images.length > 0) && !!expiryOf(d);
+  /** null = no expiry. A typed date that is not a future date is invalid (undefined). */
+  const expiryOf = (d: { days: number | null; custom: string }): string | null | undefined => (d.days === NONE ? null : d.days ? endOfDay(d.days) : parseDay(d.custom) ?? undefined);
+  const valid = (d: Draft) => d.title.trim().length >= 2 && expiryOf(d) !== undefined;
   const ready = drafts.length > 0 && drafts.every(valid);
 
   const sendAll = async () => {
@@ -79,7 +86,7 @@ export function AnnouncementsScreen() {
           const ups = await Promise.all(d.images.map((im, i) => uploadPrescription({ id: `ann-${d.key}-${i}`, ...im }, sig)));
           images.push(...ups.map((u) => ({ publicId: u.publicId, mimeType: u.mimeType, resourceType: u.resourceType, sizeBytes: u.sizeBytes })));
         }
-        items.push({ title: d.title.trim(), body: d.body.trim(), images, expiresAt: expiryOf(d)! });
+        items.push({ title: d.title.trim(), body: d.body.trim(), images, expiresAt: expiryOf(d) ?? null });
       }
       const r = await endpoints.admin.createAnnouncements(items);
       tick('success');
@@ -94,6 +101,10 @@ export function AnnouncementsScreen() {
     try { const r = await endpoints.admin.sendAnnouncement(a.id); tick('success'); await saved.reload(); await showDialog({ title: t('ann.resentTitle'), message: t('ann.resentMsg', { people: r.sentTo }), icon: 'checkmark-circle', confirmLabel: t('common.ok') }); }
     catch (e) { setErr((e as Error).message); tick('error'); } finally { setBusy(null); }
   };
+  const toggle = async (a: Announcement) => {
+    setBusy(`tog-${a.id}`); setErr('');
+    try { await endpoints.admin.updateAnnouncement(a.id, { isActive: !a.isActive }); tick('success'); await saved.reload(); } catch (e) { setErr((e as Error).message); tick('error'); } finally { setBusy(null); }
+  };
   const remove = async (a: Announcement) => {
     const ok = await showDialog({ title: t('ann.deleteTitle'), message: t('ann.deleteMsg', { title: a.title }), icon: 'trash', tone: 'danger', confirmLabel: t('ann.delete'), cancelLabel: t('common.cancel') });
     if (!ok) return;
@@ -103,7 +114,7 @@ export function AnnouncementsScreen() {
   const saveExpiry = async () => {
     if (!edit) return;
     const expiresAt = expiryOf(edit);
-    if (!expiresAt) { setErr(t('ann.badDate')); tick('error'); return; }
+    if (expiresAt === undefined) { setErr(t('ann.badDate')); tick('error'); return; }
     setBusy(`exp-${edit.id}`); setErr('');
     try { await endpoints.admin.updateAnnouncement(edit.id, { expiresAt }); tick('success'); setEdit(null); await saved.reload(); } catch (e) { setErr((e as Error).message); } finally { setBusy(null); }
   };
@@ -117,9 +128,9 @@ export function AnnouncementsScreen() {
           <View style={s.draftHead}><Text style={[type.bodyMedium, { color: colors.text, flex: 1 }]}>{t('ann.draftN', { n: i + 1 })}</Text>
             {drafts.length > 1 ? <Tap accessibilityRole="button" accessibilityLabel={t('ann.removeDraft')} hitSlop={10} onPress={() => setDrafts((all) => all.filter((x) => x.key !== d.key))}><Icon name="close-circle" size={24} color={colors.muted} /></Tap> : null}</View>
           <TextField label={`${t('ann.titleField')} *`} value={d.title} onChangeText={(v) => patch(d.key, { title: v })} maxLength={80} />
-          <TextField label={t('ann.body')} value={d.body} onChangeText={(v) => patch(d.key, { body: v })} multiline maxLength={1000} hint={d.images.length ? t('ann.bodyOptional') : t('ann.bodyRequired')} />
+          <TextField label={t('ann.body')} value={d.body} onChangeText={(v) => patch(d.key, { body: v })} multiline maxLength={1000} hint={t('ann.bodyOptional')} />
           <Text style={[type.smallMedium, { color: colors.text }]}>{t('ann.pictures')}</Text>
-          <Text style={[type.small, { color: colors.secondary }]}>{d.images.length ? t('ann.asSlider') : t('ann.asNotification')}</Text>
+          <Text style={[type.small, { color: colors.secondary }]}>{d.images.length ? t('ann.asSlider') : t('ann.asNotification')} {t('ann.optional')}</Text>
           {d.images.length ? (
             <View style={s.thumbs}>{d.images.map((im, n) => (
               <View key={im.uri + n} style={s.thumb}><Image source={{ uri: im.uri }} style={s.thumbImg} />
@@ -137,12 +148,12 @@ export function AnnouncementsScreen() {
       {saved.loading && !saved.data ? <View style={{ gap: 12 }}><Skeleton h={110} r={16} /><Skeleton h={110} r={16} /></View>
         : saved.error && !saved.data ? <ErrorView message={saved.error} onRetry={saved.reload} retryLabel={t('common.retry')} />
         : !saved.data?.announcements.length ? <Message icon="megaphone-outline" title={t('ann.none')} text={t('ann.noneHelp')} />
-        : saved.data.announcements.map((a) => <SavedCard key={a.id} a={a} busy={busy} edit={edit?.id === a.id ? edit : null} setEdit={setEdit} onSave={saveExpiry} onResend={() => resend(a)} onDelete={() => remove(a)} />)}
+        : saved.data.announcements.map((a) => <SavedCard key={a.id} a={a} busy={busy} edit={edit?.id === a.id ? edit : null} setEdit={setEdit} onSave={saveExpiry} onResend={() => resend(a)} onToggle={() => toggle(a)} onDelete={() => remove(a)} />)}
     </Screen>
   );
 }
 
-function SavedCard({ a, busy, edit, setEdit, onSave, onResend, onDelete }: { a: Announcement; busy: string | null; edit: { id: string; days: number | null; custom: string } | null; setEdit: (e: { id: string; days: number | null; custom: string } | null) => void; onSave: () => void; onResend: () => void; onDelete: () => void }) {
+function SavedCard({ a, busy, edit, setEdit, onSave, onResend, onToggle, onDelete }: { a: Announcement; busy: string | null; edit: { id: string; days: number | null; custom: string } | null; setEdit: (e: { id: string; days: number | null; custom: string } | null) => void; onSave: () => void; onResend: () => void; onToggle: () => void; onDelete: () => void }) {
   const { t } = useTranslation();
   const first = a.images[0]?.url;
   return (
@@ -153,13 +164,15 @@ function SavedCard({ a, busy, edit, setEdit, onSave, onResend, onDelete }: { a: 
           <Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={2}>{a.title}</Text>
           {a.body ? <Text style={[type.small, { color: colors.secondary }]} numberOfLines={2}>{a.body}</Text> : null}
           <View style={s.pills}>
-            <Pill text={a.expired ? t('ann.expired') : t('ann.active')} tone={a.expired ? 'red' : 'green'} />
+            <Pill text={a.status === 'expired' ? t('ann.expired') : a.status === 'inactive' ? t('ann.inactive') : t('ann.active')} tone={a.status === 'expired' ? 'red' : a.status === 'inactive' ? 'amber' : 'green'} />
             <Pill text={a.hasImages ? t('ann.kindSlider', { count: a.images.length }) : t('ann.kindText')} tone="blue" />
           </View>
         </View>
       </View>
-      <Text style={[type.small, { color: colors.secondary }]}>{a.expired ? t('ann.expiredOn', { date: formatDateTime(a.expiresAt) }) : t('ann.expiresOn', { date: formatDateTime(a.expiresAt) })} · {t('ann.sentTimes', { count: a.sendCount })}{a.lastSentAt ? ` · ${t('ann.lastSent', { date: formatDateTime(a.lastSentAt) })}` : ''}</Text>
+      <Text style={[type.small, { color: colors.secondary }]}>{t('ann.createdOn', { date: formatDateTime(a.createdAt) })}</Text>
+      <Text style={[type.small, { color: a.expired ? colors.red : colors.secondary }]}>{!a.expiresAt ? t('ann.noExpiryLine') : a.expired ? t('ann.expiredOn', { date: formatDateTime(a.expiresAt) }) : t('ann.expiresOn', { date: formatDateTime(a.expiresAt) })} · {t('ann.sentTimes', { count: a.sendCount })}{a.lastSentAt ? ` · ${t('ann.lastSent', { date: formatDateTime(a.lastSentAt) })}` : ''}</Text>
       {a.expired ? <Text style={[type.small, { color: colors.amber }]}>{t('ann.expiredHelp')}</Text> : null}
+      {a.status === 'inactive' ? <Text style={[type.small, { color: colors.amber }]}>{t('ann.inactiveHelp')}</Text> : null}
       {edit ? (
         <View style={{ marginTop: spacing.sm }}>
           <ExpiryPicker days={edit.days} custom={edit.custom} onDays={(n) => setEdit({ ...edit, days: n })} onCustom={(v) => setEdit({ ...edit, custom: v })} />
@@ -170,8 +183,9 @@ function SavedCard({ a, busy, edit, setEdit, onSave, onResend, onDelete }: { a: 
         </View>
       ) : (
         <View style={s.row}>
-          <View style={s.rowBtn}><Button small title={t('ann.sendAgain')} icon="send" onPress={onResend} loading={busy === `send-${a.id}`} disabled={a.expired || !!busy} /></View>
-          <View style={s.rowBtn}><Button small variant="outline" title={t('ann.editDate')} icon="calendar" onPress={() => setEdit({ id: a.id, days: 7, custom: '' })} disabled={!!busy} /></View>
+          <View style={s.rowBtn}><Button small title={t('ann.pushReminder')} icon="notifications" onPress={onResend} loading={busy === `send-${a.id}`} disabled={a.status !== 'active' || !!busy} /></View>
+          <View style={s.rowBtn}><Button small variant="outline" title={a.isActive ? t('ann.deactivate') : t('ann.activate')} icon={a.isActive ? 'pause-circle-outline' : 'play-circle-outline'} onPress={onToggle} loading={busy === `tog-${a.id}`} disabled={!!busy} /></View>
+          <View style={s.rowBtn}><Button small variant="outline" title={t('ann.editDate')} icon="calendar" onPress={() => setEdit({ id: a.id, days: a.expiresAt ? 7 : NONE, custom: '' })} disabled={!!busy} /></View>
           <View style={s.rowBtn}><Button small variant="danger" title={t('ann.delete')} icon="trash-outline" onPress={onDelete} loading={busy === `del-${a.id}`} disabled={!!busy} /></View>
         </View>
       )}

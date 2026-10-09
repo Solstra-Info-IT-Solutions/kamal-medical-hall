@@ -135,6 +135,8 @@ export interface ShopDetails {
 export type ShopPublic = ShopDetails & { isOpen: boolean; openingTime: string; closingTime: string; legacy: { address: string | null; phone: string | null; email: string | null; latitude: number | null; longitude: number | null } };
 
 export interface Announcement {
-  id: string; title: string; body: string; expiresAt: string; createdAt: string; lastSentAt: string | null; sendCount: number;
+  id: string; title: string; body: string; expiresAt: string | null; createdAt: string; lastSentAt: string | null; sendCount: number;
+  /** Switched on by the admin (an announcement without an expiry date stays live until it is switched off). */
+  isActive: boolean; status: 'active' | 'expired' | 'inactive';
   active: boolean; expired: boolean; hasImages: boolean; images: { publicId: string; mimeType: string; url: string | null; fullUrl: string | null }[];
 }

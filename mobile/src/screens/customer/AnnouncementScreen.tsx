@@ -4,7 +4,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { endpoints } from '../../api/endpoints';
 import { openFile } from '../../components/FileViewer';
 import { Skeleton } from '../../components/motion';
-import { ErrorView, Message, Pill } from '../../components/ui';
+import { ErrorView, Message } from '../../components/ui';
 import { useLoad } from '../../hooks';
 import { useContentStyle } from '../../layout';
 import type { CustomerStackParamList } from '../../navigation/types';
@@ -23,12 +23,15 @@ export function AnnouncementScreen({ route }: NativeStackScreenProps<CustomerSta
     <ScrollView contentContainerStyle={[s.body, content]} showsVerticalScrollIndicator={false}>
       {a.images.map((im, i) => (
         <Pressable key={im.publicId} accessibilityRole="button" accessibilityLabel={`${a.title} ${i + 1}`} onPress={() => openFile({ title: a.title, urls: a.images.map((x) => x.url).filter((u): u is string => !!u), fallbackUrl: im.fullUrl })}>
-          {im.url ? <Image source={{ uri: im.url }} style={s.img} resizeMode="cover" /> : null}
+          {im.url ? <Image source={{ uri: im.url }} style={s.img} resizeMode="contain" /> : null}
         </Pressable>
       ))}
-      <View style={s.pillRow}><Pill text={a.expired ? t('ann.expiredShort') : t('ann.validTill', { date: formatDateTime(a.expiresAt) })} tone={a.expired ? 'red' : 'green'} /></View>
       <Text style={[type.h2, { color: colors.text }]}>{a.title}</Text>
       {a.body ? <Text style={[type.body, { color: colors.text }]} selectable>{a.body}</Text> : null}
+      <View style={s.dates}>
+        <View style={s.dateRow}><Text style={[type.small, { color: colors.secondary }]}>{t('ann.created')}</Text><Text style={[type.bodyMedium, { color: colors.text }]}>{formatDateTime(a.createdAt)}</Text></View>
+        {a.expiresAt ? <View style={s.dateRow}><Text style={[type.small, { color: colors.secondary }]}>{a.expired ? t('ann.expiredShort') : t('ann.validUntil')}</Text><Text style={[type.bodyMedium, { color: a.expired ? colors.red : colors.text }]}>{formatDateTime(a.expiresAt)}</Text></View> : null}
+      </View>
       {a.expired ? <Text style={[type.small, { color: colors.secondary }]}>{t('ann.expiredNote')}</Text> : null}
     </ScrollView>
   );
@@ -37,5 +40,6 @@ export function AnnouncementScreen({ route }: NativeStackScreenProps<CustomerSta
 const s = StyleSheet.create({
   body: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.md },
   img: { width: '100%', aspectRatio: 16 / 9, borderRadius: radius.lg, backgroundColor: colors.card },
-  pillRow: { flexDirection: 'row' },
+  dates: { gap: 10, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.card },
+  dateRow: { gap: 2 },
 });
