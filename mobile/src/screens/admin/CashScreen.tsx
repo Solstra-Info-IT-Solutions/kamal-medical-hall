@@ -6,7 +6,7 @@ import { endpoints } from '../../api/endpoints';
 import type { ClosingSummary } from '../../api/types';
 import { Avatar, CallButton } from '../../components/CallButton';
 import { Skeleton, tick } from '../../components/motion';
-import { Button, Card, ErrorView, Icon, Message, Screen } from '../../components/ui';
+import { ButtonRow, Button, Card, ErrorView, Icon, Message, Screen } from '../../components/ui';
 import { showDialog } from '../../dialog';
 import { useErrorPopup, useLoad } from '../../hooks';
 import { colors, spacing, type } from '../../theme';
@@ -65,10 +65,10 @@ export function CashScreen() {
               <Button small variant="outline" title={t('cash.done')} icon="checkmark" loading={busy === `${p.partnerId}${o.orderId}`} disabled={!!busy} onPress={() => settle(p.partnerId, p.name, o.amount, 1, [o.orderId], o.orderNumber)} />
             </View>
           ))}
-          <View style={s.actions}>
+          <ButtonRow>
             <View style={{ flex: 1 }}><CallButton phone={p.phone} compact label={t('admin.callPartner')} /></View>
             <View style={{ flex: 2 }}><Button title={t('cash.markAll', { amount: formatMoney(p.total) })} icon="checkmark-done" loading={busy === p.partnerId} disabled={!!busy} onPress={() => settle(p.partnerId, p.name, p.total, p.orders.length)} /></View>
-          </View>
+          </ButtonRow>
         </Card>
       ))}
     </Screen>

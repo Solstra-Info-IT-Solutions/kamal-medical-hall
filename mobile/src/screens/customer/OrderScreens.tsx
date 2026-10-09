@@ -16,7 +16,7 @@ import { OrderCard } from '../../components/OrderCard';
 import { CountUp, Enter, Ripples, Skeleton, Tap, tick, useShake } from '../../components/motion';
 import { Avatar, CallButton } from '../../components/CallButton';
 import { StarRating } from '../../components/ReviewParts';
-import { Button, Card, ErrorView, Icon, Message, Pill, ResponsiveGrid, Screen, type IconName } from '../../components/ui';
+import { ButtonRow, Button, Card, ErrorView, Icon, Message, Pill, ResponsiveGrid, Screen, type IconName } from '../../components/ui';
 import { fileBadge, isImageMime } from '../../fileKinds';
 import { notice, showDialog } from '../../dialog';
 import { useContentStyle } from '../../layout';
@@ -247,10 +247,10 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
           <Text style={[type.bodyMedium, { color: colors.text }]}>{o.address.recipientName}{o.address.phone ? ` · ${o.address.phone}` : ''}</Text>
           <Text style={[type.body, { color: colors.secondary, marginTop: 2 }]}>{addressLine}</Text>
           <Text style={[type.bodyMedium, { color: colors.text, marginTop: 6 }]}>{formatDelivery(o.deliveryDate, o.deliverySlot)}</Text>
-          <View style={s.btnPair}>
+          <ButtonRow>
             <Button small variant="outline" icon="map" title={t('order.openMap')} onPress={openMap} style={{ flex: 1 }} />
             <Button small variant="outline" icon="copy" title={t('order.copyAddress')} onPress={() => { void copyAddress(); }} style={{ flex: 1 }} />
-          </View>
+          </ButtonRow>
         </Section>
 
         <Section icon="people" title={t('order.sectionPeople')}>
@@ -267,10 +267,10 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
             </View></View> : null}
             {o.bill ? <>
               <View style={s.billCard}><Icon name="document-text" size={28} /><View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={1}>{o.bill.name}</Text><Text style={[type.small, { color: colors.secondary }]}>{fileBadge(o.bill.name, o.bill.mimeType)}{o.bill.uploadedAt ? ` · ${formatDateTime(o.bill.uploadedAt)}` : ''}</Text></View></View>
-              <View style={s.btnPair}>
+              <ButtonRow>
                 <Button small variant="outline" title={t('order.viewBill')} icon="eye" onPress={() => openFile({ title: o.bill!.name, urls: o.bill!.previewUrls ?? [], fallbackUrl: o.bill!.viewUrl, downloadUrl: o.bill!.downloadUrl })} disabled={!o.bill.viewUrl && !o.bill.previewUrls?.length} style={{ flex: 1 }} />
                 <Button small title={t('order.downloadBill')} icon="download" onPress={() => { if (o.bill?.downloadUrl) void Linking.openURL(o.bill.downloadUrl); }} disabled={!o.bill.downloadUrl} style={{ flex: 1 }} />
-              </View>
+              </ButtonRow>
             </> : null}
           </Section>
         ) : null}

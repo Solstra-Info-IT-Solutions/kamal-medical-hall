@@ -18,7 +18,7 @@ import { PaymentSheet, type PaymentInfo } from '../../components/PaymentSheet';
 import { SourceOptions } from '../../components/SourceOptions';
 import { NotificationsRow } from '../../components/NotificationsRow';
 import { CountUp, Enter, Skeleton, Tap, tick } from '../../components/motion';
-import { Button, Card, ErrorView, Icon, Message, Pill, Screen, type IconName } from '../../components/ui';
+import { ButtonRow, Button, Card, ErrorView, Icon, Message, Pill, Screen, type IconName } from '../../components/ui';
 import { extractTransactionId } from '../../core/txnId';
 import { notice, showDialog } from '../../dialog';
 import { useLoad } from '../../hooks';
@@ -316,10 +316,10 @@ export function JobScreen({ navigation, route }: NativeStackScreenProps<PartnerS
   const proofOk = via === 'cash' || (!!proof && ref.trim().length >= 6);
   const canDeliver = riding && (!cod || (via !== null && received && proofOk));
   const footer = pendingRequest ? (
-    <View style={s.footerRow}>
+    <ButtonRow>
       <Button title={t('partner.reject')} variant="outline" onPress={reject} disabled={!!busy} style={{ flex: 1 }} />
       <Button title={t('partner.accept')} icon="checkmark" onPress={() => run('accept', () => endpoints.partner.accept(o.id))} loading={busy === 'accept'} style={{ flex: 1 }} />
-    </View>
+    </ButtonRow>
   ) : waitingCustomer ? (
     <View style={{ gap: 8 }}>
       <View style={s.waitBox}><Icon name="hourglass-outline" size={20} color={colors.amber} /><Text style={[type.small, { color: colors.text, flex: 1 }]}>{t('partner.waitingCustomerHelp')}</Text></View>
@@ -354,10 +354,10 @@ export function JobScreen({ navigation, route }: NativeStackScreenProps<PartnerS
               </View>
             </View>
             <Text style={[type.body, { color: colors.text, marginTop: spacing.md }]}>{[a.line1, a.line2, a.landmark].filter(Boolean).join(', ')}, {a.city} - {a.pincode}</Text>
-            <View style={s.btnRow}>
+            <ButtonRow>
               <Button title={t('partner.map')} icon="navigate" variant="outline" onPress={() => Linking.openURL(Platform.OS === 'ios' ? `http://maps.apple.com/?q=${query}` : mapUrl)} style={{ flex: 1 }} />
               {o.canCallCustomer && o.customer?.phone ? <View style={{ flex: 1 }}><CallButton phone={o.customer.phone} label={t('partner.call')} /></View> : null}
-            </View>
+            </ButtonRow>
             {!o.canCallCustomer ? <View style={s.noCall}><Icon name="call-outline" size={18} color={colors.secondary} /><Text style={[type.small, { color: colors.secondary, flex: 1 }]}>{t('partner.callDisabledHelp')}</Text></View> : null}
           </Card>
         </Enter>

@@ -7,7 +7,7 @@ import { uploadPrescription } from '../../api/upload';
 import type { Announcement } from '../../api/types';
 import { SourceOptions } from '../../components/SourceOptions';
 import { Skeleton, Tap, tick } from '../../components/motion';
-import { Button, Card, ErrorView, Icon, Message, Pill, Screen, TextField } from '../../components/ui';
+import { ButtonRow, Button, Card, ErrorView, Icon, Message, Pill, Screen, TextField } from '../../components/ui';
 import { showDialog } from '../../dialog';
 import { useErrorPopup, useLoad } from '../../hooks';
 import { colors, radius, spacing, type } from '../../theme';
@@ -176,18 +176,18 @@ function SavedCard({ a, busy, edit, setEdit, onSave, onResend, onToggle, onDelet
       {edit ? (
         <View style={{ marginTop: spacing.sm }}>
           <ExpiryPicker days={edit.days} custom={edit.custom} onDays={(n) => setEdit({ ...edit, days: n })} onCustom={(v) => setEdit({ ...edit, custom: v })} />
-          <View style={s.row}>
+          <ButtonRow>
             <View style={s.rowBtn}><Button small variant="outline" title={t('common.cancel')} onPress={() => setEdit(null)} /></View>
             <View style={s.rowBtn}><Button small title={t('ann.saveDate')} icon="checkmark" loading={busy === `exp-${a.id}`} onPress={onSave} /></View>
-          </View>
+          </ButtonRow>
         </View>
       ) : (
-        <View style={s.row}>
+        <ButtonRow>
           <View style={s.rowBtn}><Button small title={t('ann.pushReminder')} icon="notifications" onPress={onResend} loading={busy === `send-${a.id}`} disabled={a.status !== 'active' || !!busy} /></View>
           <View style={s.rowBtn}><Button small variant="outline" title={a.isActive ? t('ann.deactivate') : t('ann.activate')} icon={a.isActive ? 'pause-circle-outline' : 'play-circle-outline'} onPress={onToggle} loading={busy === `tog-${a.id}`} disabled={!!busy} /></View>
           <View style={s.rowBtn}><Button small variant="outline" title={t('ann.editDate')} icon="calendar" onPress={() => setEdit({ id: a.id, days: a.expiresAt ? 7 : NONE, custom: '' })} disabled={!!busy} /></View>
           <View style={s.rowBtn}><Button small variant="danger" title={t('ann.delete')} icon="trash-outline" onPress={onDelete} loading={busy === `del-${a.id}`} disabled={!!busy} /></View>
-        </View>
+        </ButtonRow>
       )}
     </Card>
   );

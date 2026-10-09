@@ -20,7 +20,7 @@ import { SourceOptions } from '../../components/SourceOptions';
 import { NotificationsRow } from '../../components/NotificationsRow';
 import { OrderCard } from '../../components/OrderCard';
 import { CountUp, Enter, Skeleton, Tap, tick } from '../../components/motion';
-import { Button, Card, ErrorView, Icon, Message, Pill, ResponsiveGrid, Screen, TextField, type IconName } from '../../components/ui';
+import { ButtonRow, Button, Card, ErrorView, Icon, Message, Pill, ResponsiveGrid, Screen, TextField, type IconName } from '../../components/ui';
 import { notice, showDialog } from '../../dialog';
 import { useLoad } from '../../hooks';
 import { guessMime, isBlockedName, isImageMime } from '../../fileKinds';
@@ -344,10 +344,10 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
             <Avatar name={o.customer?.name} size={48} />
             <View style={{ flex: 1 }}><Text style={[type.small, { color: colors.secondary }]}>{t('admin.customer')}</Text><Text style={[type.h3, { color: colors.text }]}>{o.customer?.name ?? '—'}</Text><Text style={[type.small, { color: colors.secondary }]}>+91 {o.customer?.phone}</Text></View>
           </View>
-          <View style={s.btnRow}>
+          <ButtonRow>
             <View style={{ flex: 1 }}><CallButton phone={o.customer?.phone} label={t('admin.callCustomer')} /></View>
             <Button title={t('admin.directions')} variant="outline" icon="navigate" onPress={openMaps} style={{ flex: 1 }} />
-          </View>
+          </ButtonRow>
           <Text style={[type.body, { color: colors.text, marginTop: spacing.md }]}>{[o.address.line1, o.address.line2, o.address.landmark].filter(Boolean).join(', ')}, {o.address.city} - {o.address.pincode}</Text>
           <Text style={[type.smallMedium, { color: colors.secondary, marginTop: 2 }]}>{formatDelivery(o.deliveryDate, o.deliverySlot)}</Text>
         </Card>
@@ -363,10 +363,10 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
             </Tap>))}</View>
           {o.note ? <Text style={[type.small, { color: colors.secondary, marginTop: 6 }]}>{t('review.note')}: {o.note}</Text> : null}
           {o.quotedAmount !== null ? <Text style={[type.bodyMedium, { color: colors.text, marginTop: spacing.md }]}>{t('order.amount')}: {formatMoney(o.quotedAmount)}{o.paymentMethod ? ` · ${t(`pay.${o.paymentMethod}`)} (${o.paymentStatus})` : ''}</Text> : null}
-          {o.bill ? <View style={[s.btnRow, { marginTop: spacing.sm }]}>
+          {o.bill ? <ButtonRow style={{ marginTop: spacing.sm }}>
             <Button title={t('admin.viewBill')} variant="outline" icon="eye" small disabled={!o.bill.viewUrl} onPress={() => openFile({ title: o.bill!.name, urls: o.bill!.previewUrls ?? [], fallbackUrl: o.bill!.viewUrl, downloadUrl: o.bill!.downloadUrl })} style={{ flex: 1 }} />
             <Button title={t('order.downloadBill')} icon="download" small disabled={!o.bill.downloadUrl} onPress={() => { void Linking.openURL(o.bill!.downloadUrl!); }} style={{ flex: 1 }} />
-          </View> : null}
+          </ButtonRow> : null}
 
           {o.rejectionReason || o.cancelReason ? <Text style={[type.body, { color: colors.red, marginTop: spacing.sm }]}>{o.rejectionReason ?? o.cancelReason}</Text> : null}
         </Card>
@@ -571,10 +571,10 @@ export function TeamScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Team'>) 
                   </View>
                   <View style={s.activeRow}><Text style={[type.small, { color: colors.secondary }]}>{t('admin.active')}</Text><Switch accessibilityLabel={t('admin.active')} value={p.active} onValueChange={(v) => toggleActive(p, v)} /></View>
                   {p.active && (p.state === 'off' || p.state === 'returning' || p.state === 'available') ? (
-                    <View style={[s.btnRow, { marginTop: spacing.sm }]}>
+                    <ButtonRow style={{ marginTop: spacing.sm }}>
                       {p.state !== 'available' ? <Button small title={t('admin.markAvailable')} variant="outline" onPress={() => override(p, 'available')} style={{ flex: 1 }} /> : null}
                       {p.state !== 'off' ? <Button small title={t('admin.markAbsent')} variant="ghost" onPress={() => override(p, 'off')} style={{ flex: 1 }} /> : null}
-                    </View>
+                    </ButtonRow>
                   ) : null}
                 </Card>
               </Enter>
@@ -703,10 +703,10 @@ export function PartnerAreasScreen({ navigation, route }: NativeStackScreenProps
       <Enter><Text style={[type.small, { color: colors.secondary, marginBottom: spacing.md }]}>{t('admin.areasHelp', { name: route.params.name })}</Text></Enter>
       <Enter index={1}>
         <View style={[s.search, { marginHorizontal: 0 }]}><Icon name="search" size={20} color={colors.secondary} /><TextInput value={q} onChangeText={setQ} keyboardType="number-pad" placeholder={t('admin.searchPincode')} placeholderTextColor={colors.muted} accessibilityLabel={t('admin.searchPincode')} style={[type.body, s.searchInput]} /></View>
-        <View style={[s.btnRow, { marginBottom: spacing.md, marginTop: 0 }]}>
+        <ButtonRow style={{ marginBottom: spacing.md, marginTop: 0 }}>
           <Button title={t('admin.selectAll')} variant="outline" onPress={() => setSelected(new Set(active.map((p) => p.pincode)))} style={{ flex: 1 }} />
           <Button title={t('admin.clear')} variant="outline" onPress={() => setSelected(new Set())} style={{ flex: 1 }} />
-        </View>
+        </ButtonRow>
         <Text style={[type.smallMedium, { color: sel.size ? colors.primary : colors.green, marginBottom: spacing.sm }]}>{sel.size ? t('admin.areasCount', { count: sel.size }) : t('admin.areasAll')}</Text>
       </Enter>
       <View style={s.chipWrap}>
@@ -915,10 +915,10 @@ export function StoreSettingsScreen({ navigation }: NativeStackScreenProps<Admin
           <View style={s.personRow}><Icon name="storefront" size={22} /><Text style={[type.h3, { color: colors.text, flex: 1 }]}>{t('admin.shopLocation')}</Text></View>
           <Text style={[type.small, { color: colors.secondary, marginVertical: spacing.sm }]}>{t('admin.shopLocationHelp')}</Text>
           <Button title={gps ? t('address.gpsBusy') : t('admin.useHere')} variant="outline" icon="locate" onPress={useHere} loading={gps} style={{ marginBottom: spacing.md }} />
-          <View style={s.btnRow}>
+          <ButtonRow>
             <View style={{ flex: 1 }}><TextField label={t('admin.latitude')} value={f.latitude} onChangeText={set('latitude')} keyboardType="numbers-and-punctuation" valid={lat !== null && locationOk} /></View>
             <View style={{ flex: 1 }}><TextField label={t('admin.longitude')} value={f.longitude} onChangeText={set('longitude')} keyboardType="numbers-and-punctuation" valid={lng !== null && locationOk} /></View>
-          </View>
+          </ButtonRow>
           <TextField label={t('admin.geofence')} value={f.geofenceM} onChangeText={(v) => set('geofenceM')(v.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" hint={t('admin.geofenceHint')} />
         </Card>
       </Enter>

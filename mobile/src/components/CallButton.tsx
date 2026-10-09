@@ -31,7 +31,7 @@ export const Avatar = ({ name, size = 44, uri }: { name: string | null | undefin
 const s = StyleSheet.create({
   round: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   // Same size as <Button>, so a Call button and a Directions / Message button next to each other line up exactly.
-  pill: { minWidth: 128, minHeight: 52, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing.lg, borderRadius: radius.md },
+  pill: { minHeight: 52, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing.lg, borderRadius: radius.md },
   pillSmall: { minHeight: 40, paddingHorizontal: 14, borderRadius: radius.sm },
   avatar: { backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.cardBorder },
 });

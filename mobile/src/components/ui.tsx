@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { HeaderHeightContext } from '@react-navigation/elements';
 import { useNavigation } from '@react-navigation/native';
@@ -50,6 +51,26 @@ export function ResponsiveGrid({ children, columns, gap = 12 }: { children: Reac
 export function BackButton({ onPress }: { onPress?: () => void }) {
   const nav = useNavigation();
   return <Tap accessibilityRole="button" accessibilityLabel="Back" hitSlop={12} onPress={onPress ?? (() => nav.goBack())} style={s.back}><Icon name="chevron-back" size={28} color={colors.text} /></Tap>;
+}
+
+/**
+ * Buttons side by side when there is room, otherwise wrapped onto further lines (down to one per line on a narrow phone), so
+ * labels are never squeezed, broken in the middle of a word or drawn over each other. Items on the last line stretch to fill it.
+ */
+export function ButtonRow({ children, minItem = 150, gap = 10, style }: { children: React.ReactNode; minItem?: number; gap?: number; style?: StyleProp<ViewStyle> }) {
+  const [w, setW] = React.useState(0);
+  const items = React.Children.toArray(children).filter(Boolean) as React.ReactElement<{ style?: StyleProp<ViewStyle> }>[];
+  const perLine = w ? Math.max(1, Math.min(items.length, Math.floor((w + gap) / (minItem + gap)))) : items.length;
+  const basis = w ? (w - gap * (perLine - 1)) / perLine : undefined;
+  return (
+    <View onLayout={(e) => setW(Math.floor(e.nativeEvent.layout.width))} style={[{ flexDirection: 'row', flexWrap: 'wrap', gap }, style]}>
+      {items.map((child, i) => {
+        // the row decides the size: drop any `flex` the child brought, so nothing fights over the width
+        const { flex: _f, flexGrow: _g, flexShrink: _s, flexBasis: _b, ...own } = (StyleSheet.flatten(child.props.style) ?? {}) as ViewStyle;
+        return <View key={child.key ?? i} style={{ flexGrow: 1, flexShrink: 1, flexBasis: basis ?? 0, minWidth: 0 }}>{React.cloneElement(child, { style: own })}</View>;
+      })}
+    </View>
+  );
 }
 
 /** Every button in the app has the same fixed height (52, or 40 when `small`) so screens look uniform. */
@@ -166,7 +187,7 @@ const s = StyleSheet.create({
   pad: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xxl },
   footer: { paddingTop: spacing.sm, paddingBottom: spacing.md, backgroundColor: colors.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   back: { padding: 4, marginLeft: 4 },
-  btn: { minWidth: 128, minHeight: BUTTON_HEIGHT, paddingVertical: 6, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing.lg },
+  btn: { minHeight: BUTTON_HEIGHT, paddingVertical: 6, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing.lg },
   btnSmall: { minHeight: BUTTON_HEIGHT_SMALL, borderRadius: radius.sm, paddingHorizontal: 14 },
   btnPrimary: { backgroundColor: colors.primary, boxShadow: '0px 6px 16px rgba(11,95,219,0.28)' },
   btnOutline: { borderWidth: 1.5, borderColor: colors.primary, backgroundColor: colors.white },

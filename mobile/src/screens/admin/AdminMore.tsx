@@ -11,7 +11,7 @@ import { Avatar, CallButton } from '../../components/CallButton';
 import { AreaChart, Donut } from '../../components/charts';
 import { ReviewCard } from '../../components/ReviewParts';
 import { Skeleton, Tap, tick } from '../../components/motion';
-import { Button, Card, ErrorView, Icon, Message, Pill, Screen, TextField, type IconName } from '../../components/ui';
+import { ButtonRow, Button, Card, ErrorView, Icon, Message, Pill, Screen, TextField, type IconName } from '../../components/ui';
 import { notice, showDialog } from '../../dialog';
 import { useErrorPopup, useLoad } from '../../hooks';
 import { useContentStyle } from '../../layout';
@@ -111,10 +111,10 @@ export function RevenueScreen() {
       </Card>
 
       <Text style={[type.h3, s.sec]}>{t('admin.download')}</Text>
-      <View style={s.btnRow}>
+      <ButtonRow>
         <Button small variant="outline" icon="download" title={t('admin.exp_revenue')} onPress={() => { void downloadExport('revenue', days, t); }} style={{ flex: 1 }} />
         <Button small variant="outline" icon="download" title={t('admin.exp_orders')} onPress={() => { void downloadExport('orders', days, t); }} style={{ flex: 1 }} />
-      </View>
+      </ButtonRow>
       <Button small variant="outline" icon="download" title={t('admin.exp_payments')} onPress={() => { void downloadExport('payments', days, t); }} style={{ marginTop: spacing.sm }} />
     </Screen>
   );
@@ -176,10 +176,10 @@ export function AdminReviewsScreen() {
       {loading && !data ? <Skel /> : error && !data ? <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} /> : !data?.reviews.length ? <View style={{ height: 280 }}><Message icon="star-outline" title={t('reviews.adminEmpty')} /></View> : data.reviews.map((r) => (
         <ReviewCard key={r.id} review={r} admin>
           {r.status === 'pending' ? (
-            <View style={[s.btnRow, { marginTop: spacing.md }]}>
+            <ButtonRow style={{ marginTop: spacing.md }}>
               <Button small variant="danger" icon="close" title={t('reviews.reject')} loading={busy === r.id} onPress={() => { void decide(r.id, 'rejected'); }} style={{ flex: 1 }} />
               <Button small icon="checkmark" title={t('reviews.approve')} loading={busy === r.id} onPress={() => { void decide(r.id, 'approved'); }} style={{ flex: 1 }} />
-            </View>
+            </ButtonRow>
           ) : null}
         </ReviewCard>
       ))}
