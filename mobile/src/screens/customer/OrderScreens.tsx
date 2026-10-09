@@ -24,7 +24,7 @@ import { useLoad } from '../../hooks';
 import type { CustomerStackParamList, CustomerTabParamList } from '../../navigation/types';
 import { useSession } from '../../store/session';
 import { colors, radius, spacing, type } from '../../theme';
-import { formatDate, formatDateTime, formatMoney, istDate, maskDmy, parseDmy, statusTone } from '../../utils';
+import { formatDate, formatDateTime, formatMoney, istDate, maskDmy, parseDmy, statusTone , formatDelivery } from '../../utils';
 
 type Nav = NativeStackNavigationProp<CustomerStackParamList>;
 
@@ -246,7 +246,7 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
         <Section icon="location" title={t('order.deliveryTo')} open={!['delivered', 'cancelled', 'rejected'].includes(o.status)}>
           <Text style={[type.bodyMedium, { color: colors.text }]}>{o.address.recipientName}{o.address.phone ? ` · ${o.address.phone}` : ''}</Text>
           <Text style={[type.body, { color: colors.secondary, marginTop: 2 }]}>{addressLine}</Text>
-          <Text style={[type.bodyMedium, { color: colors.text, marginTop: 6 }]}>{formatDate(o.deliveryDate)} · {o.deliverySlot}</Text>
+          <Text style={[type.bodyMedium, { color: colors.text, marginTop: 6 }]}>{formatDelivery(o.deliveryDate, o.deliverySlot)}</Text>
           <View style={s.btnPair}>
             <Button small variant="outline" icon="map" title={t('order.openMap')} onPress={openMap} style={{ flex: 1 }} />
             <Button small variant="outline" icon="copy" title={t('order.copyAddress')} onPress={() => { void copyAddress(); }} style={{ flex: 1 }} />

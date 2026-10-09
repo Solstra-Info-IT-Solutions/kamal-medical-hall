@@ -8,6 +8,7 @@ export type CustomerStackParamList = {
   Upload: undefined;
   TypeMedicines: undefined;
   Shop: undefined;
+  Announcement: { id: string };
   Addresses: { select?: boolean } | undefined;
   AddressForm: { addressId?: string } | undefined;
   DeliveryTime: undefined;
@@ -40,6 +41,7 @@ export type AdminStackParamList = {
   OrdersByStatus: { title: string; status: string };
   Revenue: undefined;
   Cash: undefined;
+  Announcements: undefined;
   ShopDetails: undefined;
   AdminReviews: undefined;
   AdminChats: undefined;

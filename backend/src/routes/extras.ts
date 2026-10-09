@@ -147,14 +147,6 @@ adminExtras.get('/customers/:id', async (req, res) => {
   });
 });
 
-/** Sends a notification to every customer (offers, holiday notices...). */
-adminExtras.post('/broadcast', async (req, res) => {
-  const b = parse(z.object({ title: z.string().trim().min(2).max(60), body: z.string().trim().min(2).max(240) }), req.body);
-  const ids = (await pool.query("select id from users where role = 'customer' and phone not like 'deleted-%'")).rows.map((r) => r.id as string);
-  await notifyMany(ids, 'announcement', b.title, b.body);
-  res.json({ sent: ids.length });
-});
-
 // ============================================================ Downloads (CSV)
 const KINDS = ['orders', 'revenue', 'customers', 'payments', 'attendance', 'reviews'] as const;
 type Kind = (typeof KINDS)[number];

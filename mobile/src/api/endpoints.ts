@@ -1,5 +1,6 @@
 import { api } from './client';
 import type {
+  Announcement,
   ShopDetails, ShopPublic,
   CashSummary, ClosingSummary, Address, AddressInput, AppNotification, AdminChatThread, Attendance, ChatMessage, ChatQueue, CustomerDetail, DutyStatus, ExportKind, Order, OrderSummary, Overview, Partner, PartnerAttendance, Review, Revenue, PartnerState, PaymentDetails, PaymentMethod, StoreConfig, StoreSettings, Terms, Tracking, User } from './types';
 
@@ -9,7 +10,7 @@ export interface NewOrderInput {
   kind: 'prescription' | 'medicines';
   items: { name: string; quantity: number }[];
   prescriptions: { publicId: string; mimeType: string; sizeBytes: number; url: string; resourceType: 'image' | 'raw' | 'video' }[];
-  note?: string; addressId: string; deliveryDate: string; deliverySlot: string; idempotencyKey: string;
+  note?: string; addressId: string; deliveryDate: string; idempotencyKey: string;
 }
 
 export const endpoints = {
@@ -27,7 +28,7 @@ export const endpoints = {
   updateAddress: (id: string, b: AddressInput) => api<{ address: Address }>('PUT', `/addresses/${id}`, b),
   deleteAddress: (id: string) => api<void>('DELETE', `/addresses/${id}`),
 
-  signUpload: (purpose: 'prescription' | 'bill' | 'avatar' | 'review' | 'proof' = 'prescription') => api<UploadSignature>('POST', '/uploads/sign', { purpose }),
+  signUpload: (purpose: 'prescription' | 'bill' | 'avatar' | 'review' | 'proof' | 'announcement' = 'prescription') => api<UploadSignature>('POST', '/uploads/sign', { purpose }),
   invoiceLink: (orderId: string) => api<{ url: string }>('GET', `/orders/${orderId}/invoice-link`),
   createOrder: (b: NewOrderInput) => api<{ order: Order }>('POST', '/orders', b, { timeoutMs: 30000, retry: 'always' /* safe: the idempotency key makes a repeat return the same order */ }),
   orders: (scope: 'completed' | 'cancelled' | 'active', offset = 0, range?: { from?: string; to?: string }) => api<{ orders: OrderSummary[]; hasMore: boolean }>('GET', `/orders?${new URLSearchParams({ scope, offset: String(offset), ...(range?.from ? { from: range.from } : {}), ...(range?.to ? { to: range.to } : {}) })}`),
@@ -56,6 +57,8 @@ export const endpoints = {
     mine: () => api<{ reviews: Review[] }>('GET', '/reviews/mine'),
   },
   shop: () => api<ShopPublic>('GET', '/shop', undefined, { auth: false }),
+  announcements: () => api<{ announcements: Announcement[] }>('GET', '/announcements'),
+  announcement: (id: string) => api<{ announcement: Announcement }>('GET', `/announcements/${id}`),
   registerDevice: (token: string, platform: 'android' | 'ios') => api<void>('POST', '/devices', { token, platform }),
   unregisterDevice: (token: string) => api<void>('DELETE', '/devices', { token }),
 
@@ -64,6 +67,11 @@ export const endpoints = {
     revenue: (days = 30) => api<Revenue>('GET', `/admin/revenue?days=${days}`),
     shop: () => api<{ details: ShopDetails; legacy: { address: string | null; phone: string | null; email: string | null; latitude: number | null; longitude: number | null } }>('GET', '/admin/shop'),
     saveShop: (d: ShopDetails) => api<{ details: ShopDetails }>('PUT', '/admin/shop', d),
+    announcements: () => api<{ announcements: Announcement[] }>('GET', '/admin/announcements'),
+    createAnnouncements: (items: { title: string; body: string; images: { publicId: string; mimeType: string; resourceType: string; sizeBytes?: number }[]; expiresAt: string }[]) => api<{ ids: string[]; sentTo: number }>('POST', '/admin/announcements', { items }, { timeoutMs: 60000, retry: 'never' }),
+    updateAnnouncement: (id: string, b: { title?: string; body?: string; expiresAt?: string }) => api<{ announcement: Announcement }>('PATCH', `/admin/announcements/${id}`, b),
+    sendAnnouncement: (id: string) => api<{ sentTo: number; announcement: Announcement }>('POST', `/admin/announcements/${id}/send`, undefined, { retry: 'never' }),
+    deleteAnnouncement: (id: string) => api<void>('DELETE', `/admin/announcements/${id}`),
     cash: () => api<CashSummary>('GET', '/admin/cash'),
     settleCash: (partnerId: string, orderIds?: string[]) => api<CashSummary & { settled: number; amount: number }>('POST', '/admin/cash/settle', { partnerId, orderIds }),
     closingSummary: () => api<ClosingSummary>('GET', '/admin/closing-summary'),

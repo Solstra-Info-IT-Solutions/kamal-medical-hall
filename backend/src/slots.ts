@@ -1,36 +1,27 @@
-import { config } from './config.js';
-
-export const SLOTS = [
-  { id: '09-11', label: '9:00 AM - 11:00 AM', startHour: 9 },
-  { id: '11-13', label: '11:00 AM - 1:00 PM', startHour: 11 },
-  { id: '13-15', label: '1:00 PM - 3:00 PM', startHour: 13 },
-  { id: '15-17', label: '3:00 PM - 5:00 PM', startHour: 15 },
-  { id: '17-19', label: '5:00 PM - 7:00 PM', startHour: 17 },
-  { id: '19-21', label: '7:00 PM - 9:00 PM', startHour: 19 },
-] as const;
-
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-export const DAYS_AHEAD = 4;
+export const DAYS_AHEAD = 7;
+export const DEFAULT_CUTOFF = '18:00';
 
 /** yyyy-mm-dd for the calendar date in Asia/Kolkata. */
 export function istDate(at: Date): string {
   return new Date(at.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
 }
-function slotStart(date: string, startHour: number): Date {
-  return new Date(Date.parse(`${date}T${String(startHour).padStart(2, '0')}:00:00.000Z`) - IST_OFFSET_MS);
+/** Minutes since midnight, Asia/Kolkata. */
+const istMinutes = (at: Date) => { const d = new Date(at.getTime() + IST_OFFSET_MS); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
+const toMinutes = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return (h ?? 0) * 60 + (m ?? 0); };
+
+/**
+ * The seven dates a customer can choose (no time of day). Before the cut-off time (set by the admin, 6 PM by default)
+ * today is included; at or after it the list starts tomorrow, so the order is prepared for the next day.
+ */
+export function listDeliveryDates(now = new Date(), cutoff = DEFAULT_CUTOFF): string[] {
+  const start = istMinutes(now) >= toMinutes(cutoff) ? 1 : 0;
+  return Array.from({ length: DAYS_AHEAD }, (_, i) => istDate(new Date(now.getTime() + (start + i) * 86400000)));
 }
 
-export function isSlotBookable(date: string, slotId: string, now = new Date()): boolean {
-  const slot = SLOTS.find((s) => s.id === slotId);
-  if (!slot) return false;
-  const days = Array.from({ length: DAYS_AHEAD }, (_, i) => istDate(new Date(now.getTime() + i * 86400000)));
-  if (!days.includes(date)) return false;
-  return slotStart(date, slot.startHour).getTime() >= now.getTime() + config.minLeadMinutes * 60000;
-}
+export const isDateBookable = (date: string, now = new Date(), cutoff = DEFAULT_CUTOFF) => listDeliveryDates(now, cutoff).includes(date);
 
-export function listDeliveryDays(now = new Date()) {
-  return Array.from({ length: DAYS_AHEAD }, (_, i) => {
-    const date = istDate(new Date(now.getTime() + i * 86400000));
-    return { date, slots: SLOTS.map((s) => ({ id: s.id, label: s.label, available: isSlotBookable(date, s.id, now) })) };
-  });
+/** Shape kept for older app versions, which expect a list of slots per day: there is now one, "Any time". */
+export function listDeliveryDays(now = new Date(), cutoff = DEFAULT_CUTOFF) {
+  return listDeliveryDates(now, cutoff).map((date) => ({ date, slots: [{ id: 'day', label: 'Any time', available: true }] }));
 }

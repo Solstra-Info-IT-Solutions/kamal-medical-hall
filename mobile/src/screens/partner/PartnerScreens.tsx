@@ -27,7 +27,7 @@ import type { PartnerStackParamList, PartnerTabParamList } from '../../navigatio
 import { distanceMeters, formatDistance, usePartnerLocation } from '../../partnerLocation';
 import { useSession } from '../../store/session';
 import { colors, radius, spacing, type } from '../../theme';
-import { formatDate, formatDateTime, formatMoney, statusTone } from '../../utils';
+import { formatDate, formatDateTime, formatMoney, statusTone , formatDelivery } from '../../utils';
 
 type Nav = NativeStackNavigationProp<PartnerStackParamList>;
 const LIVE = ['partner:update', 'order:update', 'notification'];
@@ -174,7 +174,7 @@ export function PartnerHomeScreen(_p: BottomTabScreenProps<PartnerTabParamList, 
               <Card style={s.request}>
                 <Tap accessibilityRole="button" onPress={() => nav.navigate('Job', { orderId: o.id })} scaleTo={0.98}>
                   <View style={s.reqHead}><Text style={[type.h3, { color: colors.text }]}>#{o.orderNumber}</Text><Pill text={t('partner.respondNow')} tone="amber" /></View>
-                  <Text style={[type.small, { color: colors.secondary }]}>{o.deliveryDate ? formatDate(o.deliveryDate) : ''} · {o.deliverySlot}</Text>
+                  <Text style={[type.small, { color: colors.secondary }]}>{o.deliveryDate ? formatDelivery(o.deliveryDate, o.deliverySlot) : ''}</Text>
                   <Text style={[type.small, { color: colors.secondary }]}>{o.pincode ? `${t('address.pincode')} ${o.pincode}` : ''}{o.quotedAmount != null && o.paymentMethod === 'cod' ? ` · ${t('pay.cod')} ${formatMoney(o.quotedAmount)}` : ''}</Text>
                 </Tap>
                 <View style={s.reqBtns}>
@@ -188,7 +188,7 @@ export function PartnerHomeScreen(_p: BottomTabScreenProps<PartnerTabParamList, 
 
         <Enter index={6}><Text style={[type.h3, s.sec]}>{t('partner.activeDeliveries')}</Text></Enter>
         {jobs.data && !active.length ? <Enter index={7}><Card style={s.empty}><Icon name="cube-outline" size={30} color={colors.muted} /><Text style={[type.body, { color: colors.secondary, flex: 1 }]}>{t('partner.noJobs')}</Text></Card></Enter> : null}
-        {active.map((o, i) => <OrderCard key={o.id} order={o} index={i + 7} onPress={() => nav.navigate('Job', { orderId: o.id })} subtitle={`${o.customerName ?? ''} · ${o.deliverySlot ?? ''}`} />)}
+        {active.map((o, i) => <OrderCard key={o.id} order={o} index={i + 7} onPress={() => nav.navigate('Job', { orderId: o.id })} subtitle={`${o.customerName ?? ''}${o.deliverySlot ? ` · ${o.deliverySlot}` : ''}`} />)}
 
         <Enter index={12}>
           <NotificationsRow />
@@ -267,7 +267,9 @@ export function JobScreen({ navigation, route }: NativeStackScreenProps<PartnerS
   const a = o.address;
   const query = encodeURIComponent([a.line1, a.line2, a.landmark, a.city, a.pincode].filter(Boolean).join(', '));
   const mapUrl = a.latitude != null && a.longitude != null ? `https://www.google.com/maps/dir/?api=1&destination=${a.latitude},${a.longitude}` : `https://www.google.com/maps/search/?api=1&query=${query}`;
-  const pendingRequest = o.status === 'ready_to_dispatch' && !o.partnerAccepted;
+  const assigned = ['quoted', 'awaiting_payment', 'ready_to_dispatch'].includes(o.status); // given to this partner, not out yet
+  const pendingRequest = assigned && !o.partnerAccepted;
+  const waitingCustomer = assigned && o.status !== 'ready_to_dispatch' && o.partnerAccepted; // accepted, the customer has yet to confirm
   const readyToRide = o.status === 'ready_to_dispatch' && o.partnerAccepted;
   const riding = o.status === 'out_for_delivery';
 
@@ -318,6 +320,11 @@ export function JobScreen({ navigation, route }: NativeStackScreenProps<PartnerS
       <Button title={t('partner.reject')} variant="outline" onPress={reject} disabled={!!busy} style={{ flex: 1 }} />
       <Button title={t('partner.accept')} icon="checkmark" onPress={() => run('accept', () => endpoints.partner.accept(o.id))} loading={busy === 'accept'} style={{ flex: 1 }} />
     </View>
+  ) : waitingCustomer ? (
+    <View style={{ gap: 8 }}>
+      <View style={s.waitBox}><Icon name="hourglass-outline" size={20} color={colors.amber} /><Text style={[type.small, { color: colors.text, flex: 1 }]}>{t('partner.waitingCustomerHelp')}</Text></View>
+      <Button title={t('partner.reject')} variant="ghost" onPress={reject} disabled={!!busy} />
+    </View>
   ) : readyToRide ? (
     <View style={{ gap: 8 }}>
       <Button title={t('partner.startRide')} icon="bicycle" onPress={() => run('ride', () => endpoints.partner.outForDelivery(o.id))} loading={busy === 'ride'} />
@@ -332,7 +339,7 @@ export function JobScreen({ navigation, route }: NativeStackScreenProps<PartnerS
       <Screen footer={footer}>
         <Enter index={0}>
           <View style={s.reqHead}><Text style={[type.h2, { color: colors.text }]}>#{o.orderNumber}</Text><Pill text={pendingRequest ? t('partner.respondNow') : t(`status.${o.status}`)} tone={pendingRequest ? 'amber' : statusTone(o.status)} /></View>
-          <Text style={[type.small, { color: colors.secondary, marginBottom: spacing.md }]}>{formatDate(o.deliveryDate)} · {o.deliverySlot}</Text>
+          <Text style={[type.small, { color: colors.secondary, marginBottom: spacing.md }]}>{formatDelivery(o.deliveryDate, o.deliverySlot)}</Text>
         </Enter>
 
         {pendingRequest ? <Enter index={1}><Card style={[s.block, { backgroundColor: colors.amberBg, borderColor: colors.amberBg }]}><Text style={[type.bodyMedium, { color: colors.amber }]}>{t('partner.newRequestBanner')}</Text><Text style={[type.small, { color: colors.text }]}>{t('partner.newRequestHelp')}</Text></Card></Enter> : null}
@@ -480,6 +487,7 @@ const s = StyleSheet.create({
   howOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   proofImg: { width: '100%', height: 220, borderRadius: radius.md, backgroundColor: colors.card, marginTop: spacing.sm },
   reading: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.sm },
+  waitBox: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.amberBg },
   refInput: { marginTop: spacing.md, minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, color: colors.text },
   ack: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.border },
   footerRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },

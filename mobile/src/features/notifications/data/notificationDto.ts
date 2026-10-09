@@ -10,6 +10,7 @@ export const notificationDtoSchema = z.object({
   createdAt: z.string(),
   orderId: z.string().nullable(),
   orderNumber: z.string().nullable(),
+  announcementId: z.string().nullable().optional(),
 });
 export const notificationsResponseSchema = z.object({ notifications: z.array(notificationDtoSchema) });
 export type NotificationDto = z.infer<typeof notificationDtoSchema>;

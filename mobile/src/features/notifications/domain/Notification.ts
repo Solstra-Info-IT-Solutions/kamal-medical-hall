@@ -13,15 +13,17 @@ export interface Notification {
   createdAt: string;
   orderId: string | null;
   orderNumber: string | null;
+  announcementId?: string | null;
 }
 
 export const kindOf = (type: string): NotificationKind =>
   type.startsWith('chat') ? 'chat' : type.startsWith('review') ? 'review' : type === 'announcement' ? 'announcement' : type.startsWith('order') || type.startsWith('quote') || type.startsWith('payment') || type.startsWith('partner') ? 'order' : 'other';
 
 /** Where tapping a notification should lead, as an intent. The screen decides how to navigate there. */
-export type Destination = { screen: 'OrderDetail'; orderId: string } | { screen: 'Chat' } | { screen: 'MyReviews' } | null;
+export type Destination = { screen: 'OrderDetail'; orderId: string } | { screen: 'Announcement'; id: string } | { screen: 'Chat' } | { screen: 'MyReviews' } | null;
 
-export function destinationOf(n: Pick<Notification, 'kind' | 'orderId'>): Destination {
+export function destinationOf(n: Pick<Notification, 'kind' | 'orderId' | 'announcementId'>): Destination {
+  if (n.announcementId) return { screen: 'Announcement', id: n.announcementId };
   if (n.kind === 'chat') return { screen: 'Chat' };
   if (n.kind === 'review') return { screen: 'MyReviews' };
   return n.orderId ? { screen: 'OrderDetail', orderId: n.orderId } : null;

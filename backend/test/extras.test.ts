@@ -76,7 +76,7 @@ describe('live chat queue, notifications, reviews, exports and profile picture',
   });
 
   it('marks, deletes and clears notifications one at a time', async () => {
-    await call('POST', '/admin/broadcast', admin, { title: 'Test notice', body: 'Open on Sunday' }); // one for A, one for B
+    const notice = await call('POST', '/admin/announcements', admin, { items: [{ title: 'Test notice', body: 'Open on Sunday', expiresAt: new Date(Date.now() + 86400000).toISOString() }] }); // one for A, one for B
     const list = (await call('GET', '/notifications', a)).body.notifications;
     assert.ok(list.length >= 2);
     assert.ok(list.every((n: any) => n.read === false));
@@ -94,6 +94,7 @@ describe('live chat queue, notifications, reviews, exports and profile picture',
     assert.equal((await call('DELETE', '/notifications', a)).status, 204);
     assert.equal((await call('GET', '/notifications', a)).body.notifications.length, 0);
     assert.ok((await call('GET', '/notifications', b)).body.notifications.length >= 1, 'B keeps theirs');
+    assert.equal((await call('DELETE', `/admin/announcements/${notice.body.ids[0]}`, admin)).status, 204); // removes everybody's copy
   });
 
   it('lets a customer review a delivered order and the admin approve it', async () => {

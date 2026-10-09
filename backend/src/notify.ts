@@ -47,3 +47,21 @@ async function push(userId: string, title: string, body: string, orderId: string
   const dead = res.responses.flatMap((r, i) => (!r.success && ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token'].includes(r.error?.code ?? '') ? [rows[i].token] : []));
   if (dead.length) await pool.query('delete from device_tokens where token = any($1)', [dead]);
 }
+
+/** One push message to many people (announcements). Tokens are looked up in bulk and sent in batches of 500. */
+export async function pushToUsers(userIds: string[], title: string, body: string, data: Record<string, string> = {}) {
+  const messaging = firebaseMessaging();
+  if (!messaging || !userIds.length) return;
+  const { rows } = await pool.query('select token from device_tokens where user_id = any($1::uuid[])', [userIds]);
+  const tokens = rows.map((r) => r.token as string);
+  const dead: string[] = [];
+  for (let i = 0; i < tokens.length; i += 500) {
+    const chunk = tokens.slice(i, i + 500);
+    const res = await messaging.sendEachForMulticast({
+      tokens: chunk, notification: { title, body }, data,
+      android: { priority: 'high', ttl: 24 * 3600 * 1000, notification: { sound: 'default' } }, apns: { payload: { aps: { sound: 'default' } } },
+    });
+    res.responses.forEach((r, n) => { if (!r.success && ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token'].includes(r.error?.code ?? '')) dead.push(chunk[n]!); });
+  }
+  if (dead.length) await pool.query('delete from device_tokens where token = any($1)', [dead]);
+}

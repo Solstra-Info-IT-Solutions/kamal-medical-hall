@@ -28,7 +28,7 @@ import { useContentStyle, useLayout } from '../../layout';
 import type { AdminStackParamList, AdminTabParamList } from '../../navigation/types';
 import { useSession } from '../../store/session';
 import { colors, radius, spacing, type } from '../../theme';
-import { formatDate, formatDateTime, formatMoney, statusTone } from '../../utils';
+import { formatDate, formatDateTime, formatMoney, statusTone , formatDelivery } from '../../utils';
 
 type Nav = NativeStackNavigationProp<AdminStackParamList>;
 const LIVE = ['order:update', 'notification'];
@@ -49,6 +49,38 @@ function OrderRow({ o, onPress, index = 0 }: { o: OrderSummary; onPress: () => v
 }
 
 // ---------------------------------------------------------------- Dashboard
+/** The latest announcements with a one-tap "send again" (disabled once expired). */
+function AnnouncementsCard() {
+  const { t } = useTranslation();
+  const nav = useNavigation<NativeStackNavigationProp<AdminStackParamList>>();
+  const { data, reload } = useLoad(() => endpoints.admin.announcements(), ['announcement:update']);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState('');
+  useErrorPopup(err);
+  const list = (data?.announcements ?? []).slice(0, 3);
+  const again = async (id: string) => {
+    setBusy(id); setErr('');
+    try { await endpoints.admin.sendAnnouncement(id); tick('success'); await reload(); } catch (e) { setErr((e as Error).message); tick('error'); } finally { setBusy(null); }
+  };
+  return (
+    <>
+      <Text style={[type.h3, s.sec]}>{t('ann.sentCardTitle')}</Text>
+      <Card style={{ gap: 10 }}>
+        {!list.length ? <Text style={[type.small, { color: colors.secondary }]}>{t('ann.none')}</Text> : list.map((a) => (
+          <View key={a.id} style={s.annRow}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={2}>{a.title}</Text>
+              <Text style={[type.small, { color: a.expired ? colors.red : colors.secondary }]}>{a.expired ? t('ann.expiredOn', { date: formatDateTime(a.expiresAt) }) : t('ann.expiresOn', { date: formatDateTime(a.expiresAt) })}</Text>
+            </View>
+            <Button small variant="outline" icon="send" title={t('ann.sendAgain')} onPress={() => again(a.id)} loading={busy === a.id} disabled={a.expired || !!busy} />
+          </View>
+        ))}
+        <Button small variant="ghost" icon="megaphone" title={t('ann.manage')} onPress={() => nav.navigate('Announcements')} />
+      </Card>
+    </>
+  );
+}
+
 export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Dashboard'>) {
   const { t } = useTranslation();
   const nav = useNavigation<Nav>();
@@ -130,10 +162,12 @@ export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Das
             </Card>
           </Enter>
 
+          <AnnouncementsCard />
+
           <Text style={[type.h3, s.sec]}>{t('admin.secManage')}</Text>
           <ResponsiveGrid columns={tileColumns}>
             {([
-              ['storefront', 'shop.adminTitle', 'ShopDetails'], ['bar-chart', 'admin.revenue', 'Revenue'], ['wallet', 'cash.title', 'Cash'], ['download', 'admin.exports', 'Exports'], ['megaphone', 'admin.broadcast', 'Broadcast'],
+              ['storefront', 'shop.adminTitle', 'ShopDetails'], ['bar-chart', 'admin.revenue', 'Revenue'], ['wallet', 'cash.title', 'Cash'], ['download', 'admin.exports', 'Exports'], ['megaphone', 'ann.title', 'Announcements'],
               ['card', 'admin.paymentDetails', 'PaymentDetails'], ['location', 'admin.pincodes', 'Pincodes'], ['calendar', 'admin.attendance', 'Attendance'],
               ['document-text', 'admin.terms', 'Terms'], ['settings', 'admin.settings', 'StoreSettings'],
             ] as const).map(([icon, label, route]) => (
@@ -186,14 +220,14 @@ export const AllOrdersScreen = () => { const { t } = useTranslation(); return <O
 /** Why this partner cannot take the order right now, or null when they can. */
 function assignBlocker(t: (k: string, o?: Record<string, unknown>) => string, p: Partner, pincode: string): string | null {
   const covers = p.pincodes.length === 0 || p.pincodes.includes(pincode);
-  return !p.active ? t('admin.inactive') : !['available', 'off', 'break'].includes(p.state) ? t('admin.partnerBusyReason') : !covers ? t('admin.notCoveredReason', { pincode }) : null;
+  return !p.active ? t('admin.inactive') : !covers ? t('admin.notCoveredReason', { pincode }) : null;
 }
 
 function PartnerRow({ p, pincode, busy, canAssign, onAssign }: { p: Partner; pincode: string; busy: boolean; canAssign: boolean; onAssign: () => void }) {
   const { t } = useTranslation();
   const covers = p.pincodes.length === 0 || p.pincodes.includes(pincode);
   const ready = p.active && p.state === 'available' && covers;
-  const reason = assignBlocker(t, p, pincode) ?? (p.state === 'available' ? null : t('admin.offDutyHint'));
+  const reason = assignBlocker(t, p, pincode) ?? (p.state === 'available' ? null : ['off', 'break'].includes(p.state) ? t('admin.offDutyHint') : t('admin.queueHint', { count: p.activeOrders }));
   return (
     <View style={[s.partnerRow, ready && s.partnerReady]}>
       <Avatar name={p.name} />
@@ -288,8 +322,9 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
       if (call) void Linking.openURL(`tel:${p.phone}`);
       return;
     }
-    const offDuty = p.state !== 'available';
-    const ok = await showDialog({ title: t('admin.assignConfirmTitle', { name: p.name }), message: offDuty ? t('admin.assignOffDutyMsg', { order: o.orderNumber }) : t('admin.assignConfirmMsg', { order: o.orderNumber }), icon: 'bicycle', confirmLabel: t('admin.assignBtn'), cancelLabel: t('common.cancel') });
+    const offDuty = ['off', 'break'].includes(p.state);
+    const busy_ = !offDuty && p.state !== 'available';
+    const ok = await showDialog({ title: t('admin.assignConfirmTitle', { name: p.name }), message: busy_ ? t('admin.assignBusyMsg', { order: o.orderNumber, count: p.activeOrders }) : offDuty ? t('admin.assignOffDutyMsg', { order: o.orderNumber }) : t('admin.assignConfirmMsg', { order: o.orderNumber }), icon: 'bicycle', confirmLabel: t('admin.assignBtn'), cancelLabel: t('common.cancel') });
     if (ok) await run(`assign-${p.id}`, () => endpoints.admin.assign(o.id, p.id));
   };
 
@@ -314,7 +349,7 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
             <Button title={t('admin.directions')} variant="outline" icon="navigate" onPress={openMaps} style={{ flex: 1 }} />
           </View>
           <Text style={[type.body, { color: colors.text, marginTop: spacing.md }]}>{[o.address.line1, o.address.line2, o.address.landmark].filter(Boolean).join(', ')}, {o.address.city} - {o.address.pincode}</Text>
-          <Text style={[type.smallMedium, { color: colors.secondary, marginTop: 2 }]}>{formatDate(o.deliveryDate)} · {o.deliverySlot}</Text>
+          <Text style={[type.smallMedium, { color: colors.secondary, marginTop: 2 }]}>{formatDelivery(o.deliveryDate, o.deliverySlot)}</Text>
         </Card>
       </Enter>
 
@@ -366,9 +401,9 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
               <CallButton phone={o.partner.phone} compact label={t('admin.callPartner')} />
             </View>
             <View style={[s.pillRow, { marginTop: spacing.md }]}>
-              <Pill text={o.status === 'out_for_delivery' ? t('admin.st_busy') : o.partnerAccepted ? t('admin.accepted') : t('admin.waitingResponse')} tone={o.status === 'out_for_delivery' ? 'blue' : o.partnerAccepted ? 'green' : 'amber'} />
+              <Pill text={o.status === 'out_for_delivery' ? t('admin.st_busy') : o.partnerAccepted ? (o.status === 'ready_to_dispatch' ? t('admin.accepted') : t('admin.acceptedWaiting')) : t('admin.waitingResponse')} tone={o.status === 'out_for_delivery' ? 'blue' : o.partnerAccepted ? 'green' : 'amber'} />
             </View>
-            {['ready_to_dispatch', 'out_for_delivery'].includes(o.status) ? <Button title={t('admin.unassign')} variant="outline" icon="swap-horizontal" loading={busy === 'unassign'} style={{ marginTop: spacing.md }}
+            {['quoted', 'awaiting_payment', 'ready_to_dispatch', 'out_for_delivery'].includes(o.status) ? <Button title={t('admin.unassign')} variant="outline" icon="swap-horizontal" loading={busy === 'unassign'} style={{ marginTop: spacing.md }}
               onPress={async () => { const ok = await showDialog({ title: t('admin.unassignTitle', { name: o.partner!.name }), message: t('admin.unassignMsg'), icon: 'swap-horizontal', confirmLabel: t('admin.unassign'), cancelLabel: t('common.cancel') }); if (ok) await run('unassign', () => endpoints.admin.unassign(o.id)); }} /> : null}
           </Card>
         </Enter>
@@ -407,10 +442,11 @@ export function OrderReviewScreen({ route }: NativeStackScreenProps<AdminStackPa
       ) : null}
       {o.status === 'awaiting_payment' ? <Enter index={4}><Card style={s.block}><Text style={[type.body, { color: colors.text }]}>{t('admin.awaitingRazorpay')}</Text></Card></Enter> : null}
 
-      {o.status === 'ready_to_dispatch' && !o.partner ? (
+      {['quoted', 'awaiting_payment', 'ready_to_dispatch'].includes(o.status) && !o.partner ? (
         <Enter index={4}>
           <Text style={[type.h3, s.sec]}>{t('admin.assignTitle')}</Text>
           <Text style={[type.small, { color: colors.secondary, marginBottom: spacing.md }]}>{t('admin.assignHelp')}</Text>
+          {o.status !== 'ready_to_dispatch' ? <Text style={[type.small, { color: colors.amber, marginBottom: spacing.md }]}>{t('admin.assignEarlyHelp')}</Text> : null}
           {partners.loading && !partners.data ? <Skeleton h={90} r={16} /> : null}
           {!list.length && !partners.loading ? <Card><Text style={[type.body, { color: colors.text, marginBottom: spacing.md }]}>{t('admin.noPartners')}</Text><Button title={t('admin.addFirstPartner')} icon="person-add" onPress={() => nav.navigate('Tabs', { screen: 'Team' })} /></Card> : null}
           {list.map((p) => (
@@ -767,7 +803,7 @@ export function MoreScreen(_p: BottomTabScreenProps<AdminTabParamList, 'More'>) 
         {row('storefront-outline', t('shop.adminTitle'), () => nav.navigate('ShopDetails'))}
         {row('wallet-outline', t('cash.title'), () => nav.navigate('Cash'))}
         {row('download-outline', t('admin.exports'), () => nav.navigate('Exports'))}
-        {row('megaphone-outline', t('admin.broadcast'), () => nav.navigate('Broadcast'))}
+        {row('megaphone-outline', t('ann.title'), () => nav.navigate('Announcements'))}
         {row('card-outline', t('admin.paymentDetails'), () => nav.navigate('PaymentDetails'))}
         {row('calendar-outline', t('admin.attendance'), () => nav.navigate('Attendance'))}
         {row('document-text-outline', t('admin.terms'), () => nav.navigate('Terms'))}
@@ -834,10 +870,10 @@ export function ReportsScreen() {
 export function StoreSettingsScreen({ navigation }: NativeStackScreenProps<AdminStackParamList, 'StoreSettings'>) {
   const { t } = useTranslation();
   const { data, error, loading, reload } = useLoad(() => endpoints.admin.settings());
-  const [f, setF] = useState<{ isOpen: boolean; openingTime: string; closingTime: string; address: string; phone: string; email: string; latitude: string; longitude: string; geofenceM: string } | null>(null);
+  const [f, setF] = useState<{ isOpen: boolean; openingTime: string; closingTime: string; address: string; phone: string; email: string; latitude: string; longitude: string; geofenceM: string; orderCutoffTime: string } | null>(null);
   const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
   useErrorPopup(err); const [gps, setGps] = useState(false);
-  useEffect(() => { if (data && !f) setF({ isOpen: data.isOpen, openingTime: data.openingTime, closingTime: data.closingTime, address: data.address ?? '', phone: data.phone ?? '', email: data.email ?? '', latitude: data.latitude != null ? String(data.latitude) : '', longitude: data.longitude != null ? String(data.longitude) : '', geofenceM: String(data.geofenceM ?? 150) }); }, [data, f]);
+  useEffect(() => { if (data && !f) setF({ isOpen: data.isOpen, openingTime: data.openingTime, closingTime: data.closingTime, address: data.address ?? '', phone: data.phone ?? '', email: data.email ?? '', latitude: data.latitude != null ? String(data.latitude) : '', longitude: data.longitude != null ? String(data.longitude) : '', geofenceM: String(data.geofenceM ?? 150), orderCutoffTime: data.orderCutoffTime ?? '18:00' }); }, [data, f]);
   if (loading && !data) return <ListSkeleton />;
   if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
   if (!f) return <ListSkeleton />;
@@ -856,13 +892,14 @@ export function StoreSettingsScreen({ navigation }: NativeStackScreenProps<Admin
   };
   const save = async () => {
     if (!locationOk) { setErr(t('admin.locationInvalid')); tick('error'); return; }
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(f.orderCutoffTime)) { setErr(t('admin.cutoffInvalid')); tick('error'); return; }
     if (data?.isOpen && !f.isOpen) {
       const ok = await showDialog({ title: t('admin.closeStoreTitle'), message: t('admin.closeStoreMsg'), icon: 'storefront', tone: 'danger', confirmLabel: t('admin.closeStore'), cancelLabel: t('common.cancel') });
       if (!ok) return;
     }
     setBusy(true); setErr('');
     try {
-      await endpoints.admin.saveSettings({ isOpen: f.isOpen, openingTime: f.openingTime, closingTime: f.closingTime, latitude: lat, longitude: lng, geofenceM: Number(f.geofenceM) || 150 });
+      await endpoints.admin.saveSettings({ isOpen: f.isOpen, openingTime: f.openingTime, closingTime: f.closingTime, latitude: lat, longitude: lng, geofenceM: Number(f.geofenceM) || 150, orderCutoffTime: f.orderCutoffTime });
       tick('success'); navigation.goBack();
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
@@ -871,6 +908,7 @@ export function StoreSettingsScreen({ navigation }: NativeStackScreenProps<Admin
       <Enter><Card style={[s.block, s.personRow]}><View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]}>{t('admin.storeOpen')}</Text><Text style={[type.small, { color: f.isOpen ? colors.green : colors.red }]}>{f.isOpen ? t('admin.storeOpenOn') : t('admin.storeOpenOff')}</Text></View><Switch accessibilityLabel={t('admin.storeOpen')} value={f.isOpen} onValueChange={(v) => setF({ ...f, isOpen: v })} /></Card></Enter>
       <Enter index={1}><TextField label={t('admin.opening')} value={f.openingTime} onChangeText={set('openingTime')} placeholder="09:00" /></Enter>
       <Enter index={2}><TextField label={t('admin.closing')} value={f.closingTime} onChangeText={set('closingTime')} placeholder="21:00" /></Enter>
+      <Enter index={2}><TextField label={t('admin.cutoff')} value={f.orderCutoffTime} onChangeText={set('orderCutoffTime')} placeholder="18:00" hint={t('admin.cutoffHint')} /></Enter>
       <Enter index={3}><Button title={t('shop.editDetails')} icon="storefront" variant="outline" onPress={() => navigation.navigate('ShopDetails')} style={{ marginBottom: spacing.md }} /></Enter>
       <Enter index={6}>
         <Card style={s.block}>
@@ -961,6 +999,7 @@ const s = StyleSheet.create({
   partnerRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12, padding: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.md, backgroundColor: colors.white },
   partnerReady: { borderColor: colors.green, backgroundColor: '#F5FCF7' },
   assignBtn: { minWidth: 92 },
+  annRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   reasonText: { width: '100%', color: colors.secondary },
   stats: { flexDirection: 'row', gap: 12, marginTop: spacing.md },
   stat: { flex: 1, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.tint },

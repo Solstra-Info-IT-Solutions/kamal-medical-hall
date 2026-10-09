@@ -10,6 +10,8 @@ import { LoginScreen, OtpScreen, SignupScreen, WelcomeScreen } from '../screens/
 import { CashScreen } from '../screens/admin/CashScreen';
 import { ShopDetailsScreen } from '../screens/admin/ShopDetails';
 import { ShopScreen } from '../screens/customer/ShopScreen';
+import { AnnouncementScreen } from '../screens/customer/AnnouncementScreen';
+import { AnnouncementsScreen } from '../screens/admin/AdminAnnouncements';
 import { AdminChatScreen, AdminChatsScreen, AdminReviewsScreen, BroadcastScreen, CustomerDetailScreen, ExportsScreen, RevenueScreen } from '../screens/admin/AdminMore';
 import { AllOrdersScreen, AttendanceScreen, CustomersScreen, DashboardScreen, MoreScreen, OrderReviewScreen, OrdersByStatusScreen, PartnerAreasScreen, PaymentDetailsScreen, PincodesScreen, ReportsScreen, RequestsScreen, StoreSettingsScreen, TeamScreen, TermsScreen } from '../screens/admin/AdminScreens';
 import { AddressFormScreen, AddressesScreen } from '../screens/customer/AddressScreens';
@@ -127,6 +129,7 @@ function CustomerNavigator() {
       <CStack.Screen name="Language" component={LanguageScreen} options={{ title: t('profile.language') }} />
       <CStack.Screen name="Help" component={HelpScreen} options={{ title: t('profile.help') }} />
       <CStack.Screen name="Shop" component={ShopScreen} options={{ title: t('shop.title') }} />
+      <CStack.Screen name="Announcement" component={AnnouncementScreen} options={{ title: t('ann.detailTitle') }} />
       <CStack.Screen name="Legal" component={LegalScreen} options={{ title: t('legal.title') }} />
       <CStack.Screen name="Chat" component={ChatScreen} options={{ title: t('chat.title') }} />
       <CStack.Screen name="WriteReview" component={WriteReviewScreen} options={{ title: t('reviews.writeTitle') }} />
@@ -168,6 +171,7 @@ function AdminNavigator() {
       <AStack.Screen name="OrdersByStatus" component={OrdersByStatusScreen} options={({ route }) => ({ title: route.params.title })} />
       <AStack.Screen name="Revenue" component={RevenueScreen} options={{ title: t('admin.revenue') }} />
       <AStack.Screen name="Cash" component={CashScreen} options={{ title: t('cash.title') }} />
+      <AStack.Screen name="Announcements" component={AnnouncementsScreen} options={{ title: t('ann.title') }} />
       <AStack.Screen name="ShopDetails" component={ShopDetailsScreen} options={{ title: t('shop.adminTitle') }} />
       <AStack.Screen name="AdminReviews" component={AdminReviewsScreen} options={{ title: t('admin.reviews') }} />
       <AStack.Screen name="AdminChats" component={AdminChatsScreen} options={{ title: t('admin.chats') }} />

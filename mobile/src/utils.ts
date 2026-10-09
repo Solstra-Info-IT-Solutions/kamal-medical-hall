@@ -10,10 +10,18 @@ function toDate(value: string): Date {
 }
 export const formatDate = (value: string) => toDate(value).toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' });
 export const formatDateTime = (value: string) => new Date(value).toLocaleString(locale(), { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
-export const formatDayChip = (value: string, index: number) => ({
-  top: index === 0 ? i18n.t('time.today') : index === 1 ? i18n.t('time.tomorrow') : toDate(value).toLocaleDateString(locale(), { weekday: 'short' }),
-  bottom: toDate(value).toLocaleDateString(locale(), { day: 'numeric', month: 'short' }),
-});
+/** "Today" / "Tomorrow" / weekday for a yyyy-mm-dd date, judged against the phone's calendar. */
+export const formatDayChip = (value: string) => {
+  const d = toDate(value);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
+  return {
+    top: diff === 0 ? i18n.t('time.today') : diff === 1 ? i18n.t('time.tomorrow') : d.toLocaleDateString(locale(), { weekday: 'long' }),
+    bottom: d.toLocaleDateString(locale(), { day: 'numeric', month: 'long' }),
+  };
+};
+/** Date and, only when the order has one, the time window ("9 Oct · 9:00 AM - 11:00 AM"). Orders now carry a date only. */
+export const formatDelivery = (date: string, slot?: string | null) => (slot ? `${formatDate(date)} · ${slot}` : formatDate(date));
 export const formatMoney = (amount: number) => `₹${amount.toLocaleString('en-IN', Number.isInteger(amount) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export const statusTone = (s: OrderStatus): 'green' | 'red' | 'amber' | 'blue' =>

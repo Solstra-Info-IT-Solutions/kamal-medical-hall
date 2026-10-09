@@ -10,7 +10,7 @@ import { fillOrderCoordinates } from '../geocode.js';
 import { distanceMeters, etaMinutes, releasePartner, storeLocation } from '../partnerState.js';
 import { CANCELLABLE, loadOrder, transition } from '../orderService.js';
 import { isServiceable } from '../pincodes.js';
-import { isSlotBookable, SLOTS } from '../slots.js';
+import { isDateBookable } from '../slots.js';
 import jwt from 'jsonwebtoken';
 import type { AuthUser } from '../auth.js';
 import { INVOICE_STATUSES, streamInvoice } from '../invoice.js';
@@ -35,7 +35,7 @@ const createSchema = z.object({
   note: z.string().trim().max(300).optional(),
   addressId: z.string().uuid(),
   deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  deliverySlot: z.string(),
+  deliverySlot: z.string().optional(), // older app versions still send one; it is ignored
   idempotencyKey: z.string().min(8).max(100),
 });
 
@@ -45,9 +45,8 @@ orders.post('/', authed, requireRole('customer'), async (req, res) => {
   // A prescription is required for every order. Typed medicine names are optional extras that go with it.
   if (b.prescriptions.length < 1) throw bad('Please upload your prescription to place an order.', 'prescription_required');
   if (b.prescriptions.some((p) => !p.publicId.startsWith(`prescriptions/${user.id}/`) || isBlockedFile(p.publicId))) throw bad('Invalid prescription file.', 'invalid_file');
-  if (!SLOTS.some((s) => s.id === b.deliverySlot) || !isSlotBookable(b.deliveryDate, b.deliverySlot)) throw bad('That delivery time is no longer available. Please choose another.', 'slot_unavailable');
-
-  const store = await pool.query('select is_open from store_settings where id = 1');
+  const store = await pool.query('select is_open, order_cutoff_time from store_settings where id = 1');
+  if (!isDateBookable(b.deliveryDate, new Date(), store.rows[0].order_cutoff_time)) throw bad('That delivery date is no longer available. Please choose another.', 'slot_unavailable');
   if (!store.rows[0].is_open) throw new HttpError(409, 'store_closed', 'The store is currently not accepting orders.');
 
   const addr = await pool.query('select * from addresses where id = $1 and user_id = $2', [b.addressId, user.id]);
@@ -62,7 +61,7 @@ orders.post('/', authed, requireRole('customer'), async (req, res) => {
     const ins = await c.query(
       `insert into orders (customer_id, kind, note, address_snapshot, delivery_date, delivery_slot, idempotency_key)
        values ($1,$2,$3,$4,$5,$6,$7) returning id, order_number`,
-      [user.id, 'prescription', b.note ?? null, snapshot, b.deliveryDate, SLOTS.find((s) => s.id === b.deliverySlot)!.label, b.idempotencyKey],
+      [user.id, 'prescription', b.note ?? null, snapshot, b.deliveryDate, null, b.idempotencyKey],
     );
     const id = ins.rows[0].id as string;
     for (const item of b.items) await c.query('insert into order_items (order_id, name, quantity) values ($1,$2,$3)', [id, item.name, item.quantity]);
@@ -190,6 +189,7 @@ orders.post('/:id/accept-quote', authed, requireRole('customer'), async (req, re
     await c.query('delete from payments where order_id = $1 and status = $2', [order.id, 'pending']);
     await c.query('insert into payments (order_id, method, amount, status, razorpay_order_id) values ($1,$2,$3,$4,$5)',
       [order.id, paymentMethod, order.quotedAmount, paymentMethod === 'cod' ? 'cod_pending' : 'pending', razorpayOrder?.id ?? null]);
+    if (paymentMethod === 'cod') await tellPartnerConfirmed(c, order.id, order.orderNumber);
     await notifyAdmins(order.id, paymentMethod === 'cod' ? 'ready_to_dispatch' : 'awaiting_payment', 'Quote accepted',
       `${order.orderNumber} accepted (${paymentMethod === 'cod' ? 'Cash on delivery' : 'Razorpay'})`, c);
   });
@@ -198,6 +198,12 @@ orders.post('/:id/accept-quote', authed, requireRole('customer'), async (req, re
     razorpay: razorpayOrder ? { orderId: razorpayOrder.id, amount: razorpayOrder.amount, currency: razorpayOrder.currency, keyId: config.razorpay.keyId } : null,
   });
 });
+
+/** The customer confirmed (or paid) an order the admin had already given to a partner: let the partner know it can go ahead. */
+async function tellPartnerConfirmed(c: pg.PoolClient, orderId: string, orderNumber: string) {
+  const { rows } = await c.query('select partner_id from orders where id = $1', [orderId]);
+  if (rows[0]?.partner_id) await notify(rows[0].partner_id, orderId, 'order_confirmed', 'Customer confirmed the order', `${orderNumber} is confirmed. You can start the delivery when you are ready.`, c);
+}
 
 async function markPaid(c: pg.PoolClient, razorpayOrderId: string, paymentId: string, signature: string | null, paidPaise?: number) {
   const pay = await c.query('select * from payments where razorpay_order_id = $1 for update', [razorpayOrderId]);
@@ -209,6 +215,7 @@ async function markPaid(c: pg.PoolClient, razorpayOrderId: string, paymentId: st
   const { rows } = await c.query("select status from orders where id = $1 for update", [p.order_id]);
   if (rows[0].status === 'awaiting_payment') {
     const o = await transition(c, p.order_id, ['awaiting_payment'], 'ready_to_dispatch', null, { payment_status: 'paid' });
+    await tellPartnerConfirmed(c, p.order_id, o.order_number);
     await notifyAdmins(p.order_id, 'payment_received', 'Payment received', `${o.order_number} paid online and is ready to dispatch`, c);
     await notify(o.customer_id, p.order_id, 'payment_received', 'Payment received', `Your payment for ${o.order_number} was successful.`, c);
   } else {

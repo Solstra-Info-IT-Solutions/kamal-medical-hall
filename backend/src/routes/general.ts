@@ -5,7 +5,7 @@ import { config } from '../config.js';
 import { pool, tx } from '../db.js';
 import { HttpError, notFound, parse } from '../http.js';
 import { isServiceable, servicePincodes } from '../pincodes.js';
-import { listDeliveryDays } from '../slots.js';
+import { listDeliveryDates, listDeliveryDays } from '../slots.js';
 import { deletePrescriptionFiles, isBlockedFile, signUpload, signedPrescriptionUrl, type ResourceType } from '../services.js';
 
 export const general = Router();
@@ -14,11 +14,13 @@ general.get('/health', (_req, res) => { res.json({ ok: true }); });
 
 /** Public store/delivery configuration. Slots are computed server-side in Asia/Kolkata time. */
 general.get('/config', async (_req, res) => {
-  const { rows } = await pool.query('select is_open, opening_time, closing_time, address, phone, email, latitude, longitude from store_settings where id = 1');
+  const { rows } = await pool.query('select is_open, opening_time, closing_time, order_cutoff_time, address, phone, email, latitude, longitude from store_settings where id = 1');
   const s = rows[0];
   res.json({
     store: { isOpen: s.is_open, openingTime: s.opening_time, closingTime: s.closing_time, address: s.address, phone: s.phone, email: s.email, latitude: s.latitude, longitude: s.longitude },
-    deliveryDays: listDeliveryDays(),
+    deliveryDays: listDeliveryDays(new Date(), s.order_cutoff_time),
+    deliveryDates: listDeliveryDates(new Date(), s.order_cutoff_time),
+    orderCutoffTime: s.order_cutoff_time,
     authMode: config.authMode,
   });
 });
@@ -135,10 +137,10 @@ general.delete('/addresses/:id', authed, async (req, res) => {
 
 // ---- Uploads, notifications, devices ---------------------------------------
 general.post('/uploads/sign', authed, (req, res) => {
-  const { purpose } = parse(z.object({ purpose: z.enum(['prescription', 'bill', 'avatar', 'review', 'proof']).default('prescription') }), req.body ?? {});
+  const { purpose } = parse(z.object({ purpose: z.enum(['prescription', 'bill', 'avatar', 'review', 'proof', 'announcement']).default('prescription') }), req.body ?? {});
   // Customers upload prescriptions and review photos, only the store admin uploads bills, delivery partners upload payment screenshots, anyone can set a profile picture.
   const role = req.user!.role;
-  const allowed = purpose === 'bill' ? role === 'admin' : purpose === 'proof' ? role === 'delivery_partner' : purpose === 'avatar' ? true : role === 'customer';
+  const allowed = purpose === 'bill' ? role === 'admin' : purpose === 'proof' ? role === 'delivery_partner' : purpose === 'announcement' ? role === 'admin' : purpose === 'avatar' ? true : role === 'customer';
   if (!allowed) throw new HttpError(403, 'forbidden', 'Not allowed');
   res.json(signUpload(req.user!.id, purpose));
 });
@@ -162,11 +164,11 @@ general.delete('/me/avatar', authed, async (req, res) => {
 
 general.get('/notifications', authed, async (req, res) => {
   const { rows } = await pool.query(
-    `select n.id, n.type, n.title, n.body, n.read_at, n.created_at, n.order_id, o.order_number
+    `select n.id, n.type, n.title, n.body, n.read_at, n.created_at, n.order_id, n.announcement_id, o.order_number
      from notifications n left join orders o on o.id = n.order_id where n.user_id = $1 order by n.created_at desc limit 100`,
     [req.user!.id],
   );
-  res.json({ notifications: rows.map((n) => ({ id: n.id, type: n.type, title: n.title, body: n.body, read: Boolean(n.read_at), createdAt: n.created_at, orderId: n.order_id, orderNumber: n.order_number })) });
+  res.json({ notifications: rows.map((n) => ({ id: n.id, type: n.type, title: n.title, body: n.body, read: Boolean(n.read_at), createdAt: n.created_at, orderId: n.order_id, orderNumber: n.order_number, announcementId: n.announcement_id })) });
 });
 
 general.post('/notifications/read-all', authed, async (req, res) => {

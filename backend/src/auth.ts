@@ -22,7 +22,9 @@ function firebase() {
   }
   return firebaseApp;
 }
-export const firebaseMessaging = () => (config.firebaseServiceAccount ? getMessaging(firebase()) : null);
+/** Phone push is never sent from the automated tests (they run against the real database, and real phones are registered in it). */
+const pushOff = () => process.env.PUSH === 'off' || process.env.NODE_TEST_CONTEXT !== undefined;
+export const firebaseMessaging = () => (config.firebaseServiceAccount && !pushOff() ? getMessaging(firebase()) : null);
 
 /** Normalises +91XXXXXXXXXX / 91XXXXXXXXXX / XXXXXXXXXX to a 10-digit Indian mobile number. */
 export function normalisePhone(raw: string): string {

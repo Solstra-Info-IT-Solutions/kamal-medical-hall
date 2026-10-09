@@ -20,7 +20,7 @@ interface CartState {
   setPrescriptions: (f: PrescriptionFile[]) => void;
   setNote: (n: string) => void;
   setAddress: (id: string) => void;
-  setSlot: (date: string, slotId: string) => void;
+  setDate: (date: string) => void;
   /** One key per submission attempt so a retry after a network failure cannot create a duplicate order. */
   ensureKey: () => string;
   clear: () => void;
@@ -37,7 +37,7 @@ export const useCart = create<CartState>()(persist((set, get) => ({
   setPrescriptions: (prescriptions) => set({ prescriptions, idempotencyKey: null }),
   setNote: (note) => set({ note }),
   setAddress: (id) => set((s) => ({ checkout: { ...s.checkout, id } })),
-  setSlot: (date, slotId) => set((s) => ({ checkout: { ...s.checkout, date, slotId } })),
+  setDate: (date) => set((s) => ({ checkout: { ...s.checkout, date } })),
   ensureKey: () => {
     const existing = get().idempotencyKey;
     if (existing) return existing;

@@ -29,6 +29,7 @@ export function NotificationsScreen() {
   const go = (d: Destination) => {
     if (!d) return;
     if (d.screen === 'OrderDetail') nav.navigate('OrderDetail', { orderId: d.orderId });
+    else if (d.screen === 'Announcement') nav.navigate('Announcement', { id: d.id });
     else if (d.screen === 'Chat') nav.navigate('Chat', undefined);
     else nav.navigate('MyReviews');
   };

@@ -17,13 +17,16 @@ export interface DeliveryDay { date: string; slots: { id: string; label: string;
 export interface StoreConfig {
   store: { isOpen: boolean; openingTime: string; closingTime: string; address: string | null; phone: string | null; email: string | null; latitude: number | null; longitude: number | null };
   deliveryDays: DeliveryDay[];
+  /** The dates a customer can choose (no times). Before the admin's cut-off time today is included, after it the list starts tomorrow. */
+  deliveryDates: string[];
+  orderCutoffTime: string;
   authMode: 'dev' | 'firebase';
 }
 
 export interface Order {
   id: string; orderNumber: string; kind: OrderKind; status: OrderStatus; note: string | null;
   address: { recipientName: string; phone: string | null; line1: string; line2?: string; landmark?: string; pincode: string; city: string; latitude?: number; longitude?: number };
-  deliveryDate: string; deliverySlot: string; quotedAmount: number | null; quoteExpiresAt: string | null;
+  deliveryDate: string; deliverySlot: string | null; quotedAmount: number | null; quoteExpiresAt: string | null;
   paymentMethod: PaymentMethod | null; paymentStatus: string | null; rejectionReason: string | null; cancelReason: string | null;
   createdAt: string;
   /** Staff only: how a cash-on-delivery order was paid, with the proof the partner uploaded. */
@@ -47,10 +50,10 @@ export interface OrderSummary {
   id: string; orderNumber: string; kind: OrderKind; status: OrderStatus; createdAt: string; quotedAmount: number | null;
   fileCount: number; summary: string | null;
   paymentMethod?: PaymentMethod | null; paymentStatus?: string | null; customerName?: string; customerPhone?: string;
-  deliverySlot?: string; deliveryDate?: string; partnerName?: string | null;
+  deliverySlot?: string | null; deliveryDate?: string; partnerName?: string | null;
   partnerAccepted?: boolean; pincode?: string | null; rejectedReason?: string; respondedAt?: string;
 }
-export interface AppNotification { id: string; type: string; title: string; body: string; read: boolean; createdAt: string; orderId: string | null; orderNumber: string | null }
+export interface AppNotification { id: string; type: string; title: string; body: string; read: boolean; createdAt: string; orderId: string | null; orderNumber: string | null; announcementId?: string | null }
 export type PartnerState = 'off' | 'available' | 'reserved' | 'busy' | 'returning' | 'break';
 export type DutyStatus = 'on_duty' | 'off_duty' | 'on_break' | 'leave';
 export type DayStatus = 'present' | 'leave' | 'paid_leave' | 'absent';
@@ -83,7 +86,7 @@ export interface PaymentDetails {
 }
 export interface StoreSettings {
   isOpen: boolean; openingTime: string; closingTime: string; address: string | null; phone: string | null; email: string | null;
-  latitude: number | null; longitude: number | null; geofenceM: number;
+  latitude: number | null; longitude: number | null; geofenceM: number; orderCutoffTime?: string;
 }
 
 export type ChatRole = 'customer' | 'admin' | 'bot';
@@ -130,3 +133,8 @@ export interface ShopDetails {
 }
 /** What customers see (the PAN is never included), plus today's opening hours and the older settings as a fallback. */
 export type ShopPublic = ShopDetails & { isOpen: boolean; openingTime: string; closingTime: string; legacy: { address: string | null; phone: string | null; email: string | null; latitude: number | null; longitude: number | null } };
+
+export interface Announcement {
+  id: string; title: string; body: string; expiresAt: string; createdAt: string; lastSentAt: string | null; sendCount: number;
+  active: boolean; expired: boolean; hasImages: boolean; images: { publicId: string; mimeType: string; url: string | null; fullUrl: string | null }[];
+}

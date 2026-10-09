@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Linking, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { endpoints } from '../../api/endpoints';
+import { AnnouncementSlider } from '../../components/AnnouncementSlider';
 import { OrderCard } from '../../components/OrderCard';
 import { Skeleton, Tap } from '../../components/motion';
 import { Icon, ResponsiveGrid } from '../../components/ui';
@@ -32,8 +33,10 @@ export function HomeScreen(_props: BottomTabScreenProps<CustomerTabParamList, 'H
   const active = useLoad(() => endpoints.orders('active'), ['order:update']);
   const unread = useLoad(async () => (await endpoints.notifications()).notifications.filter((n) => !n.read).length, ['notification']);
   const shop = useLoad(() => endpoints.shop());
+  const ann = useLoad(() => endpoints.announcements(), ['announcement:update']);
+  const slides = (ann.data?.announcements ?? []).filter((a) => a.hasImages);
   const shopPhone = shop.data?.phones?.find((p) => p.number)?.number ?? shop.data?.legacy.phone ?? null;
-  const refresh = () => { void active.reload(); void unread.reload(); };
+  const refresh = () => { void active.reload(); void unread.reload(); void ann.reload(); };
 
   return (
     <SafeAreaView style={s.fill} edges={['top']}>
@@ -47,6 +50,8 @@ export function HomeScreen(_props: BottomTabScreenProps<CustomerTabParamList, 'H
         </View>
         <Text style={[type.h2, { marginTop: spacing.lg, color: colors.text }]}>{user?.name ? t('home.greetingName', { name: user.name.split(' ')[0] }) : t('home.greeting')}</Text>
         <Text style={[type.body, { color: colors.secondary, marginBottom: spacing.lg }]}>{t('home.help')}</Text>
+
+        <AnnouncementSlider items={slides} onOpen={(a) => nav.navigate('Announcement', { id: a.id })} />
 
         <Tap onPress={() => nav.navigate('Upload')} style={s.actionShadow} accessibilityRole="button" accessibilityLabel={t('home.uploadTitle')}>
           <LinearGradient colors={[colors.card, '#DCEBFB']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.action}>

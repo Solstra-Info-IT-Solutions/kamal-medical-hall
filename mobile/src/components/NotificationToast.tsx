@@ -9,7 +9,7 @@ import { openFromNotification } from '../navigation/ref';
 import { Tap, tick } from './motion';
 import { Icon } from './ui';
 
-interface Toast { id: string; type?: string; title: string; body: string; orderId: string | null }
+interface Toast { id: string; type?: string; title: string; body: string; orderId: string | null; announcementId?: string | null }
 
 /** Slide-down banner for notifications that arrive over the live socket while the app is open. */
 export function NotificationToast() {

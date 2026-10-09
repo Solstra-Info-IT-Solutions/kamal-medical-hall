@@ -24,22 +24,6 @@ function CheckoutSkeleton() {
   return <View style={{ padding: spacing.lg, gap: 14 }}><Skeleton h={50} r={25} /><Skeleton h={56} r={14} /><Skeleton h={56} r={14} /><Skeleton h={56} r={14} /></View>;
 }
 
-function DayChip({ top, bottom, on, onPress, index }: { top: string; bottom: string; on: boolean; onPress: () => void; index: number }) {
-  const sel = useSharedValue(on ? 1 : 0);
-  useEffect(() => { sel.value = withSpring(on ? 1 : 0, { damping: 14, stiffness: 200 }); }, [on, sel]);
-  const a = useAnimatedStyle(() => ({ transform: [{ translateY: interpolate(sel.value, [0, 1], [0, -3]) }], backgroundColor: sel.value > 0.5 ? colors.primary : colors.tint, borderColor: sel.value > 0.5 ? colors.primary : colors.border }));
-  return (
-    <Enter index={index} style={{ flex: 1 }}>
-      <Tap accessibilityRole="button" accessibilityState={{ selected: on }} onPress={onPress} scaleTo={0.94}>
-        <Animated.View style={[s.day, a]}>
-          <Text style={[type.smallMedium, { color: on ? colors.white : colors.secondary }]}>{top}</Text>
-          <Text style={[type.smallMedium, { color: on ? colors.white : colors.text }]}>{bottom}</Text>
-        </Animated.View>
-      </Tap>
-    </Enter>
-  );
-}
-
 function SlotRow({ label, on, available, unavailableText, onPress, index }: { label: string; on: boolean; available: boolean; unavailableText: string; onPress: () => void; index: number }) {
   const sel = useSharedValue(on ? 1 : 0);
   useEffect(() => { sel.value = withTiming(on ? 1 : 0, { duration: 220 }); }, [on, sel]);
@@ -59,34 +43,25 @@ function SlotRow({ label, on, available, unavailableText, onPress, index }: { la
 
 export function DeliveryTimeScreen({ navigation }: NativeStackScreenProps<CustomerStackParamList, 'DeliveryTime'>) {
   const { t } = useTranslation();
-  const { date, slotId } = useCart((st) => st.checkout);
-  const setSlot = useCart((st) => st.setSlot);
+  const date = useCart((st) => st.checkout.date);
+  const setDate = useCart((st) => st.setDate);
   const { data, error, loading, reload } = useLoad(() => endpoints.config());
-  const days = data?.deliveryDays ?? [];
-  const [day, setDay] = useState<string | null>(date);
+  const dates = data?.deliveryDates ?? data?.deliveryDays.map((d) => d.date) ?? [];
 
-  useEffect(() => {
-    if (!days.length) return;
-    const first = days.find((d) => d.date === (day ?? date)) ?? days.find((d) => d.slots.some((x) => x.available)) ?? days[0];
-    if (first.date !== day) setDay(first.date);
-    // Drop a previously chosen slot that is no longer bookable.
-    const chosen = first.slots.find((x) => x.id === slotId && first.date === date);
-    if (date && slotId && !chosen?.available) useCart.setState((st) => ({ checkout: { ...st.checkout, date: null, slotId: null } }));
-  }, [days, day, date, slotId]);
+  // A date chosen earlier may have dropped off the list (the cut-off time passed): clear it.
+  useEffect(() => { if (dates.length && date && !dates.includes(date)) useCart.setState((st) => ({ checkout: { ...st.checkout, date: null } })); }, [dates, date]);
 
   if (loading && !data) return <CheckoutSkeleton />;
   if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
-  const current = days.find((d) => d.date === day);
-  const selectedHere = date === day ? slotId : null;
+  const cutoff = data?.orderCutoffTime ? new Date(`2000-01-01T${data.orderCutoffTime}:00`).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '';
   return (
-    <Screen footer={<Button title={t('time.review')} icon="arrow-forward" disabled={!date || !slotId} onPress={() => goTo(navigation, 'Review')} />}>
+    <Screen footer={<Button title={t('time.review')} icon="arrow-forward" disabled={!date || !dates.includes(date)} onPress={() => goTo(navigation, 'Review')} />}>
       <Enter><CheckoutSteps step={1} labels={[t('steps.address'), t('steps.time'), t('steps.review')]} /></Enter>
       {data && !data.store.isOpen ? <Text style={[type.small, { color: colors.red, marginBottom: spacing.md }]}>{t('time.storeClosed')}</Text> : null}
-      <View style={s.days}>
-        {days.map((d, i) => { const label = formatDayChip(d.date, i); return <DayChip key={d.date} index={i} top={label.top} bottom={label.bottom} on={d.date === day} onPress={() => setDay(d.date)} />; })}
-      </View>
-      {current?.slots.map((sl, i) => <SlotRow key={`${current.date}-${sl.id}`} index={i} label={sl.label} on={selectedHere === sl.id} available={sl.available} unavailableText={t('time.unavailable')} onPress={() => setSlot(current.date, sl.id)} />)}
-      <Enter index={7}><View style={s.free}><Icon name="bicycle" size={18} color={colors.green} /><Text style={[type.small, { color: colors.green, flex: 1 }]}>{t('cart.freeDelivery')}</Text></View></Enter>
+      <Text style={[type.h3, { color: colors.text }]}>{t('time.chooseDate')}</Text>
+      {cutoff ? <Text style={[type.small, { color: colors.secondary, marginBottom: spacing.md }]}>{t('time.cutoffHint', { time: cutoff })}</Text> : null}
+      {dates.map((d, i) => { const l = formatDayChip(d); return <SlotRow key={d} index={i} label={`${l.top}, ${l.bottom}`} on={date === d} available unavailableText="" onPress={() => setDate(d)} />; })}
+      <Enter index={8}><View style={s.free}><Icon name="bicycle" size={18} color={colors.green} /><Text style={[type.small, { color: colors.green, flex: 1 }]}>{t('cart.freeDelivery')}</Text></View></Enter>
     </Screen>
   );
 }
@@ -107,12 +82,11 @@ export function ReviewScreen({ navigation }: NativeStackScreenProps<CustomerStac
   const [errCount, setErrCount] = useState(0);
   const shake = useShake(errCount);
   const address = addresses.data?.addresses.find((a) => a.id === checkout.id);
-  const slotLabel = config.data?.deliveryDays.find((d) => d.date === checkout.date)?.slots.find((x) => x.id === checkout.slotId)?.label;
 
   if ((addresses.loading || config.loading) && !addresses.data) return <CheckoutSkeleton />;
   if (addresses.error || config.error) return <ErrorView message={(addresses.error ?? config.error)!} onRetry={() => { void addresses.reload(); void config.reload(); }} retryLabel={t('common.retry')} />;
 
-  const ready = !!address && !!checkout.date && !!checkout.slotId;
+  const ready = !!address && !!checkout.date;
   const submit = async () => {
     if (!ready || !address) { setError(t('review.incomplete')); setErrCount((c) => c + 1); return; }
     if (!prescriptions.length) { setError(t('cart.rxRequired')); setErrCount((c) => c + 1); return; }
@@ -130,7 +104,7 @@ export function ReviewScreen({ navigation }: NativeStackScreenProps<CustomerStac
       setStep(t('review.sending'));
       const { order } = await endpoints.createOrder({
         kind: 'prescription', items: medicines.map((m) => ({ name: m.name, quantity: m.quantity })),
-        prescriptions: files, note: note || undefined, addressId: address.id, deliveryDate: checkout.date!, deliverySlot: checkout.slotId!, idempotencyKey: cart.ensureKey(),
+        prescriptions: files, note: note || undefined, addressId: address.id, deliveryDate: checkout.date!, idempotencyKey: cart.ensureKey(),
       });
       tick('success');
       uploaded.clear();
@@ -165,7 +139,7 @@ export function ReviewScreen({ navigation }: NativeStackScreenProps<CustomerStac
         <Text style={[type.bodyMedium, { color: colors.text }]}>{address.recipientName} · {address.phone}</Text>
         <Text style={[type.body, { color: colors.secondary }]}>{[address.line1, address.line2, address.landmark].filter(Boolean).join(', ')}</Text>
         <Text style={[type.body, { color: colors.secondary }]}>{address.city} - {address.pincode}</Text></> : <Text style={[type.body, { color: colors.red }]}>{t('review.noAddress')}</Text>)}
-      {section(3, 'time', t('review.time'), () => goTo(navigation, 'DeliveryTime'), checkout.date ? <Text style={[type.body, { color: colors.text }]}>{formatDate(checkout.date)}{slotLabel ? `\n${slotLabel}` : ''}</Text> : <Text style={[type.body, { color: colors.red }]}>{t('review.noTime')}</Text>)}
+      {section(3, 'time', t('review.time'), () => goTo(navigation, 'DeliveryTime'), checkout.date ? <Text style={[type.body, { color: colors.text }]}>{formatDate(checkout.date)}</Text> : <Text style={[type.body, { color: colors.red }]}>{t('review.noTime')}</Text>)}
       <Enter index={4}><View style={s.info}><Icon name="information-circle" size={22} /><Text style={[type.small, { flex: 1, color: colors.text }]}>{t('review.info')}</Text></View></Enter>
       <Animated.View style={shake}>{error ? <Animated.Text entering={FadeInDown.duration(220)} style={[type.small, { color: colors.red, marginTop: spacing.md }]}>{error}</Animated.Text> : null}</Animated.View>
     </Screen>

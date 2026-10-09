@@ -54,7 +54,7 @@ export function streamInvoice(res: Response, o: OrderData, store: StoreInfo, pre
   y += 16;
   const meta: [string, string][] = [
     ['Invoice no.', o.orderNumber], ['Order date', date(o.createdAt)],
-    ['Delivery', `${date(o.deliveryDate)}, ${o.deliverySlot}`], ...(o.deliveredAt ? [['Delivered on', dateTime(o.deliveredAt)] as [string, string]] : []),
+    ['Delivery', o.deliverySlot ? `${date(o.deliveryDate)}, ${o.deliverySlot}` : date(o.deliveryDate)], ...(o.deliveredAt ? [['Delivered on', dateTime(o.deliveredAt)] as [string, string]] : []),
   ];
   let my = y;
   for (const [k, v] of meta) {

@@ -20,10 +20,20 @@ export async function setPartnerState(db: Queryable, partnerId: string, state: P
   if (hasAfterCommit(db)) db.afterCommit(emit); else emit();
 }
 
-/** After an order ends, is cancelled or is rejected, a partner returns to "available" if still on duty today, otherwise "off". */
+/**
+ * Works out a partner's state from what they are actually holding (a partner can have several orders at once):
+ * any order out for delivery -> busy; otherwise any assigned order waiting to go out -> reserved; otherwise available
+ * (on duty today and the shop open) or off. Call it after anything that adds or removes one of their orders.
+ */
 export async function releasePartner(db: Queryable, partnerId: string) {
-  const { rows } = await db.query(`select (d.on_duty and d.on_duty_day = ${TODAY_IST}) as duty, (select is_open from store_settings where id = 1) as open from delivery_partners d where d.user_id = $1`, [partnerId]);
-  await setPartnerState(db, partnerId, rows[0]?.duty && rows[0]?.open ? 'available' : 'off');
+  const { rows } = await db.query(`select
+      (select count(*) from orders where partner_id = $1 and status = 'out_for_delivery')::int as out,
+      (select count(*) from orders where partner_id = $1 and status in ('quoted', 'awaiting_payment', 'ready_to_dispatch'))::int as pending,
+      (d.on_duty and d.on_duty_day = ${TODAY_IST}) as duty, (select is_open from store_settings where id = 1) as open
+    from delivery_partners d where d.user_id = $1`, [partnerId]);
+  const r = rows[0];
+  const state: PartnerState = r?.out > 0 ? 'busy' : r?.pending > 0 ? 'reserved' : r?.duty && r?.open ? 'available' : 'off';
+  await setPartnerState(db, partnerId, state);
 }
 
 /** Great-circle distance in metres. */

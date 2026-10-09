@@ -28,11 +28,11 @@ export function initPushBackgroundHandler() {
 }
 
 /** Waits for the navigator (the app may still be starting after a tap on a notification), then opens the order. */
-function openOrderWhenReady(data: { orderId?: unknown; type?: unknown } | undefined, tries = 0) {
+function openOrderWhenReady(data: { orderId?: unknown; type?: unknown; announcementId?: unknown } | undefined, tries = 0) {
   if (!data?.orderId && !data?.type) return;
   // required lazily: the navigation module depends on the session store, which depends on this file
   const nav = require('./navigation/ref') as typeof import('./navigation/ref');
-  if (nav.navigationRef.isReady()) return nav.openFromNotification({ orderId: data.orderId as string | undefined, type: data.type as string | undefined });
+  if (nav.navigationRef.isReady()) return nav.openFromNotification({ orderId: data.orderId as string | undefined, type: data.type as string | undefined, announcementId: data.announcementId as string | undefined });
   if (tries < 40) setTimeout(() => openOrderWhenReady(data, tries + 1), 250);
 }
 

@@ -44,6 +44,8 @@ export function attachRealtime(server: HttpServer) {
 export const emitUser = (userId: string | null | undefined, event: string, payload: unknown) => {
   if (userId) io?.to(`user:${userId}`).emit(event, payload);
 };
+/** A refresh signal for every connected app (no personal data in the payload). */
+export const emitEveryone = (event: string, payload: unknown) => { io?.emit(event, payload); };
 export const emitAdmins = (event: string, payload: unknown) => { io?.to('admins').emit(event, payload); };
 
 /** Tells everyone involved in an order that it changed so their screens can refresh instantly. */

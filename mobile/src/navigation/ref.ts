@@ -13,8 +13,9 @@ export function openOrderFromNotification(orderId: string | null) {
 }
 
 /** Where a tapped notification leads: cash notifications open the admin's cash screen, everything else the order. */
-export function openFromNotification(n: { orderId?: string | null; type?: string | null }) {
+export function openFromNotification(n: { orderId?: string | null; type?: string | null; announcementId?: string | null }) {
   if (!navigationRef.isReady()) return;
   if (useSession.getState().user?.role === 'admin' && (n.type === 'closing_alert' || n.type === 'cash_to_collect')) { navigationRef.navigate('Cash'); return; }
+  if (n.type === 'announcement' && n.announcementId) { navigationRef.navigate('Announcement', { id: n.announcementId }); return; }
   openOrderFromNotification(n.orderId ?? null);
 }
