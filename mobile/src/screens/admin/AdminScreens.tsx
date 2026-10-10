@@ -16,6 +16,7 @@ import { uploadPrescription } from '../../api/upload';
 import type { Order, OrderSummary, Partner, PartnerState } from '../../api/types';
 import { Avatar, CallButton } from '../../components/CallButton';
 import { openFile } from '../../components/FileViewer';
+import { ListRow } from '../../components/layout';
 import { SourceOptions } from '../../components/SourceOptions';
 import { NotificationsRow } from '../../components/NotificationsRow';
 import { OrderCard } from '../../components/OrderCard';
@@ -230,19 +231,16 @@ function PartnerRow({ p, pincode, busy, canAssign, onAssign }: { p: Partner; pin
   const reason = assignBlocker(t, p, pincode) ?? (p.state === 'available' ? null : ['off', 'break'].includes(p.state) ? t('admin.offDutyHint') : t('admin.queueHint', { count: p.activeOrders }));
   return (
     <View style={[s.partnerRow, ready && s.partnerReady]}>
-      <Avatar name={p.name} />
-      <View style={{ flex: 1 }}>
+      <ListRow
+        leading={<Avatar name={p.name} />}
+        trailing={<View style={s.partnerActions}><CallButton phone={p.phone} compact label={t('admin.callPartner')} /><Button small title={t('admin.assignBtn')} onPress={onAssign} disabled={!canAssign} loading={busy} style={s.assignBtn} /></View>}>
         <Text style={[type.bodyMedium, { color: colors.text }]}>{p.name}</Text>
         <Text style={[type.small, { color: colors.secondary }]}>{p.phone}{p.activeOrders ? ` · ${t('admin.activeOrders', { count: p.activeOrders })}` : ''}</Text>
         <View style={s.pillRow}>
           {statePill(t, p)}
           <Pill text={p.pincodes.length === 0 ? t('admin.coversAll') : covers ? t('admin.covers', { pincode }) : t('admin.notCovered')} tone={covers ? 'blue' : 'red'} />
         </View>
-      </View>
-      <View style={{ gap: 8, alignItems: 'flex-end' }}>
-        <CallButton phone={p.phone} compact label={t('admin.callPartner')} />
-        <Button small title={t('admin.assignBtn')} onPress={onAssign} disabled={!canAssign} loading={busy} style={s.assignBtn} />
-      </View>
+      </ListRow>
       {!ready && reason ? <Text style={[type.small, s.reasonText]}>{reason}</Text> : null}
     </View>
   );
@@ -996,9 +994,10 @@ const s = StyleSheet.create({
   pillRow: { flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' },
   rxRow: { flexDirection: 'row', gap: 10, marginTop: spacing.sm },
   rx: { width: 72, height: 90, borderRadius: radius.sm, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  partnerRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12, padding: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.md, backgroundColor: colors.white },
+  partnerRow: { gap: 10, padding: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.md, backgroundColor: colors.white },
   partnerReady: { borderColor: colors.green, backgroundColor: '#F5FCF7' },
   assignBtn: { minWidth: 92 },
+  partnerActions: { gap: 8, alignItems: 'flex-end' },
   annRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   reasonText: { width: '100%', color: colors.secondary },
   stats: { flexDirection: 'row', gap: 12, marginTop: spacing.md },

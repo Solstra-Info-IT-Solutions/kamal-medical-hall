@@ -14,7 +14,7 @@ export function CallButton({ phone, label, compact, small, tone = 'green' }: { p
   }
   return (
     <Tap accessibilityRole="button" accessibilityLabel={label ?? `Call ${phone}`} onPress={open} style={[s.pill, small && s.pillSmall, { backgroundColor: fg }]}>
-      <Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8} style={[type.button, small && { fontSize: 15, lineHeight: 22 }, { color: colors.white, flexShrink: 1, textAlign: 'center' }]}>{label ?? phone}</Text>
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[type.button, small && { fontSize: 15, lineHeight: 22 }, { color: colors.white, flexShrink: 1, textAlign: 'center' }]}>{label ?? phone}</Text>
       <Icon name="call" size={small ? 18 : 20} color={colors.white} />
     </Tap>
   );
@@ -31,7 +31,7 @@ export const Avatar = ({ name, size = 44, uri }: { name: string | null | undefin
 const s = StyleSheet.create({
   round: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   // Same size as <Button>, so a Call button and a Directions / Message button next to each other line up exactly.
-  pill: { minHeight: 52, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing.lg, borderRadius: radius.md },
-  pillSmall: { minHeight: 40, paddingHorizontal: 14, borderRadius: radius.sm },
+  pill: { height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing.lg, borderRadius: radius.md },
+  pillSmall: { height: 40, paddingHorizontal: 14, borderRadius: radius.sm },
   avatar: { backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.cardBorder },
 });

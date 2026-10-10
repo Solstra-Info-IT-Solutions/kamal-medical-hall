@@ -5,6 +5,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { endpoints } from '../../api/endpoints';
 import type { ClosingSummary } from '../../api/types';
 import { Avatar, CallButton } from '../../components/CallButton';
+import { ListRow } from '../../components/layout';
 import { Skeleton, tick } from '../../components/motion';
 import { ButtonRow, Button, Card, ErrorView, Icon, Message, Screen } from '../../components/ui';
 import { showDialog } from '../../dialog';
@@ -46,15 +47,11 @@ export function CashScreen() {
 
       {d.cash.partners.length === 0 ? <View style={{ marginTop: spacing.lg }}><Message icon="checkmark-circle-outline" title={t('cash.title')} text={t('cash.nothing')} /></View> : d.cash.partners.map((p) => (
         <Card key={p.partnerId} style={s.card}>
-          <View style={s.head}>
-            <Avatar name={p.name} size={46} />
-            <View style={{ flex: 1 }}>
-              <Text style={[type.small, { color: colors.secondary }]}>{t('cash.staffShort')}</Text>
-              <Text style={[type.h3, { color: colors.text }]} numberOfLines={2}>{p.name}</Text>
-            </View>
-            <CallButton phone={p.phone} compact label={t('admin.callPartner')} />
-            <Text style={[type.h2, { color: colors.amber }]}>{formatMoney(p.total)}</Text>
-          </View>
+          <ListRow centered leading={<Avatar name={p.name} size={46} />}
+            trailing={<View style={s.headEnd}><CallButton phone={p.phone} compact label={t('admin.callPartner')} /><Text style={[type.h2, { color: colors.amber }]}>{formatMoney(p.total)}</Text></View>}>
+            <Text style={[type.small, { color: colors.secondary }]}>{t('cash.staffShort')}</Text>
+            <Text style={[type.h3, { color: colors.text }]} numberOfLines={2}>{p.name}</Text>
+          </ListRow>
           {p.orders.map((o) => (
             <View key={o.orderId} style={s.orderRow}>
               <Icon name="receipt-outline" size={18} color={colors.muted} />
@@ -83,7 +80,7 @@ const s = StyleSheet.create({
   heroLabel: { ...type.small, color: 'rgba(255,255,255,0.75)', textAlign: 'center' },
   heroDivider: { width: 1, height: 34, backgroundColor: 'rgba(255,255,255,0.25)' },
   card: { marginTop: spacing.md, gap: spacing.sm },
-  head: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headEnd: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   orderRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   actions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: spacing.sm },
 });

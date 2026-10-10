@@ -5,6 +5,7 @@ import { Image, StyleSheet, Text, View } from 'react-native';
 import { endpoints } from '../../api/endpoints';
 import { uploadPrescription } from '../../api/upload';
 import type { Announcement } from '../../api/types';
+import { ListRow, TitleBadge } from '../../components/layout';
 import { SourceOptions } from '../../components/SourceOptions';
 import { Skeleton, Tap, tick } from '../../components/motion';
 import { ButtonRow, Button, Card, ErrorView, Icon, Message, Pill, Screen, TextField } from '../../components/ui';
@@ -158,17 +159,12 @@ function SavedCard({ a, busy, edit, setEdit, onSave, onResend, onToggle, onDelet
   const first = a.images[0]?.url;
   return (
     <Card style={s.saved}>
-      <View style={s.savedTop}>
-        {first ? <Image source={{ uri: first }} style={s.savedImg} /> : <View style={[s.savedImg, s.savedIcon]}><Icon name="notifications" size={24} color={colors.primary} /></View>}
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={2}>{a.title}</Text>
-          {a.body ? <Text style={[type.small, { color: colors.secondary }]} numberOfLines={2}>{a.body}</Text> : null}
-          <View style={s.pills}>
-            <Pill text={a.status === 'expired' ? t('ann.expired') : a.status === 'inactive' ? t('ann.inactive') : t('ann.active')} tone={a.status === 'expired' ? 'red' : a.status === 'inactive' ? 'amber' : 'green'} />
-            <Pill text={a.hasImages ? t('ann.kindSlider', { count: a.images.length }) : t('ann.kindText')} tone="blue" />
-          </View>
-        </View>
-      </View>
+      <ListRow leading={first ? <Image source={{ uri: first }} style={s.savedImg} /> : <View style={[s.savedImg, s.savedIcon]}><Icon name="notifications" size={24} color={colors.primary} /></View>}>
+        <TitleBadge title={a.title} titleStyle={[type.bodyMedium, { color: colors.text }]}
+          badge={<Pill text={a.status === 'expired' ? t('ann.expired') : a.status === 'inactive' ? t('ann.inactive') : t('ann.active')} tone={a.status === 'expired' ? 'red' : a.status === 'inactive' ? 'amber' : 'green'} />} />
+        {a.body ? <Text style={[type.small, { color: colors.secondary, marginTop: 2 }]} numberOfLines={2}>{a.body}</Text> : null}
+        <View style={s.pills}><Pill text={a.hasImages ? t('ann.kindSlider', { count: a.images.length }) : t('ann.kindText')} tone="blue" /></View>
+      </ListRow>
       <Text style={[type.small, { color: colors.secondary }]}>{t('ann.createdOn', { date: formatDateTime(a.createdAt) })}</Text>
       <Text style={[type.small, { color: a.expired ? colors.red : colors.secondary }]}>{!a.expiresAt ? t('ann.noExpiryLine') : a.expired ? t('ann.expiredOn', { date: formatDateTime(a.expiresAt) }) : t('ann.expiresOn', { date: formatDateTime(a.expiresAt) })} · {t('ann.sentTimes', { count: a.sendCount })}{a.lastSentAt ? ` · ${t('ann.lastSent', { date: formatDateTime(a.lastSentAt) })}` : ''}</Text>
       {a.expired ? <Text style={[type.small, { color: colors.amber }]}>{t('ann.expiredHelp')}</Text> : null}
@@ -205,7 +201,6 @@ const s = StyleSheet.create({
   thumbImg: { width: '100%', height: '100%' },
   thumbX: { position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
   saved: { marginTop: spacing.md, gap: 8 },
-  savedTop: { flexDirection: 'row', gap: 12 },
   savedImg: { width: 72, height: 72, borderRadius: radius.md, backgroundColor: colors.card },
   savedIcon: { alignItems: 'center', justifyContent: 'center' },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
