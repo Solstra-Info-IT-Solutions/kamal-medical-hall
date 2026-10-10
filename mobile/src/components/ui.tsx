@@ -82,7 +82,7 @@ export function Button({ title, onPress, variant = 'primary', loading, disabled,
     <Tap accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ disabled: !!off, busy: !!loading }} disabled={off} onPress={onPress} haptic={!off}
       style={[s.btn, small && s.btnSmall, variant === 'primary' && s.btnPrimary, variant === 'outline' && s.btnOutline, variant === 'danger' && s.btnDanger, variant === 'ghost' && s.btnGhost, off && { opacity: 0.5 }, style]}>
       {loading ? <ActivityIndicator color={fg} /> : <>
-        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[type.button, small && { fontSize: 15, lineHeight: 22 }, { color: fg, flexShrink: 1, textAlign: 'center' }]}>{title}</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[type.button, small && { fontSize: 14, lineHeight: 20 }, { color: fg, flexShrink: 1, textAlign: 'center' }]}>{title}</Text>
         {icon ? <Icon name={icon} size={small ? 18 : 20} color={fg} /> : null}
       </>}
     </Tap>
@@ -186,7 +186,7 @@ const s = StyleSheet.create({
   footer: { paddingTop: spacing.sm, paddingBottom: spacing.md, backgroundColor: colors.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   back: { padding: 4, marginLeft: 4 },
   btn: { height: BUTTON_HEIGHT, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing.lg },
-  btnSmall: { height: BUTTON_HEIGHT_SMALL, borderRadius: radius.sm, paddingHorizontal: 14 },
+  btnSmall: { height: BUTTON_HEIGHT_SMALL, borderRadius: radius.sm, paddingHorizontal: 12, gap: 6 },
   btnPrimary: { backgroundColor: colors.primary, boxShadow: '0px 6px 16px rgba(11,95,219,0.28)' },
   btnOutline: { borderWidth: 1.5, borderColor: colors.primary, backgroundColor: colors.white },
   btnDanger: { borderWidth: 1.5, borderColor: colors.red, backgroundColor: colors.white },

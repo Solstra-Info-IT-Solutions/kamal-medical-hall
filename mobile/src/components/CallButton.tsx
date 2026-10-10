@@ -14,7 +14,7 @@ export function CallButton({ phone, label, compact, small, tone = 'green' }: { p
   }
   return (
     <Tap accessibilityRole="button" accessibilityLabel={label ?? `Call ${phone}`} onPress={open} style={[s.pill, small && s.pillSmall, { backgroundColor: fg }]}>
-      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[type.button, small && { fontSize: 15, lineHeight: 22 }, { color: colors.white, flexShrink: 1, textAlign: 'center' }]}>{label ?? phone}</Text>
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[type.button, small && { fontSize: 14, lineHeight: 20 }, { color: colors.white, flexShrink: 1, textAlign: 'center' }]}>{label ?? phone}</Text>
       <Icon name="call" size={small ? 18 : 20} color={colors.white} />
     </Tap>
   );

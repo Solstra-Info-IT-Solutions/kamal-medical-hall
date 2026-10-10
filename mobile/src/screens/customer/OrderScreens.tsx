@@ -163,6 +163,7 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
   const { t } = useTranslation();
   const { data, error, loading, reload } = useLoad(() => endpoints.order(route.params.orderId), ['order:update']);
   const config = useLoad(() => endpoints.config());
+  const shop = useLoad(() => endpoints.shop());
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -176,7 +177,9 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
   const canCancel = ['requested', 'quoted', 'accepted', 'awaiting_payment', 'ready_to_dispatch'].includes(o.status);
   const hasInvoice = ['ready_to_dispatch', 'out_for_delivery', 'delivered'].includes(o.status) && o.quotedAmount !== null;
   const live = o.status === 'ready_to_dispatch' || o.status === 'out_for_delivery';
-  const storePhone = config.data?.store.phone ?? o.store.phone;
+  // the shop's number: the profile the admin filled in first, then the older settings
+  const storePhone = shop.data?.phones?.find((p) => p.number)?.number ?? shop.data?.legacy.phone ?? config.data?.store.phone ?? o.store.phone;
+  const callShop = () => { if (storePhone) void Linking.openURL(`tel:${storePhone}`); else void notice(t('shop.noPhoneTitle'), t('shop.noPhoneMsg'), t('common.ok')); };
   const addressLine = `${[o.address.line1, o.address.line2, o.address.landmark].filter(Boolean).join(', ')}, ${o.address.city} - ${o.address.pincode}`;
 
   const cancel = async () => {
@@ -227,7 +230,7 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
 
         <View style={s.quickRow}>
           {live ? <QuickAction icon="navigate" label={t('live.trackBtn')} onPress={() => navigation.navigate('Track', { orderId: o.id })} tone="green" /> : null}
-          {storePhone ? <QuickAction icon="call" label={t('order.callStore')} onPress={() => { void Linking.openURL(`tel:${storePhone}`); }} /> : null}
+          <QuickAction icon="call" label={t('order.callStore')} onPress={callShop} tone="green" />
           <QuickAction icon="chatbubbles" label={t('order.chatAbout')} onPress={() => navigation.navigate('Chat', { orderId: o.id })} />
           {o.bill?.viewUrl ? <QuickAction icon="document-text" label={t('order.viewBill')} onPress={() => openFile({ title: o.bill!.name, urls: o.bill!.previewUrls ?? [], fallbackUrl: o.bill!.viewUrl, downloadUrl: o.bill!.downloadUrl })} tone="amber" /> : null}
         </View>
@@ -254,24 +257,28 @@ export function OrderDetailScreen({ navigation, route }: NativeStackScreenProps<
         </Section>
 
         <Section icon="people" title={t('order.sectionPeople')}>
+          <View style={s.stack}>
           <View style={s.infoRow}><Icon name="storefront" size={22} /><View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]}>{o.store.name}</Text>{o.store.address ? <Text style={[type.small, { color: colors.secondary }]}>{o.store.address}</Text> : null}</View>
             {storePhone ? <CallButton phone={storePhone} compact label={t('order.callStore')} /> : null}</View>
-          {o.partner?.name ? <View style={s.infoRow}><Avatar name={o.partner.name} size={36} /><View style={{ flex: 1 }}><Text style={[type.small, { color: colors.secondary }]}>{t('order.deliveryPartner')}</Text><Text style={[type.bodyMedium, { color: colors.text }]}>{o.partner.name}</Text></View></View> : <Text style={[type.small, { color: colors.secondary, marginTop: 4 }]}>{t('order.partnerPending')}</Text>}
+          {o.partner?.name ? <View style={s.infoRow}><Avatar name={o.partner.name} size={36} /><View style={{ flex: 1 }}><Text style={[type.small, { color: colors.secondary }]}>{t('order.deliveryPartner')}</Text><Text style={[type.bodyMedium, { color: colors.text }]}>{o.partner.name}</Text></View></View> : <Text style={[type.small, { color: colors.secondary }]}>{t('order.partnerPending')}</Text>}
+          </View>
         </Section>
 
         {o.quotedAmount !== null || o.bill ? (
           <Section icon="card" title={t('order.sectionPayment')}>
+            <View style={s.stack}>
             {o.quotedAmount !== null ? <View style={s.infoRow}><Icon name="cash" size={22} /><View style={{ flex: 1 }}>
               <Text style={[type.bodyMedium, { color: colors.text }]}>{formatMoney(o.quotedAmount)}{o.paymentMethod ? ` · ${t(`pay.${o.paymentMethod}`)}` : ''}</Text>
               {o.paymentStatus ? <Text style={[type.small, { color: colors.secondary }]}>{t('order.paymentStatus', { status: o.paymentStatus.replace(/_/g, ' ') })}</Text> : null}
             </View></View> : null}
             {o.bill ? <>
-              <View style={s.billCard}><Icon name="document-text" size={28} /><View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={1}>{o.bill.name}</Text><Text style={[type.small, { color: colors.secondary }]}>{fileBadge(o.bill.name, o.bill.mimeType)}{o.bill.uploadedAt ? ` · ${formatDateTime(o.bill.uploadedAt)}` : ''}</Text></View></View>
+              <View style={s.billCard}><Icon name="document-text" size={28} /><View style={{ flex: 1, minWidth: 0 }}><Text style={[type.bodyMedium, { color: colors.text }]} numberOfLines={2}>{o.bill.name}</Text><Text style={[type.small, { color: colors.secondary }]}>{fileBadge(o.bill.name, o.bill.mimeType)}{o.bill.uploadedAt ? ` · ${formatDateTime(o.bill.uploadedAt)}` : ''}</Text></View></View>
               <ButtonRow>
                 <Button small variant="outline" title={t('order.viewBill')} icon="eye" onPress={() => openFile({ title: o.bill!.name, urls: o.bill!.previewUrls ?? [], fallbackUrl: o.bill!.viewUrl, downloadUrl: o.bill!.downloadUrl })} disabled={!o.bill.viewUrl && !o.bill.previewUrls?.length} style={{ flex: 1 }} />
                 <Button small title={t('order.downloadBill')} icon="download" onPress={() => { if (o.bill?.downloadUrl) void Linking.openURL(o.bill.downloadUrl); }} disabled={!o.bill.downloadUrl} style={{ flex: 1 }} />
               </ButtonRow>
             </> : null}
+            </View>
           </Section>
         ) : null}
 
@@ -393,8 +400,9 @@ const s = StyleSheet.create({
   chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   dateInput: { flex: 1, paddingVertical: 10, paddingHorizontal: 14, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, color: colors.text, textAlign: 'center' },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   billBtns: { flexDirection: 'row', gap: 10, marginTop: spacing.sm },
+  stack: { gap: spacing.md },
   billCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder },
   actRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 5 },
   actDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary, marginTop: 7 },

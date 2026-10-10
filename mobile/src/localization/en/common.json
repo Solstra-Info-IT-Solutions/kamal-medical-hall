@@ -927,7 +927,9 @@
     "contact": "Contact us",
     "openNow": "Open now",
     "closedNow": "Closed now",
-    "email": "Email"
+    "email": "Email",
+    "noPhoneTitle": "No phone number yet",
+    "noPhoneMsg": "The shop has not added a phone number yet. Please use the chat to reach us."
   },
   "ann": {
     "title": "Announcements",
