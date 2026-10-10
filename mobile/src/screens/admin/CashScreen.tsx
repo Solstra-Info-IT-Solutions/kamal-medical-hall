@@ -52,6 +52,7 @@ export function CashScreen() {
               <Text style={[type.small, { color: colors.secondary }]}>{t('cash.staffShort')}</Text>
               <Text style={[type.h3, { color: colors.text }]} numberOfLines={2}>{p.name}</Text>
             </View>
+            <CallButton phone={p.phone} compact label={t('admin.callPartner')} />
             <Text style={[type.h2, { color: colors.amber }]}>{formatMoney(p.total)}</Text>
           </View>
           {p.orders.map((o) => (
@@ -66,7 +67,6 @@ export function CashScreen() {
             </View>
           ))}
           <ButtonRow>
-            <View style={{ flex: 1 }}><CallButton phone={p.phone} compact label={t('admin.callPartner')} /></View>
             <View style={{ flex: 2 }}><Button title={t('cash.markAll', { amount: formatMoney(p.total) })} icon="checkmark-done" loading={busy === p.partnerId} disabled={!!busy} onPress={() => settle(p.partnerId, p.name, p.total, p.orders.length)} /></View>
           </ButtonRow>
         </Card>
@@ -84,6 +84,6 @@ const s = StyleSheet.create({
   heroDivider: { width: 1, height: 34, backgroundColor: 'rgba(255,255,255,0.25)' },
   card: { marginTop: spacing.md, gap: spacing.sm },
   head: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  orderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  orderRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   actions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: spacing.sm },
 });

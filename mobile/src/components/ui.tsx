@@ -54,20 +54,18 @@ export function BackButton({ onPress }: { onPress?: () => void }) {
 }
 
 /**
- * Buttons side by side when there is room, otherwise wrapped onto further lines (down to one per line on a narrow phone), so
- * labels are never squeezed, broken in the middle of a word or drawn over each other. Items on the last line stretch to fill it.
+ * Buttons side by side when there is room, otherwise wrapped onto further lines (one per line on a narrow phone), so labels
+ * are never squeezed, broken in the middle of a word or drawn over each other. Every cell has a minimum width of `minItem`;
+ * the layout engine moves a cell to the next line when two would not fit, and a lone cell on the last line stretches.
  */
-export function ButtonRow({ children, minItem = 150, gap = 10, style }: { children: React.ReactNode; minItem?: number; gap?: number; style?: StyleProp<ViewStyle> }) {
-  const [w, setW] = React.useState(0);
+export function ButtonRow({ children, minItem = 136, gap = 10, style }: { children: React.ReactNode; minItem?: number; gap?: number; style?: StyleProp<ViewStyle> }) {
   const items = React.Children.toArray(children).filter(Boolean) as React.ReactElement<{ style?: StyleProp<ViewStyle> }>[];
-  const perLine = w ? Math.max(1, Math.min(items.length, Math.floor((w + gap) / (minItem + gap)))) : items.length;
-  const basis = w ? (w - gap * (perLine - 1)) / perLine : undefined;
   return (
-    <View onLayout={(e) => setW(Math.floor(e.nativeEvent.layout.width))} style={[{ flexDirection: 'row', flexWrap: 'wrap', gap }, style]}>
+    <View style={[{ flexDirection: 'row', flexWrap: 'wrap', gap }, style]}>
       {items.map((child, i) => {
         // the row decides the size: drop any `flex` the child brought, so nothing fights over the width
         const { flex: _f, flexGrow: _g, flexShrink: _s, flexBasis: _b, ...own } = (StyleSheet.flatten(child.props.style) ?? {}) as ViewStyle;
-        return <View key={child.key ?? i} style={{ flexGrow: 1, flexShrink: 1, flexBasis: basis ?? 0, minWidth: 0 }}>{React.cloneElement(child, { style: own })}</View>;
+        return <View key={child.key ?? i} style={{ flexGrow: 1, flexShrink: 1, flexBasis: minItem, minWidth: minItem, maxWidth: '100%' }}>{React.cloneElement(child, { style: own })}</View>;
       })}
     </View>
   );
