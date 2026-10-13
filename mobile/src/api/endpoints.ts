@@ -1,4 +1,7 @@
 import { api } from './client';
+
+/** The SMS gateway used for login OTPs. The API key itself is never sent back, only its last 4 characters. */
+export interface SmsSettings { apiUrl: string; senderId: string; smsType: string; otpTemplate: string; apiKeySet: boolean; apiKeyHint: string | null; updatedAt: string; inUse: boolean }
 import type {
   Announcement,
   ShopDetails, ShopPublic,
@@ -59,7 +62,7 @@ export const endpoints = {
   shop: () => api<ShopPublic>('GET', '/shop', undefined, { auth: false }),
   announcements: () => api<{ announcements: Announcement[] }>('GET', '/announcements'),
   announcement: (id: string) => api<{ announcement: Announcement }>('GET', `/announcements/${id}`),
-  registerDevice: (token: string, platform: 'android' | 'ios') => api<void>('POST', '/devices', { token, platform }),
+  registerDevice: (token: string, platform: 'android' | 'ios' | 'web') => api<void>('POST', '/devices', { token, platform }),
   unregisterDevice: (token: string) => api<void>('DELETE', '/devices', { token }),
 
   admin: {
@@ -67,6 +70,9 @@ export const endpoints = {
     revenue: (days = 30) => api<Revenue>('GET', `/admin/revenue?days=${days}`),
     shop: () => api<{ details: ShopDetails; legacy: { address: string | null; phone: string | null; email: string | null; latitude: number | null; longitude: number | null } }>('GET', '/admin/shop'),
     saveShop: (d: ShopDetails) => api<{ details: ShopDetails }>('PUT', '/admin/shop', d),
+    sms: () => api<SmsSettings>('GET', '/admin/sms'),
+    saveSms: (b: { senderId: string; smsType: string; otpTemplate: string; apiKey?: string; apiUrl?: string }) => api<SmsSettings>('PUT', '/admin/sms', b),
+    testSms: (phone: string) => api<{ sent: boolean; requestId: string | null }>('POST', '/admin/sms/test', { phone }, { retry: 'never', timeoutMs: 30000 }),
     announcements: () => api<{ announcements: Announcement[] }>('GET', '/admin/announcements'),
     createAnnouncements: (items: { title: string; body: string; images: { publicId: string; mimeType: string; resourceType: string; sizeBytes?: number }[]; expiresAt: string | null }[]) => api<{ ids: string[]; sentTo: number }>('POST', '/admin/announcements', { items }, { timeoutMs: 60000, retry: 'never' }),
     updateAnnouncement: (id: string, b: { title?: string; body?: string; expiresAt?: string | null; isActive?: boolean }) => api<{ announcement: Announcement }>('PATCH', `/admin/announcements/${id}`, b),

@@ -18,6 +18,7 @@ import { Avatar, CallButton } from '../../components/CallButton';
 import { openFile } from '../../components/FileViewer';
 import { ListRow } from '../../components/layout';
 import { SourceOptions } from '../../components/SourceOptions';
+import { NotificationBell } from '../../components/NotificationBell';
 import { NotificationsRow } from '../../components/NotificationsRow';
 import { OrderCard } from '../../components/OrderCard';
 import { CountUp, Enter, Skeleton, Tap, tick } from '../../components/motion';
@@ -115,7 +116,7 @@ export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Das
   const totalPartners = team.data?.partners.filter((p) => p.active).length ?? 0;
   return (
     <SafeAreaView style={s.fill} edges={['top']}>
-      <Header title={t('admin.dashboard')} />
+      <Header title={t('admin.dashboard')} right={<NotificationBell label={t('admin.notifications')} onPress={() => nav.navigate('Notifications')} />} />
       {stats.loading && !data ? <ListSkeleton /> : stats.error && !data ? <ErrorView message={stats.error} onRetry={stats.reload} retryLabel={t('common.retry')} /> : (
         <ScrollView contentContainerStyle={[s.pad, content]} refreshControl={<RefreshControl refreshing={false} onRefresh={() => { void stats.reload(); void ov.reload(); void team.reload(); void recent.reload(); }} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
           <Enter index={0}>
@@ -795,6 +796,7 @@ export function MoreScreen(_p: BottomTabScreenProps<AdminTabParamList, 'More'>) 
       <Header title={t('admin.more')} />
       <ScrollView contentContainerStyle={[s.pad, useContentStyle()]} showsVerticalScrollIndicator={false}>
         <Enter index={0}><View style={s.me}><Avatar name={user?.name} size={56} /><View><Text style={[type.h3, { color: colors.text }]}>{user?.name}</Text><Text style={[type.small, { color: colors.secondary }]}>+91 {user?.phone}</Text></View></View></Enter>
+        {row('notifications-outline', t('admin.notifications'), () => nav.navigate('Notifications'))}
         {row('chatbubbles-outline', t('admin.chats'), () => nav.navigate('AdminChats'))}
         {row('star-outline', t('admin.reviews'), () => nav.navigate('AdminReviews'))}
         {row('bar-chart-outline', t('admin.revenue'), () => nav.navigate('Revenue'))}
@@ -809,6 +811,7 @@ export function MoreScreen(_p: BottomTabScreenProps<AdminTabParamList, 'More'>) 
         {row('people-outline', t('admin.customers'), () => nav.navigate('Customers'))}
         {row('bar-chart-outline', t('admin.reports'), () => nav.navigate('Reports'))}
         {row('settings-outline', t('admin.settings'), () => nav.navigate('StoreSettings'))}
+        {row('chatbox-ellipses-outline', t('sms.title'), () => nav.navigate('SmsSettings'))}
         <NotificationsRow />
         {row('language-outline', t('profile.language'), () => nav.navigate('Language'))}
         {row('log-out-outline', t('profile.logout'), signOut, true)}

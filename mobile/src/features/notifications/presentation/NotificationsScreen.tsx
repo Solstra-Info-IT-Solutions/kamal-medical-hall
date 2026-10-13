@@ -6,7 +6,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Skeleton } from '../../../components/motion';
 import { Button, ErrorView, Icon, Message, Screen } from '../../../components/ui';
 import { showDialog, showErrorPopup } from '../../../dialog';
+import { openFromNotification } from '../../../navigation/ref';
 import type { CustomerStackParamList } from '../../../navigation/types';
+import { useSession } from '../../../store/session';
 import { colors, radius, spacing, type } from '../../../theme';
 import { formatDateTime } from '../../../utils';
 import type { Destination } from '../domain/Notification';
@@ -26,7 +28,10 @@ export function NotificationsScreen() {
     void showErrorPopup(state.actionError, t('common.error'), t('common.ok')).then(() => vm.dismissError());
   }, [state.actionError, vm, t]);
 
-  const go = (d: Destination) => {
+  const role = useSession((st) => st.user?.role);
+  const go = (d: Destination, n?: { orderId: string | null; type: string; announcementId?: string | null }) => {
+    // Staff (admin, delivery partner) open their own screens for the same notification.
+    if (role && role !== 'customer') { if (n) openFromNotification(n); return; }
     if (!d) return;
     if (d.screen === 'OrderDetail') nav.navigate('OrderDetail', { orderId: d.orderId });
     else if (d.screen === 'Announcement') nav.navigate('Announcement', { id: d.id });
@@ -50,7 +55,7 @@ export function NotificationsScreen() {
       </View>
       {state.items.map((n) => (
         <View key={n.id} style={[s.note, !n.read && { backgroundColor: colors.card }]}>
-          <Pressable accessibilityRole="button" onPress={() => { void vm.open(n.id).then(go); }} style={s.main}>
+          <Pressable accessibilityRole="button" onPress={() => { void vm.open(n.id).then((d) => go(d, n)); }} style={s.main}>
             <View style={[s.dot, !n.read && { backgroundColor: colors.primary }]} />
             <View style={{ flex: 1 }}>
               <Text style={[type.bodyMedium, { color: colors.text }]}>{n.title}</Text>

@@ -51,6 +51,8 @@ export type AdminStackParamList = {
   Exports: undefined;
   PartnerAreas: { partnerId: string; name: string };
   Language: undefined;
+  Notifications: undefined;
+  SmsSettings: undefined;
 };
 
 export type PartnerTabParamList = { Home: undefined; Orders: undefined };

@@ -35,9 +35,14 @@ export function normalisePhone(raw: string): string {
 }
 
 export async function verifyToken(token: string): Promise<{ uid: string; phone: string }> {
-  if (config.authMode === 'dev' || config.authMode === 'twilio') { // both issue our own signed session tokens
-    const payload = jwt.verify(token, config.jwtSecret) as { sub: string; phone: string };
-    return { uid: payload.sub, phone: payload.phone };
+  if (config.authMode !== 'firebase') { // dev, twilio and sms issue our own signed session tokens
+    try {
+      const payload = jwt.verify(token, config.jwtSecret) as { sub: string; phone: string };
+      return { uid: payload.sub, phone: payload.phone };
+    } catch (e) {
+      // App versions released before the switch still sign in with Firebase; their tokens stay valid.
+      if (config.authMode === 'dev' || !config.firebaseProjectId) throw e;
+    }
   }
   const decoded = await getAuth(firebase()).verifyIdToken(token);
   if (!decoded.phone_number) throw new Error('No phone number on token');
@@ -50,9 +55,9 @@ export async function deleteFirebaseUser(uid: string | null) {
   try { await getAuth(firebase()).deleteUser(uid); } catch (e) { console.error('firebase deleteUser failed', e); }
 }
 
-/** Session token issued after Twilio confirmed the OTP. Lasts 30 days. */
-export function signSessionToken(phone: string) {
-  return jwt.sign({ sub: `tw-${phone}`, phone }, config.jwtSecret, { expiresIn: '30d' });
+/** Session token issued after the OTP was confirmed (by Twilio, or by this server for SMS-gateway codes). Lasts 30 days. */
+export function signSessionToken(phone: string, prefix: 'tw' | 'sms' = 'tw') {
+  return jwt.sign({ sub: `${prefix}-${phone}`, phone }, config.jwtSecret, { expiresIn: '30d' });
 }
 
 export function signDevToken(phone: string) {

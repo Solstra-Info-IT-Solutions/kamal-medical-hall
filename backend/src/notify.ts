@@ -29,6 +29,9 @@ export async function notifyAdmins(orderId: string | null, type: string, title: 
   for (const row of rows) await notify(row.id, orderId, type, title, body, db);
 }
 
+/** Browsers (the web admin panel): shown by the site's service worker, which also opens the right page on click. */
+const webpush = (title: string, body: string) => ({ headers: { Urgency: 'high', TTL: String(24 * 3600) }, notification: { title, body, icon: '/notification-icon.png', badge: '/notification-icon.png' } });
+
 /** Sends the phone notification (app closed or in the background). Android: high priority so it arrives even in Doze. */
 async function push(userId: string, title: string, body: string, orderId: string | null, type = '') {
   const messaging = firebaseMessaging();
@@ -41,6 +44,7 @@ async function push(userId: string, title: string, body: string, orderId: string
     data: { ...(orderId ? { orderId } : {}), ...(type ? { type } : {}) },
     android: { priority: 'high', ttl: 24 * 3600 * 1000, notification: { sound: 'default', defaultVibrateTimings: true } },
     apns: { headers: { 'apns-priority': '10' }, payload: { aps: { sound: 'default' } } },
+    webpush: webpush(title, body),
   });
   const failed = res.responses.filter((r) => !r.success);
   if (failed.length) console.error(JSON.stringify({ level: 'error', msg: 'push not delivered', failed: failed.length, of: rows.length, codes: [...new Set(failed.map((r) => r.error?.code))] }));
@@ -60,6 +64,7 @@ export async function pushToUsers(userIds: string[], title: string, body: string
     const res = await messaging.sendEachForMulticast({
       tokens: chunk, notification: { title, body }, data,
       android: { priority: 'high', ttl: 24 * 3600 * 1000, notification: { sound: 'default' } }, apns: { payload: { aps: { sound: 'default' } } },
+      webpush: webpush(title, body),
     });
     res.responses.forEach((r, n) => { if (!r.success && ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token'].includes(r.error?.code ?? '')) dead.push(chunk[n]!); });
   }

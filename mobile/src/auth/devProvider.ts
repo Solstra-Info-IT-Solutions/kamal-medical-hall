@@ -4,7 +4,7 @@ import { endpoints } from '../api/endpoints';
 import { ApiError } from '../api/client';
 
 export interface OtpProvider {
-  mode: 'dev' | 'firebase' | 'twilio';
+  mode: 'dev' | 'firebase' | 'sms';
   sendOtp(phone: string): Promise<void>;
   /** Verifies the code and returns a bearer token for the backend. */
   confirmOtp(code: string): Promise<string>;

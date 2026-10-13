@@ -1,6 +1,7 @@
-import { ApiError, api } from '../api/client';
+import { ApiError } from '../api/client';
 import { logger } from '../core/logging';
-import { devProvider, secure, type OtpProvider } from './devProvider';
+import { devProvider, type OtpProvider } from './devProvider';
+import { autoProvider } from './serverProvider';
 
 /** Firebase's technical errors, in words a customer can act on. The code (never the phone number) goes to the logs. */
 function otpError(e: unknown, step: 'send' | 'confirm'): ApiError {
@@ -48,49 +49,5 @@ const firebaseProvider = (): OtpProvider => {
   };
 };
 
-/** SMS OTP through the server (Twilio Verify): the server checks the code and returns its own session token. */
-const SESSION_KEY = 'kmh.sessionToken';
-const twilioProvider = (): OtpProvider => {
-  let phone = '';
-  return {
-    mode: 'twilio',
-    async sendOtp(p) {
-      phone = p;
-      await api<void>('POST', '/auth/otp/send', { phone: p }, { auth: false, retry: 'never' });
-    },
-    async confirmOtp(code) {
-      const { token } = await api<{ token: string }>('POST', '/auth/otp/verify', { phone, code }, { auth: false, retry: 'never' });
-      await secure.set(SESSION_KEY, token);
-      return token;
-    },
-    getToken: () => secure.get(SESSION_KEY),
-    refreshToken: async () => null, // a session lasts 30 days; after that the person signs in again
-    signOut: () => secure.del(SESSION_KEY),
-  };
-};
-
-/**
- * The server decides how OTPs are sent (its AUTH_MODE: "twilio" or "firebase"), so switching needs no new app version.
- * A stored Twilio session wins; otherwise Firebase's signed-in user is used.
- */
-const autoProvider = (): OtpProvider => {
-  const firebase = firebaseProvider();
-  const twilio = twilioProvider();
-  let active: OtpProvider = firebase;
-  return {
-    get mode() { return active.mode; },
-    async sendOtp(phone) {
-      let useTwilio = false;
-      try { useTwilio = (await api<{ authMode?: string }>('GET', '/config', undefined, { auth: false })).authMode === 'twilio'; } catch { /* server unreachable: fall back to Firebase */ }
-      active = useTwilio ? twilio : firebase;
-      return active.sendOtp(phone);
-    },
-    confirmOtp: (code) => active.confirmOtp(code),
-    async getToken() { return (await twilio.getToken()) ?? firebase.getToken(); },
-    async refreshToken() { return (await twilio.getToken()) ? null : firebase.refreshToken(); },
-    async signOut() { await Promise.all([twilio.signOut(), firebase.signOut()]); },
-  };
-};
-
 const mode = (process.env.EXPO_PUBLIC_AUTH_MODE ?? (__DEV__ ? 'dev' : 'firebase')) as 'dev' | 'firebase';
-export const otpProvider: OtpProvider = mode === 'dev' ? devProvider() : autoProvider();
+export const otpProvider: OtpProvider = mode === 'dev' ? devProvider() : autoProvider(firebaseProvider());

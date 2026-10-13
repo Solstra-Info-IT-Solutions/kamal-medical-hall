@@ -15,7 +15,8 @@ export const config = {
   isProd: env.NODE_ENV === 'production',
   port: Number(env.PORT ?? 4000),
   databaseUrl: env.DATABASE_URL ?? '',
-  authMode: (env.AUTH_MODE ?? 'firebase') as 'dev' | 'firebase' | 'twilio',
+  /** How the login OTP is sent: 'sms' = our own code through the SMS gateway the admin configures (PearlSMS), 'twilio' = Twilio Verify, 'firebase' = Firebase phone auth. */
+  authMode: (env.AUTH_MODE ?? 'firebase') as 'dev' | 'firebase' | 'twilio' | 'sms',
   jwtSecret: env.JWT_SECRET ?? '',
   firebaseProjectId: env.FIREBASE_PROJECT_ID ?? '',
   firebaseServiceAccount: env.FIREBASE_SERVICE_ACCOUNT_JSON ?? '',

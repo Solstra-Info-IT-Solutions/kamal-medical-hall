@@ -9,6 +9,7 @@ import { Icon, type IconName } from '../components/ui';
 import { LoginScreen, OtpScreen, SignupScreen, WelcomeScreen } from '../screens/auth/AuthScreens';
 import { CashScreen } from '../screens/admin/CashScreen';
 import { ShopDetailsScreen } from '../screens/admin/ShopDetails';
+import { SmsSettingsScreen } from '../screens/admin/SmsSettings';
 import { ShopScreen } from '../screens/customer/ShopScreen';
 import { AnnouncementScreen } from '../screens/customer/AnnouncementScreen';
 import { AnnouncementsScreen } from '../screens/admin/AdminAnnouncements';
@@ -182,6 +183,8 @@ function AdminNavigator() {
       <AStack.Screen name="Terms" component={TermsScreen} options={{ title: t('admin.terms') }} />
       <AStack.Screen name="StoreSettings" component={StoreSettingsScreen} options={{ title: t('admin.settings') }} />
       <AStack.Screen name="Language" component={LanguageScreen} options={{ title: t('profile.language') }} />
+      <AStack.Screen name="Notifications" component={NotificationsScreen} options={{ title: t('admin.notifications') }} />
+      <AStack.Screen name="SmsSettings" component={SmsSettingsScreen} options={{ title: t('sms.title') }} />
     </AStack.Navigator>
   );
 }

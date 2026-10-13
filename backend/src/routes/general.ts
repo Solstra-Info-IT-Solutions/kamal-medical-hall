@@ -197,7 +197,7 @@ general.delete('/notifications/:id', authed, async (req, res) => {
 });
 
 general.post('/devices', authed, async (req, res) => {
-  const { token, platform } = parse(z.object({ token: z.string().min(10).max(4096), platform: z.enum(['android', 'ios']).optional() }), req.body);
+  const { token, platform } = parse(z.object({ token: z.string().min(10).max(4096), platform: z.enum(['android', 'ios', 'web']).optional() }), req.body);
   await pool.query(
     `insert into device_tokens (token, user_id, platform) values ($1,$2,$3)
      on conflict (token) do update set user_id = excluded.user_id, platform = excluded.platform, updated_at = now()`,

@@ -724,7 +724,8 @@
     "queueHint": "Already has {{count}} order(s). This one will be added to their list.",
     "assignBusyMsg": "{{order}} will be added to this partner's list. They already hold {{count}} order(s) and can deliver them in one trip.",
     "acceptedWaiting": "Accepted, waiting for customer",
-    "assignEarlyHelp": "The customer has not confirmed this order yet. You can assign now; the partner is told and can start as soon as the customer confirms."
+    "assignEarlyHelp": "The customer has not confirmed this order yet. You can assign now; the partner is told and can start as soon as the customer confirms.",
+    "notifications": "Notifications"
   },
   "steps": {
     "address": "Address",
@@ -830,7 +831,14 @@
     "requiredTitle": "Turn on notifications",
     "requiredMsg": "Order updates, quotes and delivery alerts reach you as notifications. Without them you may miss important updates. Please allow notifications for this app.",
     "openSettings": "Open settings",
-    "later": "Later"
+    "later": "Later",
+    "webBlockedTitle": "Notifications are blocked",
+    "webBlockedMsg": "This browser is blocking notifications from this site. Click the lock icon next to the address, set Notifications to Allow, then reload the page.",
+    "webAskTitle": "Turn on notifications?",
+    "webAskMsg": "Get new requests, payments and cash alerts on this computer even when this tab is in the background.",
+    "turnOn": "Turn on",
+    "webUnsupported": "This browser does not support notifications. Use Chrome, Edge or Firefox.",
+    "webManageMsg": "Notifications are on for this browser. To turn them off, click the lock icon next to the address and change Notifications."
   },
   "cash": {
     "title": "Cash to collect",
@@ -996,5 +1004,33 @@
     "activate": "Activate",
     "created": "Posted on",
     "validUntil": "Valid until"
+  },
+  "sms": {
+    "title": "SMS & OTP settings",
+    "gateway": "SMS gateway (PearlSMS)",
+    "inUse": "In use for login",
+    "notInUse": "Not in use",
+    "inUseHelp": "Login OTPs are sent through this gateway with the settings below.",
+    "notInUseHelp": "The server currently sends OTPs another way. These settings are saved and used once the server is switched to the SMS gateway.",
+    "senderId": "Sender ID",
+    "senderIdHint": "The 6-letter header approved on DLT, for example SPPLFW",
+    "smsType": "SMS type",
+    "otherType": "Other SMS type (optional)",
+    "apiKey": "API key",
+    "keySaved": "Saved key {{hint}}. Type a new one to replace it",
+    "keyMissing": "Paste the API key from PearlSMS",
+    "keyKeepHint": "Leave empty to keep the saved key. The full key is never shown again.",
+    "template": "OTP message",
+    "templateHint": "Must match the DLT-approved template exactly. {otp} is replaced by the 6-digit code.",
+    "needsOtp": "Put {otp} where the code should appear",
+    "preview": "Preview",
+    "apiUrl": "Gateway address",
+    "testTitle": "Send a test SMS",
+    "testHelp": "Sends the OTP message with the sample code 123456 to the number below, using the saved settings. Save your changes first.",
+    "sendTest": "Send test SMS",
+    "testSentTitle": "Test SMS sent",
+    "testSentMsg": "The gateway accepted the message for +91 {{phone}}. It should arrive in a few seconds.",
+    "savedTitle": "Saved",
+    "savedMsg": "The next OTP will be sent with these settings."
   }
 }

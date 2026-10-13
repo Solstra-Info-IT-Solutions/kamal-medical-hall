@@ -1,21 +1,16 @@
-import { getApps, initializeApp } from 'firebase/app';
 import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, signOut, type ConfirmationResult } from 'firebase/auth';
 import { ApiError } from '../api/client';
+import { firebaseWebApp, firebaseWebConfig } from '../firebaseWeb';
 import { devProvider, type OtpProvider } from './devProvider';
+import { autoProvider } from './serverProvider';
 
 /**
- * Website sign-in. Uses Firebase phone auth through the browser SDK with an invisible reCAPTCHA.
- * Set EXPO_PUBLIC_FIREBASE_WEB_CONFIG to the JSON of your Firebase *web app* config
- * (apiKey, authDomain, projectId, appId) and add the site's domain under Firebase > Authentication > Settings > Authorized domains.
+ * Website sign-in. When the server sends OTPs itself (SMS gateway), that is used; otherwise Firebase phone auth through the browser SDK with an invisible reCAPTCHA.
+ * (the site's domain must then be listed under Firebase > Authentication > Settings > Authorized domains).
  */
 const firebaseWebProvider = (): OtpProvider => {
-  const raw = process.env.EXPO_PUBLIC_FIREBASE_WEB_CONFIG;
-  const config = raw ? (JSON.parse(raw) as Record<string, string>) : null;
-  const auth = () => {
-    if (!config) throw new ApiError(0, 'not_configured', 'Website sign-in is not configured yet.');
-    const app = getApps()[0] ?? initializeApp(config);
-    return getAuth(app);
-  };
+  const config = firebaseWebConfig;
+  const auth = () => getAuth(firebaseWebApp());
   let confirmation: ConfirmationResult | null = null;
   let verifier: RecaptchaVerifier | null = null;
   const holder = () => {
@@ -59,4 +54,4 @@ const firebaseWebProvider = (): OtpProvider => {
 };
 
 const mode = (process.env.EXPO_PUBLIC_AUTH_MODE ?? 'firebase') as 'dev' | 'firebase';
-export const otpProvider: OtpProvider = mode === 'dev' ? devProvider() : firebaseWebProvider();
+export const otpProvider: OtpProvider = mode === 'dev' ? devProvider() : autoProvider(firebaseWebProvider());
