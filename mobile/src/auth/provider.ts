@@ -46,6 +46,12 @@ const firebaseProvider = (): OtpProvider => {
       try { return (await auth().currentUser?.getIdToken(true)) ?? null; } catch { return null; }
     },
     signOut: async () => { try { await fb().signOut(auth()); } catch { /* already signed out */ } },
+    async signInWithCustomToken(token) {
+      await fb().signInWithCustomToken(auth(), token);
+      const id = await auth().currentUser?.getIdToken();
+      if (!id) throw new ApiError(401, 'no_token', 'Sign in failed. Please try again.');
+      return id;
+    },
   };
 };
 

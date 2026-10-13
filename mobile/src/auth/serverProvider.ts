@@ -1,23 +1,36 @@
 import { api } from '../api/client';
+import { logger } from '../core/logging';
 import { secure, type OtpProvider } from './devProvider';
 
 /**
- * SMS OTP checked by our own server (its AUTH_MODE is "sms" for the PearlSMS gateway, or "twilio" for Twilio Verify).
- * The server sends the code, checks it and returns its own session token, which lasts 30 days.
+ * OTP checked by our own server (its AUTH_MODE is "sms": the PearlSMS gateway, or the test code 123456 while the admin
+ * has OTP delivery set to "test code"; or "twilio" for Twilio Verify).
+ * Once the code is right the server returns a Firebase custom token: the app signs in to Firebase Authentication with
+ * it and from then on uses Firebase ID tokens. If that sign-in fails (or an older server sends none), the server's
+ * own 30-day session token is used instead.
  */
 const SESSION_KEY = 'kmh.sessionToken';
 export const serverOtpModes = ['sms', 'twilio'];
 
-export const serverProvider = (): OtpProvider => {
+export const serverProvider = (firebase?: OtpProvider): OtpProvider => {
   let phone = '';
   return {
     mode: 'sms',
-    async sendOtp(p) {
+    async sendOtp(p, purpose) {
       phone = p;
-      await api<void>('POST', '/auth/otp/send', { phone: p }, { auth: false, retry: 'never' });
+      await api<void>('POST', '/auth/otp/send', { phone: p, purpose }, { auth: false, retry: 'never' });
     },
     async confirmOtp(code) {
-      const { token } = await api<{ token: string }>('POST', '/auth/otp/verify', { phone, code }, { auth: false, retry: 'never' });
+      const { token, firebaseToken } = await api<{ token: string; firebaseToken?: string }>('POST', '/auth/otp/verify', { phone, code }, { auth: false, retry: 'never' });
+      if (firebaseToken && firebase?.signInWithCustomToken) {
+        try {
+          const idToken = await firebase.signInWithCustomToken(firebaseToken);
+          await secure.del(SESSION_KEY); // the Firebase session is used from now on
+          return idToken;
+        } catch (e) {
+          logger.warn('firebase custom sign-in failed, using the server session', { code: String((e as { code?: string })?.code ?? 'unknown') });
+        }
+      }
       await secure.set(SESSION_KEY, token);
       return token;
     },
@@ -32,15 +45,15 @@ export const serverProvider = (): OtpProvider => {
  * /config, and uses the server OTP or the given Firebase provider. A stored server session wins at start-up.
  */
 export const autoProvider = (firebase: OtpProvider): OtpProvider => {
-  const server = serverProvider();
+  const server = serverProvider(firebase);
   let active: OtpProvider = firebase;
   return {
     get mode() { return active.mode; },
-    async sendOtp(phone) {
+    async sendOtp(phone, purpose) {
       let useServer = false;
       try { useServer = serverOtpModes.includes((await api<{ authMode?: string }>('GET', '/config', undefined, { auth: false })).authMode ?? ''); } catch { /* server unreachable: fall back to Firebase */ }
       active = useServer ? server : firebase;
-      return active.sendOtp(phone);
+      return active.sendOtp(phone, purpose);
     },
     confirmOtp: (code) => active.confirmOtp(code),
     async getToken() { return (await server.getToken()) ?? firebase.getToken(); },

@@ -33,8 +33,8 @@ describe('SMS gateway (PearlSMS) OTP login and its admin settings', () => {
   let admin = '', cust = '';
   const mode = config.authMode;
   before(async () => {
-    saved = (await pool.query('select api_url, sender_id, sms_type, api_key, otp_template from sms_settings where id = 1')).rows[0];
-    await pool.query("update sms_settings set api_url = 'https://sms.example.test/send', sender_id = 'TESTID', sms_type = 'TRANS', api_key = 'secret-key-9876', otp_template = 'Your OTP is {otp}. Valid for 5 minutes.' where id = 1");
+    saved = (await pool.query('select api_url, sender_id, sms_type, api_key, otp_template, otp_channel from sms_settings where id = 1')).rows[0];
+    await pool.query("update sms_settings set api_url = 'https://sms.example.test/send', sender_id = 'TESTID', sms_type = 'TRANS', api_key = 'secret-key-9876', otp_template = 'Your OTP is {otp}. Valid for 5 minutes.', otp_channel = 'sms' where id = 1");
     forgetSmsSettings();
     setSmsFetch((async (url: string, init: RequestInit) => {
       const form = new URLSearchParams(String(init.body));
@@ -51,7 +51,7 @@ describe('SMS gateway (PearlSMS) OTP login and its admin settings', () => {
   });
   after(async () => {
     config.authMode = mode;
-    await pool.query('update sms_settings set api_url = $1, sender_id = $2, sms_type = $3, api_key = $4, otp_template = $5 where id = 1', [saved.api_url, saved.sender_id, saved.sms_type, saved.api_key, saved.otp_template]);
+    await pool.query('update sms_settings set api_url = $1, sender_id = $2, sms_type = $3, api_key = $4, otp_template = $5, otp_channel = $6 where id = 1', [saved.api_url, saved.sender_id, saved.sms_type, saved.api_key, saved.otp_template, saved.otp_channel]);
     await pool.query('delete from otp_codes where phone = any($1)', [[PHONE, OTHER]]);
     await pool.query('delete from users where phone = any($1)', [[PHONE, CUSTOMER]]);
     closeRealtime(); server.close();
@@ -59,7 +59,7 @@ describe('SMS gateway (PearlSMS) OTP login and its admin settings', () => {
   });
 
   it('sends a fresh 6-digit code through the gateway with the configured sender, type and key', async () => {
-    assert.equal((await call('POST', '/auth/otp/send', undefined, { phone: `+91 ${PHONE}` })).status, 204);
+    assert.equal((await call('POST', '/auth/otp/send', undefined, { phone: `+91 ${PHONE}` })).status, 200);
     const f = sent.at(-1)!.form;
     assert.equal(sent.at(-1)!.url, 'https://sms.example.test/send');
     assert.equal(f.get('sender'), 'TESTID'); assert.equal(f.get('smstype'), 'TRANS'); assert.equal(f.get('apikey'), 'secret-key-9876'); assert.equal(f.get('numbers'), PHONE);
@@ -80,7 +80,7 @@ describe('SMS gateway (PearlSMS) OTP login and its admin settings', () => {
   });
 
   it('waits 30 s between sends, burns the code after 5 wrong tries, and reports gateway errors', async () => {
-    assert.equal((await call('POST', '/auth/otp/send', undefined, { phone: OTHER })).status, 204);
+    assert.equal((await call('POST', '/auth/otp/send', undefined, { phone: OTHER })).status, 200);
     const code = lastCode();
     const again = await call('POST', '/auth/otp/send', undefined, { phone: OTHER });
     assert.equal(again.status, 429); assert.equal(again.body.error.code, 'otp_rate_limited');
@@ -92,7 +92,7 @@ describe('SMS gateway (PearlSMS) OTP login and its admin settings', () => {
     const down = await call('POST', '/auth/otp/send', undefined, { phone: OTHER });
     assert.equal(down.status, 502); assert.equal(down.body.error.code, 'otp_unavailable');
     gateway = () => ({ status: 200, json: { status: 'OK' } });
-    assert.equal((await call('POST', '/auth/otp/send', undefined, { phone: OTHER })).status, 204, 'a failed send can be retried at once');
+    assert.equal((await call('POST', '/auth/otp/send', undefined, { phone: OTHER })).status, 200, 'a failed send can be retried at once');
   });
 
   it('lets only the admin read and change the settings; the key is never shown in full', async () => {

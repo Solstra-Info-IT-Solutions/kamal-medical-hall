@@ -3,8 +3,27 @@ export type OrderStatus = 'requested' | 'quoted' | 'accepted' | 'awaiting_paymen
 export type OrderKind = 'prescription' | 'medicines';
 export type PaymentMethod = 'razorpay' | 'cod';
 
+export type Gender = 'male' | 'female' | 'other';
 export interface User {
-  avatarUrl?: string | null; id: string; phone: string; role: Role; name: string | null; email: string | null; language?: string }
+  avatarUrl?: string | null; id: string; phone: string; role: Role; name: string | null; email: string | null; language?: string;
+  gender?: Gender | null; dateOfBirth?: string | null; city?: string | null;
+  /** False once the admin approved a deactivation: the app then shows only the account status and the reactivation form. */
+  isActive?: boolean;
+}
+
+/** What the sign-up form sends. Everything but the name is optional. */
+export interface SignupProfile { name: string; email?: string; gender?: Gender | null; dateOfBirth?: string | null; city?: string }
+
+/** A customer's request to deactivate their account, or to activate it again. The admin approves or declines it. */
+export interface AccountRequest {
+  id: string; kind: 'deactivate' | 'reactivate'; reason: string; details: string | null;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled'; adminNote: string | null; createdAt: string; decidedAt: string | null;
+}
+
+export interface CustomerSummary {
+  id: string; name: string | null; phone: string; email: string | null; gender: Gender | null; dateOfBirth: string | null; city: string | null;
+  isActive: boolean; deactivatedAt: string | null; joinedAt: string; signedUp: boolean; orderCount?: number; pendingRequest: { kind: AccountRequest['kind'] } | null;
+}
 
 export interface Address {
   id: string; label: 'home' | 'office' | 'other'; recipientName: string; phone: string;
@@ -20,7 +39,9 @@ export interface StoreConfig {
   /** The dates a customer can choose (no times). Before the admin's cut-off time today is included, after it the list starts tomorrow. */
   deliveryDates: string[];
   orderCutoffTime: string;
-  authMode: 'dev' | 'firebase';
+  authMode: 'dev' | 'firebase' | 'twilio' | 'sms';
+  /** True while the admin has OTP delivery set to the test code 123456 (no SMS is sent). */
+  otpTestMode?: boolean;
 }
 
 export interface Order {
@@ -112,9 +133,11 @@ export interface Revenue {
   topItems: { name: string; quantity: number; orders: number }[];
 }
 export interface CustomerDetail {
-  customer: { id: string; name: string | null; phone: string; email: string | null; joinedAt: string };
+  customer: CustomerSummary;
   orderCount: number; deliveredCount: number; lifetimeValue: number;
   orders: { id: string; orderNumber: string; status: OrderStatus; amount: number | null; createdAt: string }[];
+  requests: AccountRequest[];
+  addresses: string[];
 }
 export type ExportKind = 'orders' | 'revenue' | 'customers' | 'payments' | 'attendance' | 'reviews';
 

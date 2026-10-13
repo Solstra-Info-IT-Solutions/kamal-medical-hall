@@ -2,6 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     { "name": "api", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "backend", "run", "start"], "port": 4000 },
-    { "name": "web", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "mobile", "run", "web", "--", "--port", "8081"], "port": 8081 }
+    { "name": "web", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "mobile", "run", "web", "--", "--port", "8081"], "port": 8081 },
+    { "name": "api-otp", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "backend", "run", "start"], "port": 4100,
+      "env": { "PORT": "4100", "AUTH_MODE": "sms", "PUSH": "off", "NODE_ENV": "development" } },
+    { "name": "web-otp", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "mobile", "run", "web", "--", "--port", "8091"], "port": 8091,
+      "env": { "EXPO_PUBLIC_API_URL": "http://localhost:4100", "EXPO_PUBLIC_AUTH_MODE": "firebase", "EXPO_PUBLIC_ENV": "web" } }
   ]
 }

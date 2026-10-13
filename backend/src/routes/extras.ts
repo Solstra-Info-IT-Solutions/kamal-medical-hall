@@ -133,20 +133,6 @@ adminExtras.get('/revenue', async (req, res) => {
   });
 });
 
-adminExtras.get('/customers/:id', async (req, res) => {
-  const u = (await pool.query("select id, name, phone, email, created_at, avatar_public_id from users where id = $1 and role = 'customer'", [req.params.id])).rows[0];
-  if (!u) throw notFound('Customer not found');
-  const [orders, totals] = await Promise.all([
-    pool.query(`select id, order_number, status, quoted_amount, created_at from orders where customer_id = $1 order by created_at desc limit 20`, [u.id]),
-    pool.query(`select count(*) as orders, count(*) filter (where status = 'delivered') as delivered, coalesce(sum(quoted_amount) filter (where status = 'delivered'), 0) as lifetime from orders where customer_id = $1`, [u.id]),
-  ]);
-  res.json({
-    customer: { id: u.id, name: u.name, phone: u.phone, email: u.email, joinedAt: u.created_at },
-    orderCount: +totals.rows[0].orders, deliveredCount: +totals.rows[0].delivered, lifetimeValue: Number(totals.rows[0].lifetime),
-    orders: orders.rows.map((o) => ({ id: o.id, orderNumber: o.order_number, status: o.status, amount: o.quoted_amount === null ? null : Number(o.quoted_amount), createdAt: o.created_at })),
-  });
-});
-
 // ============================================================ Downloads (CSV)
 const KINDS = ['orders', 'revenue', 'customers', 'payments', 'attendance', 'reviews'] as const;
 type Kind = (typeof KINDS)[number];

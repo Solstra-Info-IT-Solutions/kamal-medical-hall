@@ -11,6 +11,8 @@ import { otpProvider } from '../../auth/provider';
 import { Enter, Float, Ripples, tick, useShake } from '../../components/motion';
 import { BackButton, Button, Icon, Screen, TextField } from '../../components/ui';
 import { useAutoFocus } from '../../hooks';
+import { endpoints } from '../../api/endpoints';
+import { showDialog } from '../../dialog';
 import type { AuthStackParamList } from '../../navigation/types';
 import { useSession } from '../../store/session';
 import { colors, fonts, radius, spacing, type } from '../../theme';
@@ -36,7 +38,10 @@ export function WelcomeScreen({ navigation }: NativeStackScreenProps<AuthStackPa
         <Float style={[s.deco, { right: 52, bottom: 20 }]} amplitude={10} duration={2900} delay={200} rotate={12}><MaterialCommunityIcons name="leaf" size={34} color="#B7E4C4" /></Float>
       </View>
       <Animated.View entering={FadeInUp.delay(600).duration(600).springify().damping(15)} style={{ padding: spacing.lg, width: '100%', maxWidth: 460, alignSelf: 'center' }}>
-        <Button title={t('auth.start')} icon="arrow-forward" onPress={() => navigation.navigate('Login')} />
+        <View style={{ gap: spacing.sm }}>
+          <Button title={t('auth.login')} icon="log-in-outline" onPress={() => navigation.navigate('Login')} />
+          <Button title={t('register.create')} variant="outline" icon="person-add-outline" onPress={() => navigation.navigate('Register')} />
+        </View>
       </Animated.View>
     </SafeAreaView>
   );
@@ -46,9 +51,9 @@ const IndiaFlag = () => (
   <View style={s.flag}><View style={{ flex: 1, backgroundColor: '#FF9933' }} /><View style={{ flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }}><View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: '#000080' }} /></View><View style={{ flex: 1, backgroundColor: '#138808' }} /></View>
 );
 
-export function LoginScreen({ navigation }: NativeStackScreenProps<AuthStackParamList, 'Login'>) {
+export function LoginScreen({ navigation, route }: NativeStackScreenProps<AuthStackParamList, 'Login'>) {
   const { t } = useTranslation();
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(route.params?.phone ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useErrorPopup(error);
@@ -68,9 +73,15 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<AuthStackPara
     if (!valid) return fail(t('auth.invalidPhone'));
     setBusy(true); setError('');
     try {
-      await otpProvider.sendOtp(phone);
-      navigation.navigate('OTP', { phone });
+      await otpProvider.sendOtp(phone, 'login');
+      navigation.navigate('OTP', { phone, purpose: 'login' });
     } catch (e) {
+      if (e instanceof ApiError && e.code === 'not_registered') {
+        setBusy(false);
+        const go = await showDialog({ title: t('register.notFoundTitle'), message: t('register.notFoundMsg'), icon: 'person-add', confirmLabel: t('register.create'), cancelLabel: t('common.cancel') });
+        if (go) navigation.replace('Register', { phone });
+        return;
+      }
       fail(e instanceof ApiError ? e.message : t('auth.sendFailed'));
     } finally { setBusy(false); }
   };
@@ -98,6 +109,9 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<AuthStackPara
           <Enter index={4}>
             <Text style={[type.small, s.center, { color: colors.secondary, marginTop: spacing.xxxl }]}>{t('auth.consent')}</Text>
             <Pressable onPress={() => navigation.navigate('Legal')}><Text style={[type.smallMedium, s.center, { color: colors.primary }]}>{t('auth.consentLink')}</Text></Pressable>
+            <Text style={[type.small, s.center, { color: colors.secondary, marginTop: spacing.xl }]}>
+              {t('register.newHere')} <Text style={{ color: colors.primary }} onPress={() => navigation.replace('Register', phone ? { phone } : undefined)}>{t('register.create')}</Text>
+            </Text>
           </Enter>
         </View>
       </Screen>
@@ -123,8 +137,10 @@ function OtpBox({ char, active, error }: { char: string; active: boolean; error:
 
 export function OtpScreen({ route, navigation }: NativeStackScreenProps<AuthStackParamList, 'OTP'>) {
   const { t } = useTranslation();
-  const { phone } = route.params;
+  const { phone, purpose, profile } = route.params;
   const login = useSession((st) => st.login);
+  const [testMode, setTestMode] = useState(false);
+  useEffect(() => { void endpoints.config().then((c) => setTestMode(Boolean(c.otpTestMode))).catch(() => undefined); }, []);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -149,7 +165,7 @@ export function OtpScreen({ route, navigation }: NativeStackScreenProps<AuthStac
     try {
       const token = await otpProvider.confirmOtp(value);
       tick('success');
-      await login(token); // routing to the right app happens from the server-assigned role
+      await login(token, { purpose, profile }); // routing to the right app happens from the server-assigned role
     } catch (e) {
       setError(e instanceof ApiError ? (e.code === 'invalid_otp' ? t('auth.wrongOtp') : e.message) : t('auth.verifyFailed'));
       setErrCount((c) => c + 1);
@@ -159,7 +175,7 @@ export function OtpScreen({ route, navigation }: NativeStackScreenProps<AuthStac
 
   const resend = async () => {
     setError('');
-    try { await otpProvider.sendOtp(phone); setLeft(RESEND_SECONDS); } catch (e) { setError(e instanceof ApiError ? e.message : t('auth.sendFailed')); }
+    try { await otpProvider.sendOtp(phone, purpose); setLeft(RESEND_SECONDS); } catch (e) { setError(e instanceof ApiError ? e.message : t('auth.sendFailed')); }
   };
 
   const mm = String(Math.floor(left / 60)).padStart(2, '0'), ss = String(left % 60).padStart(2, '0');
@@ -171,7 +187,8 @@ export function OtpScreen({ route, navigation }: NativeStackScreenProps<AuthStac
         <View style={s.authBody}>
           <Animated.View entering={ZoomIn.duration(500).springify().damping(13)}><Image source={logo} style={s.authLogo} resizeMode="contain" /></Animated.View>
           <Enter index={1}><Text style={[type.h2, s.center]}>{t('auth.otpTitle')}</Text></Enter>
-          <Enter index={2}><Text style={[type.small, s.center, { color: colors.secondary, marginBottom: spacing.xl }]}>{t('auth.otpSubtitle', { phone: `+91 ${phone.slice(0, 5)} ${phone.slice(5)}` })}</Text></Enter>
+          <Enter index={2}><Text style={[type.small, s.center, { color: colors.secondary, marginBottom: testMode ? spacing.md : spacing.xl }]}>{t('auth.otpSubtitle', { phone: `+91 ${phone.slice(0, 5)} ${phone.slice(5)}` })}</Text></Enter>
+          {testMode ? <Enter index={2}><View style={s.testBanner}><Icon name="flask-outline" size={18} color={colors.amber} /><Text style={[type.small, { color: colors.text, flex: 1 }]}>{t('auth.testOtp')}</Text></View></Enter> : null}
           <Enter index={3}>
             <Animated.View style={shake}>
               <Pressable onPress={() => input.current?.focus()} style={s.otpRow} accessibilityLabel={t('auth.otpLabel')}>
@@ -250,6 +267,7 @@ const s = StyleSheet.create({
   otpRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   otpBox: { flex: 1, height: 58, borderWidth: 1.5, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   otpHidden: { position: 'absolute', opacity: 0, width: '100%', height: '100%' },
+  testBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.amberBg, marginBottom: spacing.lg },
   timerTrack: { width: 140, height: 4, borderRadius: 2, backgroundColor: colors.border, overflow: 'hidden' },
   timerFill: { height: 4, backgroundColor: colors.primary, borderRadius: 2 },
 });

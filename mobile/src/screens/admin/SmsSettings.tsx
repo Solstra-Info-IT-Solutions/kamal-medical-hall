@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, Text, View } from 'react-native';
 import { endpoints, type SmsSettings } from '../../api/endpoints';
+import { ChoiceChips } from '../../components/forms';
 import { TitleBadge } from '../../components/layout';
 import { Tap, tick } from '../../components/motion';
 import { Button, ButtonRow, Card, ErrorView, Icon, Loading, Pill, Screen, TextField } from '../../components/ui';
@@ -10,8 +11,8 @@ import { useErrorPopup, useLoad } from '../../hooks';
 import { colors, radius, spacing, type } from '../../theme';
 
 const TYPES = ['TRANS', 'PROMO', 'OTP'];
-type Form = { senderId: string; smsType: string; apiKey: string; otpTemplate: string; apiUrl: string };
-const fromServer = (d: SmsSettings): Form => ({ senderId: d.senderId, smsType: d.smsType, apiKey: '', otpTemplate: d.otpTemplate, apiUrl: d.apiUrl });
+type Form = { senderId: string; smsType: string; apiKey: string; otpTemplate: string; apiUrl: string; otpChannel: 'static' | 'sms' };
+const fromServer = (d: SmsSettings): Form => ({ senderId: d.senderId, smsType: d.smsType, apiKey: '', otpTemplate: d.otpTemplate, apiUrl: d.apiUrl, otpChannel: d.otpChannel });
 
 /** Admin: the SMS gateway (PearlSMS) that sends the login OTP. Sender ID, SMS type, API key and the message are editable. */
 export function SmsSettingsScreen() {
@@ -35,7 +36,7 @@ export function SmsSettingsScreen() {
   const save = async () => {
     setBusy(true); setErr('');
     try {
-      const next = await endpoints.admin.saveSms({ senderId: f.senderId, smsType: f.smsType, otpTemplate: f.otpTemplate, apiKey: f.apiKey.trim() || undefined, apiUrl: f.apiUrl.trim() || undefined });
+      const next = await endpoints.admin.saveSms({ senderId: f.senderId, smsType: f.smsType, otpTemplate: f.otpTemplate, apiKey: f.apiKey.trim() || undefined, apiUrl: f.apiUrl.trim() || undefined, otpChannel: f.otpChannel });
       setSaved(next); setF(fromServer(next)); tick('success');
       await showDialog({ title: t('sms.savedTitle'), message: t('sms.savedMsg'), icon: 'checkmark-circle', confirmLabel: t('common.ok') });
     } catch (e) { setErr((e as Error).message); tick('error'); } finally { setBusy(false); }
@@ -54,6 +55,12 @@ export function SmsSettingsScreen() {
       <Card style={s.section}>
         <TitleBadge title={t('sms.gateway')} titleStyle={[type.h3, { color: colors.text }]} badge={<Pill text={saved.inUse ? t('sms.inUse') : t('sms.notInUse')} tone={saved.inUse ? 'green' : 'amber'} />} />
         <Text style={[type.small, { color: colors.secondary }]}>{saved.inUse ? t('sms.inUseHelp') : t('sms.notInUseHelp')}</Text>
+      </Card>
+
+      <Card style={s.section}>
+        <ChoiceChips label={t('sms.channel')} value={f.otpChannel} onChange={(v) => { if (v) setF({ ...f, otpChannel: v }); }}
+          options={[{ value: 'static', label: t('sms.channelStatic') }, { value: 'sms', label: t('sms.channelSms') }]} />
+        <Text style={[type.small, { color: f.otpChannel === 'static' ? colors.amber : colors.secondary }]}>{f.otpChannel === 'static' ? t('sms.channelStaticHelp') : t('sms.channelSmsHelp')}</Text>
       </Card>
 
       <Card style={s.section}>

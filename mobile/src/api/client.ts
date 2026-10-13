@@ -11,10 +11,12 @@ export { ApiError, API_URL };
 let tokenProvider: () => Promise<string | null> = async () => null;
 let tokenRefresher: () => Promise<string | null> = async () => null;
 let onUnauthorized: () => void = () => undefined;
-export function configureApi(opts: { getToken: () => Promise<string | null>; refreshToken?: () => Promise<string | null>; onUnauthorized: () => void }) {
+let onDeactivated: () => void = () => undefined;
+export function configureApi(opts: { getToken: () => Promise<string | null>; refreshToken?: () => Promise<string | null>; onUnauthorized: () => void; onDeactivated?: () => void }) {
   tokenProvider = opts.getToken;
   tokenRefresher = opts.refreshToken ?? (async () => null);
   onUnauthorized = opts.onUnauthorized;
+  onDeactivated = opts.onDeactivated ?? (() => undefined);
   configureSocketAuth({ getToken: () => tokenProvider(), refreshToken: () => tokenRefresher() });
 }
 
@@ -35,5 +37,10 @@ const insecure = !__DEV__ && !API_URL.startsWith('https://');
 /** Backwards-compatible entry point used by `endpoints`. New code should depend on a repository, not call this directly. */
 export async function api<T = unknown>(method: string, path: string, body?: unknown, opts: RequestOptions<T> = {}): Promise<T> {
   if (insecure) throw new ApiError(0, 'insecure_config', 'This version of the app is not set up correctly. Please update it.');
-  return http.request<T>(method, path, body, opts);
+  try {
+    return await http.request<T>(method, path, body, opts);
+  } catch (e) {
+    if (e instanceof ApiError && e.code === 'account_deactivated') onDeactivated(); // the admin deactivated this account meanwhile
+    throw e;
+  }
 }

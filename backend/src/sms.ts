@@ -5,7 +5,8 @@ import { pool } from './db.js';
  * message (it must match the template approved on DLT) in the admin panel; they live in `sms_settings`.
  * The key is sent in a POST body over HTTPS, so it never appears in a URL or a proxy log.
  */
-export interface SmsSettings { apiUrl: string; senderId: string; smsType: string; apiKey: string | null; otpTemplate: string; updatedAt: string }
+/** otpChannel: 'sms' sends a real code through the gateway; 'static' (testing) sends nothing and the code is always 123456. */
+export interface SmsSettings { apiUrl: string; senderId: string; smsType: string; apiKey: string | null; otpTemplate: string; otpChannel: 'static' | 'sms'; updatedAt: string }
 
 type Fetch = typeof fetch;
 let http: Fetch = (...a) => fetch(...a);
@@ -17,11 +18,11 @@ export const forgetSmsSettings = () => { cached = null; };
 
 export async function smsSettings(): Promise<SmsSettings> {
   if (cached && Date.now() - cached.at < 30_000) return cached.value;
-  const { rows } = await pool.query('select api_url, sender_id, sms_type, api_key, otp_template, updated_at from sms_settings where id = 1');
+  const { rows } = await pool.query('select api_url, sender_id, sms_type, api_key, otp_template, otp_channel, updated_at from sms_settings where id = 1');
   const r = rows[0] ?? {};
   const value: SmsSettings = {
     apiUrl: r.api_url ?? 'https://sms.pearlsms.com/public/sms/send', senderId: r.sender_id ?? '', smsType: r.sms_type ?? 'TRANS',
-    apiKey: r.api_key ?? null, otpTemplate: r.otp_template ?? 'Your OTP is {otp}.', updatedAt: r.updated_at,
+    apiKey: r.api_key ?? null, otpTemplate: r.otp_template ?? 'Your OTP is {otp}.', otpChannel: r.otp_channel === 'sms' ? 'sms' : 'static', updatedAt: r.updated_at,
   };
   cached = { value, at: Date.now() };
   return value;

@@ -320,15 +320,6 @@ adminRouter.delete('/pincodes/:pincode', async (req, res) => {
   res.status(204).end();
 });
 
-adminRouter.get('/customers', async (req, res) => {
-  const q = parse(z.object({ search: z.string().trim().max(40).optional(), limit: z.coerce.number().int().min(1).max(100).default(50), offset: z.coerce.number().int().min(0).default(0) }), req.query);
-  const { rows } = await pool.query(
-    `select u.id, u.name, u.phone, u.created_at, (select count(*) from orders o where o.customer_id = u.id) as order_count
-     from users u where u.role = 'customer' and ($1::text is null or u.phone like '%' || $1 || '%' or u.name ilike '%' || $1 || '%')
-     order by u.created_at desc limit $2 offset $3`, [q.search ?? null, q.limit, q.offset]);
-  res.json({ customers: rows.map((r) => ({ id: r.id, name: r.name, phone: r.phone, joinedAt: r.created_at, orderCount: +r.order_count })) });
-});
-
 adminRouter.get('/reports', async (req, res) => {
   const q = parse(z.object({ days: z.coerce.number().int().min(1).max(366).default(30) }), req.query);
   const [daily, split, perPartner] = await Promise.all([

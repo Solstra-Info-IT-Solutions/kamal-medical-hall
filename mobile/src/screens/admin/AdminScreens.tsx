@@ -809,6 +809,7 @@ export function MoreScreen(_p: BottomTabScreenProps<AdminTabParamList, 'More'>) 
         {row('document-text-outline', t('admin.terms'), () => nav.navigate('Terms'))}
         {row('location-outline', t('admin.pincodes'), () => nav.navigate('Pincodes'))}
         {row('people-outline', t('admin.customers'), () => nav.navigate('Customers'))}
+        {row('person-remove-outline', t('cust.requests'), () => nav.navigate('AccountRequests'))}
         {row('bar-chart-outline', t('admin.reports'), () => nav.navigate('Reports'))}
         {row('settings-outline', t('admin.settings'), () => nav.navigate('StoreSettings'))}
         {row('chatbox-ellipses-outline', t('sms.title'), () => nav.navigate('SmsSettings'))}
@@ -817,28 +818,6 @@ export function MoreScreen(_p: BottomTabScreenProps<AdminTabParamList, 'More'>) 
         {row('log-out-outline', t('profile.logout'), signOut, true)}
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-export function CustomersScreen() {
-  const { t } = useTranslation();
-  const nav = useNavigation<Nav>();
-  const [q, setQ] = useState(''); const [term, setTerm] = useState('');
-  useEffect(() => { const id = setTimeout(() => setTerm(q.trim()), 400); return () => clearTimeout(id); }, [q]);
-  const { data, error, loading, reload } = useLoad(() => endpoints.admin.customers(term || undefined));
-  useEffect(() => { void reload(); }, [term, reload]);
-  return (
-    <Screen>
-      <View style={[s.search, { marginHorizontal: 0 }]}><Icon name="search" size={20} color={colors.secondary} /><TextInput value={q} onChangeText={setQ} placeholder={t('admin.search')} placeholderTextColor={colors.muted} accessibilityLabel={t('admin.search')} style={[type.body, s.searchInput]} /></View>
-      {loading && !data ? <ListSkeleton /> : error && !data ? <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} /> : !data!.customers.length ? <View style={{ height: 300 }}><Message icon="people-outline" title={t('admin.noCustomers')} /></View> : data!.customers.map((c, i) => (
-        <Enter key={c.id} index={i}>
-          <Card onPress={() => nav.navigate('CustomerDetail', { id: c.id, name: c.name ?? c.phone })} style={[s.block, s.personRow]}>
-            <Avatar name={c.name} />
-            <View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]}>{c.name ?? '—'}</Text><Text style={[type.small, { color: colors.secondary }]}>+91 {c.phone} · {t('admin.orderCount', { count: c.orderCount })}</Text></View>
-            <CallButton phone={c.phone} compact label={t('admin.callCustomer')} />
-          </Card>
-        </Enter>))}
-    </Screen>
   );
 }
 

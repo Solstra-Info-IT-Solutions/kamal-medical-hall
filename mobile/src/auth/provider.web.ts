@@ -1,4 +1,4 @@
-import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, signOut, type ConfirmationResult } from 'firebase/auth';
+import { getAuth, RecaptchaVerifier, signInWithCustomToken, signInWithPhoneNumber, signOut, type ConfirmationResult } from 'firebase/auth';
 import { ApiError } from '../api/client';
 import { firebaseWebApp, firebaseWebConfig } from '../firebaseWeb';
 import { devProvider, type OtpProvider } from './devProvider';
@@ -50,6 +50,10 @@ const firebaseWebProvider = (): OtpProvider => {
       try { return (await auth().currentUser?.getIdToken(true)) ?? null; } catch { return null; }
     },
     signOut: async () => { try { await signOut(auth()); } catch { /* already signed out */ } },
+    async signInWithCustomToken(token) {
+      const cred = await signInWithCustomToken(auth(), token);
+      return cred.user.getIdToken();
+    },
   };
 };
 

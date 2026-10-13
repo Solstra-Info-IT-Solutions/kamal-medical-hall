@@ -1,4 +1,6 @@
 import { useErrorPopup } from '../../hooks';
+import type { Gender } from '../../api/types';
+import { DobField, GenderChips, dobError, dobToIso, isoToDob } from '../../components/forms';
 import { clearOrderCache } from '../../cache';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
@@ -66,6 +68,7 @@ export function ProfileScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Pr
         {row('storefront-outline', t('shop.title'), () => nav.navigate('Shop'))}
         {row('help-circle-outline', t('profile.help'), () => nav.navigate('Help'))}
         {row('document-text-outline', t('profile.legal'), () => nav.navigate('Legal'))}
+        {row('person-remove-outline', t('account.title'), () => nav.navigate('Account'))}
         {row('log-out-outline', t('profile.logout'), logOut, true)}
         {row('trash-outline', t('profile.deleteAccount'), deleteAccount, true)}
       </Screen>
@@ -78,7 +81,10 @@ export function EditProfileScreen({ navigation }: { navigation: Nav }) {
   const { user, updateProfile, setAvatar } = useSession();
   const [name, setName] = useState(user?.name ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
-  const [errors, setErrors] = useState<{ name?: string; email?: string; api?: string }>({});
+  const [gender, setGender] = useState<Gender | null>(user?.gender ?? null);
+  const [dob, setDob] = useState(isoToDob(user?.dateOfBirth));
+  const [city, setCity] = useState(user?.city ?? '');
+  const [errors, setErrors] = useState<{ name?: string; email?: string; dob?: string; api?: string }>({});
   useErrorPopup(errors.api);
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -108,10 +114,12 @@ export function EditProfileScreen({ navigation }: { navigation: Nav }) {
     const e: typeof errors = {};
     if (name.trim().length < 2) e.name = t('validation.name');
     if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) e.email = t('validation.email');
+    const d = dobError(dob);
+    if (d) e.dob = d === 'range' ? t('register.dobRange') : t('register.dobFormat');
     setErrors(e);
-    if (e.name || e.email) return;
+    if (e.name || e.email || e.dob) return;
     setBusy(true);
-    try { await updateProfile({ name: name.trim(), email: email.trim() }); navigation.goBack(); } catch (err) { setErrors({ api: (err as Error).message }); } finally { setBusy(false); }
+    try { await updateProfile({ name: name.trim(), email: email.trim(), gender, dateOfBirth: dob ? dobToIso(dob) : null, city: city.trim() }); navigation.goBack(); } catch (err) { setErrors({ api: (err as Error).message }); } finally { setBusy(false); }
   };
   return (
     <Screen footer={<Button title={t('address.save')} onPress={save} loading={busy} />}>
@@ -125,6 +133,9 @@ export function EditProfileScreen({ navigation }: { navigation: Nav }) {
       </View>
       <TextField label={t('signup.name')} value={name} onChangeText={setName} error={errors.name} autoCapitalize="words" />
       <TextField label={t('signup.email')} value={email} onChangeText={setEmail} error={errors.email} keyboardType="email-address" autoCapitalize="none" />
+      <GenderChips value={gender} onChange={setGender} />
+      <DobField value={dob} onChange={setDob} error={errors.dob} />
+      <TextField label={t('register.city')} value={city} onChangeText={setCity} autoCapitalize="words" />
       <TextField label={t('profile.phone')} value={`+91 ${user?.phone ?? ''}`} editable={false} style={{ backgroundColor: colors.tint }} />
       {errors.api ? <Text style={[type.small, { color: colors.red }]}>{errors.api}</Text> : null}
     </Screen>

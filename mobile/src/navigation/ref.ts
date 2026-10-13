@@ -21,7 +21,10 @@ export function openFromNotification(n: { orderId?: string | null; type?: string
     if (!n.orderId && type.startsWith('chat')) { navigationRef.navigate('AdminChats'); return; }
     if (!n.orderId && type.startsWith('review')) { navigationRef.navigate('AdminReviews'); return; }
     if (!n.orderId && type === 'announcement') { navigationRef.navigate('Announcements'); return; }
+    if (type === 'account_request') { navigationRef.navigate('AccountRequests'); return; }
+    if (type === 'customer_signup') { navigationRef.navigate('Customers'); return; }
   }
   if (n.type === 'announcement' && n.announcementId) { navigationRef.navigate('Announcement', { id: n.announcementId }); return; }
+  if (n.type?.startsWith('account_') && useSession.getState().user?.isActive !== false) { navigationRef.navigate('Account'); return; }
   openOrderFromNotification(n.orderId ?? null);
 }

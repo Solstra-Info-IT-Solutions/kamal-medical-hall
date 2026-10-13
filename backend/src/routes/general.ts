@@ -6,6 +6,8 @@ import { pool, tx } from '../db.js';
 import { HttpError, notFound, parse } from '../http.js';
 import { isServiceable, servicePincodes } from '../pincodes.js';
 import { listDeliveryDates, listDeliveryDays } from '../slots.js';
+import { smsSettings } from '../sms.js';
+import { notifyAdmins } from '../notify.js';
 import { deletePrescriptionFiles, isBlockedFile, signUpload, signedPrescriptionUrl, type ResourceType } from '../services.js';
 
 export const general = Router();
@@ -14,7 +16,10 @@ general.get('/health', (_req, res) => { res.json({ ok: true }); });
 
 /** Public store/delivery configuration. Slots are computed server-side in Asia/Kolkata time. */
 general.get('/config', async (_req, res) => {
-  const { rows } = await pool.query('select is_open, opening_time, closing_time, order_cutoff_time, address, phone, email, latitude, longitude from store_settings where id = 1');
+  const [{ rows }, sms] = await Promise.all([
+    pool.query('select is_open, opening_time, closing_time, order_cutoff_time, address, phone, email, latitude, longitude from store_settings where id = 1'),
+    config.authMode === 'sms' ? smsSettings() : null,
+  ]);
   const s = rows[0];
   res.json({
     store: { isOpen: s.is_open, openingTime: s.opening_time, closingTime: s.closing_time, address: s.address, phone: s.phone, email: s.email, latitude: s.latitude, longitude: s.longitude },
@@ -22,6 +27,8 @@ general.get('/config', async (_req, res) => {
     deliveryDates: listDeliveryDates(new Date(), s.order_cutoff_time),
     orderCutoffTime: s.order_cutoff_time,
     authMode: config.authMode,
+    /** True while OTP delivery is set to the test code (123456); the OTP screen then says so. */
+    otpTestMode: sms?.otpChannel === 'static',
   });
 });
 
@@ -40,22 +47,49 @@ if (config.authMode === 'dev') {
   });
 }
 
-type UserRow = { id: string; phone: string; role: string; name: string | null; email: string | null; language?: string; avatar_public_id?: string | null; avatar_resource_type?: string | null };
+type UserRow = {
+  id: string; phone: string; role: string; name: string | null; email: string | null; language?: string; avatar_public_id?: string | null; avatar_resource_type?: string | null;
+  gender?: string | null; date_of_birth?: string | null; city?: string | null; is_active?: boolean;
+};
+const USER_COLUMNS = "id, phone, role, name, email, language, avatar_public_id, avatar_resource_type, gender, to_char(date_of_birth, 'YYYY-MM-DD') as date_of_birth, city, is_active";
 const userView = (u: UserRow) => ({
   id: u.id, phone: u.phone, role: u.role, name: u.name, email: u.email, language: u.language,
+  gender: u.gender ?? null, dateOfBirth: u.date_of_birth ?? null, city: u.city ?? null, isActive: u.is_active !== false,
   avatarUrl: u.avatar_public_id ? signedPrescriptionUrl(u.avatar_public_id, 'image/jpeg', (u.avatar_resource_type ?? 'image') as ResourceType) : null,
 });
 
-/** First call after OTP: creates the customer account if needed and returns the server-assigned role. */
+/** The customer sign-up form. Everything but the name is optional. */
+export const profileSchema = z.object({
+  name: z.string().trim().min(2, 'Enter your full name').max(80),
+  email: z.union([z.string().trim().toLowerCase().email('Enter a valid email').max(120), z.literal('')]).optional(),
+  gender: z.enum(['male', 'female', 'other']).nullable().optional(),
+  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth should be like 1990-05-31').nullable().optional()
+    .refine((v) => !v || (!Number.isNaN(Date.parse(v)) && new Date(v) <= new Date() && new Date(v) >= new Date('1900-01-01')), 'Enter a real date of birth'),
+  city: z.string().trim().max(60).optional(),
+});
+
+/**
+ * First call after OTP. purpose 'signup' creates the customer from the sign-up form; 'login' needs an existing
+ * account. Without a purpose (app versions before sign-up existed) the account is created on first login.
+ * Returns the server-assigned role, which decides which app the person sees.
+ */
 general.post('/auth/session', verified, async (req, res) => {
   const { uid, phone } = req.verified!;
+  const b = parse(z.object({ purpose: z.enum(['login', 'signup']).optional(), profile: profileSchema.optional() }), req.body ?? {});
+  const existing = (await pool.query('select id from users where phone = $1', [phone])).rows[0];
+  if (b.purpose === 'login' && !existing) throw new HttpError(404, 'not_registered', 'This mobile number is not registered yet. Please create an account first.');
+  if (b.purpose === 'signup' && existing) throw new HttpError(409, 'already_registered', 'This mobile number is already registered. Please log in instead.');
+  if (b.purpose === 'signup' && !b.profile) throw new HttpError(422, 'validation_error', 'Please fill in the sign-up form.');
+  const p = b.purpose === 'signup' ? b.profile! : null;
   const { rows } = await pool.query(
-    `insert into users (firebase_uid, phone) values ($1, $2)
+    `insert into users (firebase_uid, phone, name, email, gender, date_of_birth, city, signed_up_at)
+     values ($1, $2, $3, nullif($4, ''), $5, $6::date, nullif($7, ''), case when $3::text is null then null else now() end)
      on conflict (phone) do update set firebase_uid = excluded.firebase_uid, updated_at = now()
-     returning id, phone, role, name, email, language, avatar_public_id, avatar_resource_type`,
-    [uid, phone],
+     returning ${USER_COLUMNS}`,
+    [uid, phone, p?.name ?? null, p?.email ?? null, p?.gender ?? null, p?.dateOfBirth ?? null, p?.city ?? null],
   );
   const user = rows[0];
+  if (p) void notifyAdmins(null, 'customer_signup', 'New customer registered', `${p.name} (+91 ${phone}) created an account.`).catch(() => undefined);
   res.json({ user: userView(user), needsProfile: user.role === 'customer' && !user.name });
 });
 
@@ -64,18 +98,35 @@ general.get('/pincodes', async (_req, res) => {
   res.json({ pincodes: [...(await servicePincodes())].sort() });
 });
 
-general.get('/me', authed, (req, res) => { res.json({ user: userView(req.user!) }); });
+export const accountRequestView = (r: Record<string, unknown>) => ({
+  id: r.id, kind: r.kind, reason: r.reason, details: r.details ?? null, status: r.status, adminNote: r.admin_note ?? null, createdAt: r.created_at, decidedAt: r.decided_at ?? null,
+});
+
+/** The signed-in person, plus their latest deactivate / reactivate request (the app shows its status). */
+general.get('/me', authed, async (req, res) => {
+  const [{ rows }, request] = await Promise.all([
+    pool.query(`select ${USER_COLUMNS} from users where id = $1`, [req.user!.id]),
+    pool.query('select id, kind, reason, details, status, admin_note, created_at, decided_at from account_requests where user_id = $1 order by created_at desc limit 1', [req.user!.id]),
+  ]);
+  res.json({ user: userView(rows[0]), accountRequest: request.rows[0] ? accountRequestView(request.rows[0]) : null });
+});
 
 general.patch('/me', authed, async (req, res) => {
   const body = parse(z.object({
     name: z.string().trim().min(2).max(80).optional(),
     email: z.union([z.string().trim().email().max(120), z.literal('')]).optional(),
     language: z.enum(['en', 'hi']).optional(),
+    gender: profileSchema.shape.gender,
+    dateOfBirth: profileSchema.shape.dateOfBirth,
+    city: profileSchema.shape.city,
   }), req.body);
   const { rows } = await pool.query(
     `update users set name = coalesce($2, name), email = case when $3::text is null then email else nullif($3, '') end,
-       language = coalesce($4, language), updated_at = now() where id = $1 returning id, phone, role, name, email, language, avatar_public_id, avatar_resource_type`,
-    [req.user!.id, body.name ?? null, body.email ?? null, body.language ?? null],
+       language = coalesce($4, language),
+       gender = case when $5 then $6 else gender end, date_of_birth = case when $7 then $8::date else date_of_birth end,
+       city = case when $9::text is null then city else nullif($9, '') end, updated_at = now()
+     where id = $1 returning ${USER_COLUMNS}`,
+    [req.user!.id, body.name ?? null, body.email ?? null, body.language ?? null, body.gender !== undefined, body.gender ?? null, body.dateOfBirth !== undefined, body.dateOfBirth ?? null, body.city ?? null],
   );
   invalidateUser(req.user!.phone);
   res.json({ user: userView(rows[0]) });
@@ -150,14 +201,14 @@ general.put('/me/avatar', authed, async (req, res) => {
   const b = parse(z.object({ publicId: z.string().min(3).max(300), resourceType: z.enum(['image']).default('image') }), req.body);
   if (!b.publicId.startsWith(`avatars/${req.user!.id}/`) || isBlockedFile(b.publicId)) throw new HttpError(400, 'invalid_file', 'Invalid picture.');
   const { rows } = await pool.query(
-    'update users set avatar_public_id = $2, avatar_resource_type = $3, updated_at = now() where id = $1 returning id, phone, role, name, email, language, avatar_public_id, avatar_resource_type',
+    `update users set avatar_public_id = $2, avatar_resource_type = $3, updated_at = now() where id = $1 returning ${USER_COLUMNS}`,
     [req.user!.id, b.publicId, b.resourceType]);
   invalidateUser(req.user!.phone);
   res.json({ user: userView(rows[0]) });
 });
 general.delete('/me/avatar', authed, async (req, res) => {
   const { rows } = await pool.query(
-    'update users set avatar_public_id = null, updated_at = now() where id = $1 returning id, phone, role, name, email, language, avatar_public_id, avatar_resource_type', [req.user!.id]);
+    `update users set avatar_public_id = null, updated_at = now() where id = $1 returning ${USER_COLUMNS}`, [req.user!.id]);
   invalidateUser(req.user!.phone);
   res.json({ user: userView(rows[0]) });
 });

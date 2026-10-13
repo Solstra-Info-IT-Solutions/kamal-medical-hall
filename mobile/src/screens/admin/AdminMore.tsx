@@ -289,39 +289,6 @@ export function AdminChatScreen({ navigation, route }: NativeStackScreenProps<Ad
 }
 
 // ---------------------------------------------------------------- Customer detail
-export function CustomerDetailScreen({ navigation, route }: NativeStackScreenProps<AdminStackParamList, 'CustomerDetail'>) {
-  const { t } = useTranslation();
-  const { data, error, loading, reload } = useLoad(() => endpoints.admin.customer(route.params.id));
-  if (loading && !data) return <Skel />;
-  if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
-  const d = data!;
-  return (
-    <Screen>
-      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <Avatar name={d.customer.name} size={56} />
-        <View style={{ flex: 1 }}>
-          <Text style={[type.h3, { color: colors.text }]}>{d.customer.name ?? '—'}</Text>
-          <Text style={[type.small, { color: colors.secondary }]}>+91 {d.customer.phone}{d.customer.email ? ` · ${d.customer.email}` : ''}</Text>
-          <Text style={[type.small, { color: colors.muted }]}>{t('admin.customerSince', { date: formatDate(d.customer.joinedAt) })}</Text>
-        </View>
-        <CallButton phone={d.customer.phone} compact label={t('admin.callCustomer')} />
-      </Card>
-      <View style={s.statGrid}>
-        <Stat icon="receipt" label={t('admin.cdOrders')} value={String(d.orderCount)} />
-        <Stat icon="checkmark-done" label={t('admin.cdDelivered')} value={String(d.deliveredCount)} tone="green" />
-        <Stat icon="cash" label={t('admin.cdLifetime')} value={formatMoney(d.lifetimeValue)} tone="amber" />
-      </View>
-      <Text style={[type.h3, s.sec]}>{t('admin.cdRecent')}</Text>
-      {d.orders.length === 0 ? <Text style={[type.small, { color: colors.secondary }]}>{t('admin.noOrders')}</Text> : d.orders.map((o) => (
-        <Pressable key={o.id} accessibilityRole="button" onPress={() => navigation.navigate('OrderReview', { orderId: o.id })} style={s.threadRow}>
-          <View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]}>#{o.orderNumber}</Text><Text style={[type.small, { color: colors.secondary }]}>{formatDateTime(o.createdAt)}{o.amount !== null ? ` · ${formatMoney(o.amount)}` : ''}</Text></View>
-          <Pill text={t(`status.${o.status}`)} tone={statusTone(o.status)} />
-        </Pressable>
-      ))}
-    </Screen>
-  );
-}
-
 // ---------------------------------------------------------------- Announcement to every customer
 export function BroadcastScreen({ navigation }: NativeStackScreenProps<AdminStackParamList, 'Broadcast'>) {
   const { t } = useTranslation();

@@ -5,13 +5,16 @@ import { ApiError } from '../api/client';
 
 export interface OtpProvider {
   mode: 'dev' | 'firebase' | 'sms';
-  sendOtp(phone: string): Promise<void>;
+  /** purpose: 'signup' only for numbers without an account, 'login' only for registered ones (the server checks). */
+  sendOtp(phone: string, purpose?: 'login' | 'signup'): Promise<void>;
   /** Verifies the code and returns a bearer token for the backend. */
   confirmOtp(code: string): Promise<string>;
   getToken(): Promise<string | null>;
   /** Forces a new token (used once after the server answers 401). Null when the session cannot be renewed. */
   refreshToken(): Promise<string | null>;
   signOut(): Promise<void>;
+  /** Firebase only: signs in with a custom token from our server (after it checked the OTP) and returns the ID token. */
+  signInWithCustomToken?(token: string): Promise<string>;
 }
 
 const TOKEN_KEY = 'kmh.devToken';

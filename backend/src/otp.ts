@@ -1,7 +1,7 @@
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
-import { normalisePhone, signSessionToken } from './auth.js';
+import { createFirebaseSession, firebaseSessions, normalisePhone, signSessionToken } from './auth.js';
 import { config } from './config.js';
 import { pool } from './db.js';
 import { HttpError, parse } from './http.js';
@@ -12,7 +12,9 @@ import { SmsError, renderOtp, sendSms, smsSettings } from './sms.js';
  *  - 'sms': this server makes a 6-digit code, keeps only its hash for 5 minutes, and sends it through the SMS gateway
  *    the admin configured (PearlSMS). Wrong codes are counted; the 5th wrong try burns the code.
  *  - 'twilio': Twilio Verify generates, sends, expires and checks the code; this server only relays the request.
- * Either way this server issues its own session token once the code is confirmed.
+ * In 'sms' mode the admin can switch the channel to 'static' (testing): no SMS is sent and the code is always 123456.
+ * Once the code is confirmed the reply carries a Firebase custom token (the app signs in to Firebase Authentication
+ * with it) and, for app versions that predate Firebase sessions, this server's own session token.
  */
 export const otpRouter = Router();
 
@@ -41,7 +43,22 @@ function allowSend(phone: string) {
   return true;
 }
 
-const phoneSchema = z.object({ phone: z.string().min(10).max(15) });
+/** The fixed test code while the admin has OTP delivery set to "test code". */
+export const STATIC_OTP = '123456';
+const purpose = z.enum(['login', 'signup']).optional(); // missing: app versions before sign-up existed (no check)
+const phoneSchema = z.object({ phone: z.string().min(10).max(15), purpose });
+
+/** Sign-up is for new numbers only, and log-in for registered ones, so each screen can say what to do instead. */
+async function checkPurpose(phone: string, p: 'login' | 'signup' | undefined) {
+  if (!p) return;
+  const { rows } = await pool.query('select 1 from users where phone = $1', [phone]);
+  if (p === 'signup' && rows[0]) throw new HttpError(409, 'already_registered', 'This mobile number is already registered. Please log in instead.');
+  if (p === 'login' && !rows[0]) throw new HttpError(404, 'not_registered', 'This mobile number is not registered yet. Please create an account first.');
+}
+
+async function session(phone: string, prefix: 'tw' | 'sms') {
+  return { token: signSessionToken(phone, prefix), firebaseToken: firebaseSessions() ? await createFirebaseSession(phone) : undefined };
+}
 const serverOtp = () => config.authMode === 'twilio' || config.authMode === 'sms';
 
 export const OTP_TTL_MS = 5 * 60_000;
@@ -93,9 +110,16 @@ async function checkOwnCode(phone: string, code: string) {
 
 otpRouter.post('/send', async (req, res) => {
   if (!serverOtp()) throw new HttpError(404, 'not_found', 'Not found');
-  const phone = normalisePhone(parse(phoneSchema, req.body).phone);
+  const body = parse(phoneSchema, req.body);
+  const phone = normalisePhone(body.phone);
+  await checkPurpose(phone, body.purpose);
   if (!allowSend(phone)) throw new HttpError(429, 'otp_rate_limited', 'Too many OTP requests. Please wait a few minutes and try again.');
-  if (config.authMode === 'sms') { await sendOwnCode(phone); res.status(204).end(); return; }
+  if (config.authMode === 'sms') {
+    if ((await smsSettings()).otpChannel === 'static') { res.json({ sent: true, testMode: true }); return; }
+    await sendOwnCode(phone);
+    res.json({ sent: true, testMode: false });
+    return;
+  }
   const r = await twilio('/Verifications', { To: `+91${phone}`, Channel: 'sms' });
   if (r.status >= 400) {
     console.error(JSON.stringify({ level: 'error', msg: 'twilio send failed', status: r.status, twilioCode: r.body.code }));
@@ -111,12 +135,21 @@ otpRouter.post('/verify', async (req, res) => {
   if (!serverOtp()) throw new HttpError(404, 'not_found', 'Not found');
   const b = parse(z.object({ phone: z.string().min(10).max(15), code: z.string().regex(/^\d{4,8}$/) }), req.body);
   const phone = normalisePhone(b.phone);
+  const f = fails.get(phone);
   if (config.authMode === 'sms') {
-    await checkOwnCode(phone, b.code);
-    res.json({ token: signSessionToken(phone, 'sms') });
+    if ((await smsSettings()).otpChannel === 'static') {
+      if (f && f.n >= MAX_WRONG && f.until > Date.now()) throw new HttpError(429, 'otp_rate_limited', 'Too many wrong attempts. Please request a new OTP in a few minutes.');
+      if (b.code !== STATIC_OTP) {
+        fails.set(phone, { n: (f && f.until > Date.now() ? f.n : 0) + 1, until: Date.now() + 10 * 60_000 });
+        throw new HttpError(401, 'invalid_otp', 'Incorrect OTP');
+      }
+      fails.delete(phone);
+    } else {
+      await checkOwnCode(phone, b.code);
+    }
+    res.json(await session(phone, 'sms'));
     return;
   }
-  const f = fails.get(phone);
   if (f && f.n >= 5 && f.until > Date.now()) throw new HttpError(429, 'otp_rate_limited', 'Too many wrong attempts. Please request a new OTP in a few minutes.');
   const r = await twilio('/VerificationCheck', { To: `+91${phone}`, Code: b.code });
   if (r.status >= 500) throw new HttpError(502, 'otp_unavailable', 'Could not verify the OTP right now. Please try again in a moment.');
@@ -126,5 +159,5 @@ otpRouter.post('/verify', async (req, res) => {
     throw new HttpError(401, 'invalid_otp', 'Incorrect OTP');
   }
   fails.delete(phone);
-  res.json({ token: signSessionToken(phone) });
+  res.json(await session(phone, 'tw'));
 });

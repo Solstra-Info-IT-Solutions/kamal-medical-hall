@@ -7,14 +7,17 @@ import { Platform, View, useWindowDimensions } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { Icon, type IconName } from '../components/ui';
 import { LoginScreen, OtpScreen, SignupScreen, WelcomeScreen } from '../screens/auth/AuthScreens';
+import { RegisterScreen } from '../screens/auth/RegisterScreen';
 import { CashScreen } from '../screens/admin/CashScreen';
 import { ShopDetailsScreen } from '../screens/admin/ShopDetails';
 import { SmsSettingsScreen } from '../screens/admin/SmsSettings';
 import { ShopScreen } from '../screens/customer/ShopScreen';
+import { AccountStatusScreen, DeactivatedScreen } from '../screens/customer/AccountScreens';
 import { AnnouncementScreen } from '../screens/customer/AnnouncementScreen';
 import { AnnouncementsScreen } from '../screens/admin/AdminAnnouncements';
-import { AdminChatScreen, AdminChatsScreen, AdminReviewsScreen, BroadcastScreen, CustomerDetailScreen, ExportsScreen, RevenueScreen } from '../screens/admin/AdminMore';
-import { AllOrdersScreen, AttendanceScreen, CustomersScreen, DashboardScreen, MoreScreen, OrderReviewScreen, OrdersByStatusScreen, PartnerAreasScreen, PaymentDetailsScreen, PincodesScreen, ReportsScreen, RequestsScreen, StoreSettingsScreen, TeamScreen, TermsScreen } from '../screens/admin/AdminScreens';
+import { AdminChatScreen, AdminChatsScreen, AdminReviewsScreen, BroadcastScreen, ExportsScreen, RevenueScreen } from '../screens/admin/AdminMore';
+import { AccountRequestsScreen, CustomerDetailScreen, CustomerFormScreen, CustomersScreen } from '../screens/admin/CustomerAdmin';
+import { AllOrdersScreen, AttendanceScreen, DashboardScreen, MoreScreen, OrderReviewScreen, OrdersByStatusScreen, PartnerAreasScreen, PaymentDetailsScreen, PincodesScreen, ReportsScreen, RequestsScreen, StoreSettingsScreen, TeamScreen, TermsScreen } from '../screens/admin/AdminScreens';
 import { AddressFormScreen, AddressesScreen } from '../screens/customer/AddressScreens';
 import { CartScreen } from '../screens/customer/CartScreen';
 import { DeliveryTimeScreen, ReviewScreen, SuccessScreen } from '../screens/customer/CheckoutScreens';
@@ -88,6 +91,7 @@ function AuthNavigator() {
     <Auth.Navigator screenOptions={{ ...headerOptions, headerShown: false }}>
       <Auth.Screen name="Welcome" component={WelcomeScreen} />
       <Auth.Screen name="Login" component={LoginScreen} />
+      <Auth.Screen name="Register" component={RegisterScreen} />
       <Auth.Screen name="OTP" component={OtpScreen} />
       <Auth.Screen name="Legal" component={LegalScreen} options={{ headerShown: true, title: t('legal.title') }} />
     </Auth.Navigator>
@@ -135,6 +139,7 @@ function CustomerNavigator() {
       <CStack.Screen name="Chat" component={ChatScreen} options={{ title: t('chat.title') }} />
       <CStack.Screen name="WriteReview" component={WriteReviewScreen} options={{ title: t('reviews.writeTitle') }} />
       <CStack.Screen name="MyReviews" component={MyReviewsScreen} options={{ title: t('reviews.title') }} />
+      <CStack.Screen name="Account" component={AccountStatusScreen} options={{ title: t('account.title') }} />
     </CStack.Navigator>
   );
 }
@@ -178,6 +183,8 @@ function AdminNavigator() {
       <AStack.Screen name="AdminChats" component={AdminChatsScreen} options={{ title: t('admin.chats') }} />
       <AStack.Screen name="AdminChat" component={AdminChatScreen} options={({ route }) => ({ title: route.params.name })} />
       <AStack.Screen name="CustomerDetail" component={CustomerDetailScreen} options={({ route }) => ({ title: route.params.name })} />
+      <AStack.Screen name="CustomerForm" component={CustomerFormScreen} options={{ title: t('cust.addTitle') }} />
+      <AStack.Screen name="AccountRequests" component={AccountRequestsScreen} options={{ title: t('cust.requests') }} />
       <AStack.Screen name="Broadcast" component={BroadcastScreen} options={{ title: t('admin.broadcast') }} />
       <AStack.Screen name="Exports" component={ExportsScreen} options={{ title: t('admin.exports') }} />
       <AStack.Screen name="Terms" component={TermsScreen} options={{ title: t('admin.terms') }} />
@@ -213,9 +220,11 @@ function PartnerNavigator() {
   );
 }
 
-/** Customers must have a name on file before reaching the app (first-login signup). */
+/** Customers must have a name on file before reaching the app (first-login signup). A deactivated account sees only its status. */
 function CustomerGate() {
   const needsName = useSession((s) => !s.user?.name);
+  const deactivated = useSession((s) => s.user?.isActive === false);
+  if (deactivated) return <DeactivatedScreen />;
   return needsName ? <SignupScreen /> : <CustomerNavigator />;
 }
 

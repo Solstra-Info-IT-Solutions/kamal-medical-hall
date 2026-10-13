@@ -1,8 +1,8 @@
 import { api } from './client';
 
 /** The SMS gateway used for login OTPs. The API key itself is never sent back, only its last 4 characters. */
-export interface SmsSettings { apiUrl: string; senderId: string; smsType: string; otpTemplate: string; apiKeySet: boolean; apiKeyHint: string | null; updatedAt: string; inUse: boolean }
-import type {
+export interface SmsSettings { apiUrl: string; senderId: string; smsType: string; otpTemplate: string; otpChannel: 'static' | 'sms'; apiKeySet: boolean; apiKeyHint: string | null; updatedAt: string; inUse: boolean }
+import type { AccountRequest, CustomerSummary, Gender, SignupProfile,
   Announcement,
   ShopDetails, ShopPublic,
   CashSummary, ClosingSummary, Address, AddressInput, AppNotification, AdminChatThread, Attendance, ChatMessage, ChatQueue, CustomerDetail, DutyStatus, ExportKind, Order, OrderSummary, Overview, Partner, PartnerAttendance, Review, Revenue, PartnerState, PaymentDetails, PaymentMethod, StoreConfig, StoreSettings, Terms, Tracking, User } from './types';
@@ -20,11 +20,14 @@ export const endpoints = {
   config: () => api<StoreConfig>('GET', '/config', undefined, { auth: false }),
   terms: () => api<Terms>('GET', '/terms', undefined, { auth: false }),
   devLogin: (phone: string, otp: string) => api<{ token: string }>('POST', '/auth/dev-login', { phone, otp }, { auth: false }),
-  session: (token: string) => api<{ user: User; needsProfile: boolean }>('POST', '/auth/session', undefined, { token }),
-  me: () => api<{ user: User }>('GET', '/me'),
+  session: (token: string, b?: { purpose?: 'login' | 'signup'; profile?: SignupProfile }) => api<{ user: User; needsProfile: boolean }>('POST', '/auth/session', b, { token }),
+  me: () => api<{ user: User; accountRequest: AccountRequest | null }>('GET', '/me'),
+  accountRequests: () => api<{ requests: AccountRequest[] }>('GET', '/account/requests'),
+  requestAccountChange: (b: { kind: AccountRequest['kind']; reason: string; details?: string }) => api<{ request: AccountRequest }>('POST', '/account/requests', b, { retry: 'never' }),
+  cancelAccountRequest: (id: string) => api<void>('DELETE', `/account/requests/${id}`),
   deleteAccount: () => api<void>('DELETE', '/me'),
   pincodes: () => api<{ pincodes: string[] }>('GET', '/pincodes', undefined, { auth: false }),
-  updateMe: (b: { name?: string; email?: string; language?: 'en' | 'hi' }) => api<{ user: User }>('PATCH', '/me', b),
+  updateMe: (b: { name?: string; email?: string; language?: 'en' | 'hi'; gender?: Gender | null; dateOfBirth?: string | null; city?: string }) => api<{ user: User }>('PATCH', '/me', b),
 
   addresses: () => api<{ addresses: Address[] }>('GET', '/addresses'),
   addAddress: (b: AddressInput) => api<{ address: Address }>('POST', '/addresses', b),
@@ -71,7 +74,7 @@ export const endpoints = {
     shop: () => api<{ details: ShopDetails; legacy: { address: string | null; phone: string | null; email: string | null; latitude: number | null; longitude: number | null } }>('GET', '/admin/shop'),
     saveShop: (d: ShopDetails) => api<{ details: ShopDetails }>('PUT', '/admin/shop', d),
     sms: () => api<SmsSettings>('GET', '/admin/sms'),
-    saveSms: (b: { senderId: string; smsType: string; otpTemplate: string; apiKey?: string; apiUrl?: string }) => api<SmsSettings>('PUT', '/admin/sms', b),
+    saveSms: (b: { senderId: string; smsType: string; otpTemplate: string; apiKey?: string; apiUrl?: string; otpChannel?: 'static' | 'sms' }) => api<SmsSettings>('PUT', '/admin/sms', b),
     testSms: (phone: string) => api<{ sent: boolean; requestId: string | null }>('POST', '/admin/sms/test', { phone }, { retry: 'never', timeoutMs: 30000 }),
     announcements: () => api<{ announcements: Announcement[] }>('GET', '/admin/announcements'),
     createAnnouncements: (items: { title: string; body: string; images: { publicId: string; mimeType: string; resourceType: string; sizeBytes?: number }[]; expiresAt: string | null }[]) => api<{ ids: string[]; sentTo: number }>('POST', '/admin/announcements', { items }, { timeoutMs: 60000, retry: 'never' }),
@@ -112,7 +115,12 @@ export const endpoints = {
     setPincodeActive: (pincode: string, active: boolean) => api<void>('PATCH', `/admin/pincodes/${pincode}`, { active }),
     deletePincode: (pincode: string) => api<void>('DELETE', `/admin/pincodes/${pincode}`),
     setPartnerPincodes: (id: string, pincodes: string[]) => api<void>('PUT', `/admin/partners/${id}/pincodes`, { pincodes }),
-    customers: (search?: string) => api<{ customers: { id: string; name: string | null; phone: string; joinedAt: string; orderCount: number }[] }>('GET', `/admin/customers${search ? `?search=${encodeURIComponent(search)}` : ''}`),
+    customers: (search?: string, status: 'all' | 'active' | 'deactivated' = 'all') => api<{ customers: CustomerSummary[]; counts: { active: number; deactivated: number; pendingRequests: number } }>('GET', `/admin/customers?status=${status}${search ? `&search=${encodeURIComponent(search)}` : ''}`),
+    addCustomer: (b: SignupProfile & { phone: string }) => api<{ customer: CustomerSummary }>('POST', '/admin/customers', b, { retry: 'never' }),
+    updateCustomer: (id: string, b: Partial<SignupProfile>) => api<{ customer: CustomerSummary }>('PATCH', `/admin/customers/${id}`, b),
+    setCustomerActive: (id: string, active: boolean, note?: string) => api<void>('POST', `/admin/customers/${id}/status`, { active, note }, { retry: 'never' }),
+    accountRequests: (status: 'pending' | 'all' = 'pending') => api<{ requests: (AccountRequest & { customer: { id: string; name: string | null; phone: string; isActive: boolean } })[] }>('GET', `/admin/account-requests?status=${status}`),
+    decideAccountRequest: (id: string, approve: boolean, note?: string) => api<void>('POST', `/admin/account-requests/${id}/decide`, { approve, note }, { retry: 'never' }),
     reports: (days = 30) => api<{ days: number; daily: { day: string; orders: number; sales: number }[]; paymentSplit: { method: string | null; orders: number; sales: number }[]; perPartner: { name: string; orders: number }[] }>('GET', `/admin/reports?days=${days}`),
     settings: () => api<StoreSettings>('GET', '/admin/settings'),
     saveSettings: (b: Partial<StoreSettings> & Pick<StoreSettings, 'isOpen' | 'openingTime' | 'closingTime'>) => api<void>('PUT', '/admin/settings', b),

@@ -1,6 +1,13 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
+import type { SignupProfile } from '../api/types';
 
-export type AuthStackParamList = { Welcome: undefined; Login: undefined; OTP: { phone: string }; Legal: undefined };
+export type AuthStackParamList = {
+  Welcome: undefined;
+  Login: { phone?: string } | undefined;
+  Register: { phone?: string } | undefined;
+  OTP: { phone: string; purpose?: 'login' | 'signup'; profile?: SignupProfile };
+  Legal: undefined;
+};
 
 export type CustomerTabParamList = { Home: undefined; Orders: undefined; Cart: undefined; Profile: undefined };
 export type CustomerStackParamList = {
@@ -25,6 +32,7 @@ export type CustomerStackParamList = {
   Chat: { orderId?: string } | undefined;
   WriteReview: { orderId: string; orderNumber: string };
   MyReviews: undefined;
+  Account: undefined;
 };
 
 export type AdminTabParamList = { Dashboard: undefined; Requests: undefined; Orders: undefined; Team: undefined; More: undefined };
@@ -47,6 +55,8 @@ export type AdminStackParamList = {
   AdminChats: undefined;
   AdminChat: { threadId: string; name: string };
   CustomerDetail: { id: string; name: string };
+  CustomerForm: { id?: string } | undefined;
+  AccountRequests: undefined;
   Broadcast: undefined;
   Exports: undefined;
   PartnerAreas: { partnerId: string; name: string };
