@@ -3,7 +3,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { Gender } from '../api/types';
 import { colors, radius, spacing, type } from '../theme';
 import { Tap } from './motion';
-import { Icon, TextField } from './ui';
+import { DateField, todayIso } from './Calendar';
+import { Icon } from './ui';
 
 /** One choice out of a few, as chips that wrap onto the next line on narrow phones. Tapping the chosen one clears it when `clearable`. */
 export function ChoiceChips<T extends string>({ label, options, value, onChange, clearable = false }: { label?: string; options: { value: T; label: string }[]; value: T | null | undefined; onChange: (v: T | null) => void; clearable?: boolean }) {
@@ -39,27 +40,14 @@ export function CheckRow({ checked, onChange, children, error }: { checked: bool
   );
 }
 
-/** "31/05/1990" while typing (slashes added automatically) <-> "1990-05-31" for the server. */
+/** "1990-05-31" <-> "31/05/1990" (older screens and stored text use the day-first form). */
 export const dobToIso = (v: string) => { const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
 export const isoToDob = (v: string | null | undefined) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v ?? ''); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; };
-export function dobError(v: string): string | null {
-  if (!v) return null;
-  const iso = dobToIso(v);
-  if (!iso) return 'format';
-  const d = new Date(`${iso}T00:00:00`);
-  const [y, mo, da] = iso.split('-').map(Number);
-  if (Number.isNaN(d.getTime()) || d.getFullYear() !== y || d.getMonth() + 1 !== mo || d.getDate() !== da) return 'format';
-  if (d > new Date() || y! < 1900) return 'range';
-  return null;
-}
 
+/** Date of birth with the KMH calendar: any day from 1900 up to today (future days are disabled). Value "YYYY-MM-DD". */
 export function DobField({ value, onChange, error }: { value: string; onChange: (v: string) => void; error?: string }) {
   const { t } = useTranslation();
-  const typeDate = (raw: string) => {
-    const digits = raw.replace(/\D/g, '').slice(0, 8);
-    onChange([digits.slice(0, 2), digits.slice(2, 4), digits.slice(4)].filter(Boolean).join('/'));
-  };
-  return <TextField label={t('register.dob')} value={value} onChangeText={typeDate} keyboardType="number-pad" maxLength={10} placeholder="DD/MM/YYYY" error={error} hint={error ? undefined : t('register.dobHint')} />;
+  return <DateField label={t('register.dob')} value={value} onChange={(v) => onChange(v ?? '')} min="1900-01-01" max={todayIso()} placeholder={t('register.dobPick')} error={error} clearable />;
 }
 
 const s = StyleSheet.create({

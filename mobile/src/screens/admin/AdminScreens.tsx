@@ -7,7 +7,8 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Image, Linking, Platform, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Image, Linking, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Toggle } from '../../components/Toggle';
 import Animated, { FadeInDown, FadeOutLeft, LinearTransition } from 'react-native-reanimated';
 import QRCode from 'react-native-qrcode-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -126,7 +127,7 @@ export function DashboardScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Das
                 <Text style={[type.bodyMedium, { color: colors.text }]}>{data!.isOpen ? t('admin.shopIsOpen') : t('admin.shopIsClosed')}</Text>
                 <Text style={[type.small, { color: colors.secondary }]}>{data!.isOpen ? t('admin.shopOpenHelp') : t('admin.shopClosedHelp')}</Text>
               </View>
-              <Switch accessibilityLabel={t('admin.storeOpen')} value={data!.isOpen} onValueChange={setOpen} disabled={toggling} />
+              <Toggle accessibilityLabel={t('admin.storeOpen')} value={data!.isOpen} onValueChange={setOpen} disabled={toggling} />
             </View>
           </Enter>
           <Text style={[type.h3, s.sec]}>{t('admin.secOrders')}</Text>
@@ -566,9 +567,9 @@ export function TeamScreen(_p: BottomTabScreenProps<AdminTabParamList, 'Team'>) 
                   </Tap>
                   <View style={s.activeRow}>
                     <View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]}>{t('admin.canCall')}</Text><Text style={[type.small, { color: colors.secondary }]}>{p.canCallCustomer ? t('admin.canCallOn') : t('admin.canCallOff')}</Text></View>
-                    <Switch accessibilityLabel={t('admin.canCall')} value={p.canCallCustomer} onValueChange={(v) => toggleCall(p, v)} />
+                    <Toggle accessibilityLabel={t('admin.canCall')} value={p.canCallCustomer} onValueChange={(v) => toggleCall(p, v)} />
                   </View>
-                  <View style={s.activeRow}><Text style={[type.small, { color: colors.secondary }]}>{t('admin.active')}</Text><Switch accessibilityLabel={t('admin.active')} value={p.active} onValueChange={(v) => toggleActive(p, v)} /></View>
+                  <View style={s.activeRow}><Text style={[type.small, { color: colors.secondary }]}>{t('admin.active')}</Text><Toggle accessibilityLabel={t('admin.active')} value={p.active} onValueChange={(v) => toggleActive(p, v)} /></View>
                   {p.active && (p.state === 'off' || p.state === 'returning' || p.state === 'available') ? (
                     <ButtonRow style={{ marginTop: spacing.sm }}>
                       {p.state !== 'available' ? <Button small title={t('admin.markAvailable')} variant="outline" onPress={() => override(p, 'available')} style={{ flex: 1 }} /> : null}
@@ -765,7 +766,7 @@ export function PincodesScreen() {
           <View style={s.pinRow}>
             <View style={[s.pinIcon, !p.active && { backgroundColor: colors.border }]}><Icon name="location" size={18} color={p.active ? colors.primary : colors.muted} /></View>
             <View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: p.active ? colors.text : colors.muted }]}>{p.pincode}</Text>{p.area ? <Text style={[type.small, { color: colors.secondary }]}>{p.area}</Text> : null}</View>
-            <Switch accessibilityLabel={`${p.pincode} ${t('admin.active')}`} value={p.active} onValueChange={(v) => toggle(p.pincode, v)} />
+            <Toggle accessibilityLabel={`${p.pincode} ${t('admin.active')}`} value={p.active} onValueChange={(v) => toggle(p.pincode, v)} />
             <Tap accessibilityRole="button" accessibilityLabel={t('common.delete')} onPress={() => remove(p.pincode)} hitSlop={8} haptic={false} style={{ padding: 6 }}><Icon name="trash-outline" size={20} color={colors.red} /></Tap>
           </View>
         </Animated.View>
@@ -885,7 +886,7 @@ export function StoreSettingsScreen({ navigation }: NativeStackScreenProps<Admin
   };
   return (
     <Screen footer={<Button title={t('address.save')} icon="checkmark" onPress={save} loading={busy} />}>
-      <Enter><Card style={[s.block, s.personRow]}><View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]}>{t('admin.storeOpen')}</Text><Text style={[type.small, { color: f.isOpen ? colors.green : colors.red }]}>{f.isOpen ? t('admin.storeOpenOn') : t('admin.storeOpenOff')}</Text></View><Switch accessibilityLabel={t('admin.storeOpen')} value={f.isOpen} onValueChange={(v) => setF({ ...f, isOpen: v })} /></Card></Enter>
+      <Enter><Card style={[s.block, s.personRow]}><View style={{ flex: 1 }}><Text style={[type.bodyMedium, { color: colors.text }]}>{t('admin.storeOpen')}</Text><Text style={[type.small, { color: f.isOpen ? colors.green : colors.red }]}>{f.isOpen ? t('admin.storeOpenOn') : t('admin.storeOpenOff')}</Text></View><Toggle accessibilityLabel={t('admin.storeOpen')} value={f.isOpen} onValueChange={(v) => setF({ ...f, isOpen: v })} /></Card></Enter>
       <Enter index={1}><TextField label={t('admin.opening')} value={f.openingTime} onChangeText={set('openingTime')} placeholder="09:00" /></Enter>
       <Enter index={2}><TextField label={t('admin.closing')} value={f.closingTime} onChangeText={set('closingTime')} placeholder="21:00" /></Enter>
       <Enter index={2}><TextField label={t('admin.cutoff')} value={f.orderCutoffTime} onChangeText={set('orderCutoffTime')} placeholder="18:00" hint={t('admin.cutoffHint')} /></Enter>
@@ -894,7 +895,7 @@ export function StoreSettingsScreen({ navigation }: NativeStackScreenProps<Admin
           <Text style={[type.bodyMedium, { color: colors.text }]}>{t('admin.acceptPage')}</Text>
           <Text style={[type.small, { color: colors.secondary }]}>{f.customerAcceptRequired ? t('admin.acceptPageOn') : t('admin.acceptPageOff')}</Text>
         </View>
-        <Switch accessibilityLabel={t('admin.acceptPage')} value={f.customerAcceptRequired} onValueChange={(v) => setF({ ...f, customerAcceptRequired: v })} />
+        <Toggle accessibilityLabel={t('admin.acceptPage')} value={f.customerAcceptRequired} onValueChange={(v) => setF({ ...f, customerAcceptRequired: v })} />
       </Card></Enter>
       <Enter index={3}><Button title={t('shop.editDetails')} icon="storefront" variant="outline" onPress={() => navigation.navigate('ShopDetails')} style={{ marginBottom: spacing.md }} /></Enter>
       <Enter index={6}>

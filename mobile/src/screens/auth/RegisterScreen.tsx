@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiError } from '../../api/client';
 import type { Gender } from '../../api/types';
 import { otpProvider } from '../../auth/provider';
-import { CheckRow, DobField, GenderChips, dobError, dobToIso } from '../../components/forms';
+import { CheckRow, DobField, GenderChips } from '../../components/forms';
 import { Enter, tick } from '../../components/motion';
 import { BackButton, Button, Screen, TextField } from '../../components/ui';
 import { showDialog } from '../../dialog';
@@ -39,15 +39,13 @@ export function RegisterScreen({ navigation, route }: NativeStackScreenProps<Aut
     if (name.trim().length < 2) next.name = t('validation.name');
     if (!/^[6-9]\d{9}$/.test(phone)) next.phone = t('auth.invalidPhone');
     if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) next.email = t('validation.email');
-    const d = dobError(dob);
-    if (d) next.dob = d === 'range' ? t('register.dobRange') : t('register.dobFormat');
     if (!terms) next.terms = t('register.acceptTerms');
     setErrors(next);
     if (Object.values(next).some(Boolean)) { tick('error'); return; }
     setBusy(true); setApiError('');
     try {
       await otpProvider.sendOtp(phone, 'signup');
-      navigation.navigate('OTP', { phone, purpose: 'signup', profile: { name: name.trim(), email: email.trim() || undefined, gender, dateOfBirth: dob ? dobToIso(dob) : null, city: city.trim() || undefined } });
+      navigation.navigate('OTP', { phone, purpose: 'signup', profile: { name: name.trim(), email: email.trim() || undefined, gender, dateOfBirth: dob || null, city: city.trim() || undefined } });
     } catch (e) {
       if (e instanceof ApiError && e.code === 'already_registered') {
         const go = await showDialog({ title: t('register.existsTitle'), message: t('register.existsMsg'), icon: 'person-circle', confirmLabel: t('register.goLogin'), cancelLabel: t('common.cancel') });

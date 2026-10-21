@@ -24,7 +24,8 @@ import { useLoad } from '../../hooks';
 import type { CustomerStackParamList, CustomerTabParamList } from '../../navigation/types';
 import { useSession } from '../../store/session';
 import { colors, radius, spacing, type } from '../../theme';
-import { formatDate, formatDateTime, formatMoney, istDate, maskDmy, parseDmy, statusTone , formatDelivery } from '../../utils';
+import { formatDate, formatDateTime, formatMoney, istDate, statusTone , formatDelivery } from '../../utils';
+import { DateField } from '../../components/Calendar';
 
 type Nav = NativeStackNavigationProp<CustomerStackParamList>;
 
@@ -40,10 +41,9 @@ export function OrdersScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Ord
   const content = useContentStyle(true);
   const [tab, setTab] = useState<OrdersTab>('active');
   const [preset, setPreset] = useState<Preset>('all');
-  const [fromText, setFromText] = useState('');
-  const [toText, setToText] = useState('');
-  const from = fromText ? parseDmy(fromText) : null, to = toText ? parseDmy(toText) : null;
-  const customBad = preset === 'custom' && ((fromText.length === 10 && !from) || (toText.length === 10 && !to) || (from && to && from > to));
+  const [from, setFrom] = useState<string | null>(null);
+  const [to, setTo] = useState<string | null>(null);
+  const customBad = preset === 'custom' && !!from && !!to && from > to;
   const range = preset === 'today' ? { from: istDate(), to: istDate() } : preset === '7d' ? { from: istDate(-6) } : preset === '30d' ? { from: istDate(-29) } : preset === 'custom' && !customBad ? { from: from ?? undefined, to: to ?? undefined } : undefined;
   const key = `${tab}|${range?.from ?? ''}|${range?.to ?? ''}`;
   const { data, error, loading, reload } = useLoad(() => endpoints.orders(tab, 0, range), ['order:update']);
@@ -72,9 +72,9 @@ export function OrdersScreen(_p: BottomTabScreenProps<CustomerTabParamList, 'Ord
         </ScrollView>
         {preset === 'custom' ? (
           <View style={s.dateRow}>
-            <TextInput value={fromText} onChangeText={(v) => setFromText(maskDmy(v))} placeholder={t('orders.fromDate')} placeholderTextColor={colors.muted} keyboardType="number-pad" maxLength={10} accessibilityLabel={t('orders.fromDate')} style={[type.body, s.dateInput, (fromText.length === 10 && !from) && { borderColor: colors.red }]} />
+            <DateField compact clearable value={from} onChange={setFrom} max={to ?? istDate()} placeholder={t('orders.fromDate')} title={t('orders.fromDate')} accessibilityLabel={t('orders.fromDate')} />
             <Icon name="arrow-forward" size={16} color={colors.muted} />
-            <TextInput value={toText} onChangeText={(v) => setToText(maskDmy(v))} placeholder={t('orders.toDate')} placeholderTextColor={colors.muted} keyboardType="number-pad" maxLength={10} accessibilityLabel={t('orders.toDate')} style={[type.body, s.dateInput, (toText.length === 10 && !to) && { borderColor: colors.red }]} />
+            <DateField compact clearable value={to} onChange={setTo} min={from ?? undefined} max={istDate()} placeholder={t('orders.toDate')} title={t('orders.toDate')} accessibilityLabel={t('orders.toDate')} />
           </View>
         ) : null}
         {customBad ? <Text style={[type.small, { color: colors.red, paddingHorizontal: spacing.lg }]}>{t('orders.dateInvalid')}</Text> : null}

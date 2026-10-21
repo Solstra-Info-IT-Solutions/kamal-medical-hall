@@ -942,7 +942,8 @@
     "closedNow": "Closed now",
     "email": "Email",
     "noPhoneTitle": "No phone number yet",
-    "noPhoneMsg": "The shop has not added a phone number yet. Please use the chat to reach us."
+    "noPhoneMsg": "The shop has not added a phone number yet. Please use the chat to reach us.",
+    "dlSaved": "Saved earlier as: {{value}}. Choose the date again from the calendar."
   },
   "ann": {
     "title": "Announcements",
@@ -959,8 +960,8 @@
     "asNotification": "No picture: sent as a notification.",
     "expiresIn": "Expiry date (optional)",
     "days": "{{count}} day(s)",
-    "orDate": "Or choose an expiry date",
-    "dateHint": "Format YYYY-MM-DD, for example 2026-10-31. The announcement stops showing at the end of that day.",
+    "orDate": "Or pick an expiry date",
+    "dateHint": "The announcement stops showing at the end of the chosen day. Past days cannot be chosen.",
     "addAnother": "Add another announcement",
     "sendAll": "Send {{count}} announcement(s)",
     "send": "Send",
@@ -1008,7 +1009,8 @@
     "deactivate": "Deactivate",
     "activate": "Activate",
     "created": "Posted on",
-    "validUntil": "Valid until"
+    "validUntil": "Valid until",
+    "pickDate": "Tap to open the calendar"
   },
   "sms": {
     "title": "SMS & OTP settings",
@@ -1070,7 +1072,8 @@
     "existsMsg": "This mobile number already has an account. Log in with it instead.",
     "notFoundTitle": "No account yet",
     "notFoundMsg": "This mobile number is not registered. Create an account first. It takes a minute.",
-    "readTerms": "Read the terms"
+    "readTerms": "Read the terms",
+    "dobPick": "Tap to choose from the calendar"
   },
   "account": {
     "title": "Deactivate account",
@@ -1157,5 +1160,15 @@
     "gender": "Gender",
     "dob": "Date of birth",
     "city": "City"
+  },
+  "cal": {
+    "choose": "Choose a date",
+    "none": "No date chosen",
+    "today": "Today",
+    "done": "Done",
+    "prev": "Previous month",
+    "next": "Next month",
+    "chooseYear": "Choose month and year",
+    "clear": "Clear date"
   }
 }

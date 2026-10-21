@@ -6,7 +6,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { endpoints } from '../../api/endpoints';
 import type { AccountRequest, CustomerSummary, Gender } from '../../api/types';
 import { Avatar, CallButton } from '../../components/CallButton';
-import { DobField, GenderChips, dobError, dobToIso, isoToDob } from '../../components/forms';
+import { DobField, GenderChips } from '../../components/forms';
 import { ListRow, TitleBadge } from '../../components/layout';
 import { Enter, Skeleton, Tap, tick } from '../../components/motion';
 import { Button, ButtonRow, Card, ErrorView, Icon, Message, Pill, Screen, TextField, type IconName } from '../../components/ui';
@@ -184,7 +184,7 @@ export function CustomerFormScreen({ navigation, route }: NativeStackScreenProps
   useEffect(() => {
     const c: CustomerSummary | undefined = existing.data?.customer;
     if (!c || loaded) return;
-    setName(c.name ?? ''); setPhone(c.phone); setEmail(c.email ?? ''); setGender(c.gender); setDob(isoToDob(c.dateOfBirth)); setCity(c.city ?? '');
+    setName(c.name ?? ''); setPhone(c.phone); setEmail(c.email ?? ''); setGender(c.gender); setDob(c.dateOfBirth ?? ''); setCity(c.city ?? '');
     setLoaded(true);
   }, [existing.data, loaded]);
   useEffect(() => { navigation.setOptions({ title: id ? t('cust.editTitle') : t('cust.addTitle') }); }, [navigation, id, t]);
@@ -195,11 +195,9 @@ export function CustomerFormScreen({ navigation, route }: NativeStackScreenProps
     if (name.trim().length < 2) next.name = t('validation.name');
     if (!id && !/^[6-9]\d{9}$/.test(phone)) next.phone = t('auth.invalidPhone');
     if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) next.email = t('validation.email');
-    const de = dobError(dob);
-    if (de) next.dob = de === 'range' ? t('register.dobRange') : t('register.dobFormat');
     setErrors(next);
     if (Object.values(next).some(Boolean)) { tick('error'); return; }
-    const profile = { name: name.trim(), email: email.trim(), gender, dateOfBirth: dob ? dobToIso(dob) : null, city: city.trim() };
+    const profile = { name: name.trim(), email: email.trim(), gender, dateOfBirth: dob || null, city: city.trim() };
     setBusy(true); setErr('');
     try {
       if (id) await endpoints.admin.updateCustomer(id, profile);

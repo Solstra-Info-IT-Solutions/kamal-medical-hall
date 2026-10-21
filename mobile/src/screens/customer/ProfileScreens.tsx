@@ -1,6 +1,6 @@
 import { useErrorPopup } from '../../hooks';
 import type { Gender } from '../../api/types';
-import { DobField, GenderChips, dobError, dobToIso, isoToDob } from '../../components/forms';
+import { DobField, GenderChips } from '../../components/forms';
 import { clearOrderCache } from '../../cache';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
@@ -82,7 +82,7 @@ export function EditProfileScreen({ navigation }: { navigation: Nav }) {
   const [name, setName] = useState(user?.name ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [gender, setGender] = useState<Gender | null>(user?.gender ?? null);
-  const [dob, setDob] = useState(isoToDob(user?.dateOfBirth));
+  const [dob, setDob] = useState(user?.dateOfBirth ?? '');
   const [city, setCity] = useState(user?.city ?? '');
   const [errors, setErrors] = useState<{ name?: string; email?: string; dob?: string; api?: string }>({});
   useErrorPopup(errors.api);
@@ -114,12 +114,10 @@ export function EditProfileScreen({ navigation }: { navigation: Nav }) {
     const e: typeof errors = {};
     if (name.trim().length < 2) e.name = t('validation.name');
     if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) e.email = t('validation.email');
-    const d = dobError(dob);
-    if (d) e.dob = d === 'range' ? t('register.dobRange') : t('register.dobFormat');
     setErrors(e);
     if (e.name || e.email || e.dob) return;
     setBusy(true);
-    try { await updateProfile({ name: name.trim(), email: email.trim(), gender, dateOfBirth: dob ? dobToIso(dob) : null, city: city.trim() }); navigation.goBack(); } catch (err) { setErrors({ api: (err as Error).message }); } finally { setBusy(false); }
+    try { await updateProfile({ name: name.trim(), email: email.trim(), gender, dateOfBirth: dob || null, city: city.trim() }); navigation.goBack(); } catch (err) { setErrors({ api: (err as Error).message }); } finally { setBusy(false); }
   };
   return (
     <Screen footer={<Button title={t('address.save')} onPress={save} loading={busy} />}>

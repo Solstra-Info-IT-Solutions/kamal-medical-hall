@@ -1,4 +1,6 @@
 import * as Location from 'expo-location';
+import { DateField, todayIso } from '../../components/Calendar';
+import { dobToIso, isoToDob } from '../../components/forms';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, Text, View } from 'react-native';
@@ -152,7 +154,8 @@ export function ShopDetailsScreen() {
       <Section icon="document-text" title={t('shop.secLicence')} hint={t('shop.licenceHint')}>
         {inp(t('shop.dl1'), 'drugLicense1', { autoCapitalize: 'characters' })}
         {inp(t('shop.dl2'), 'drugLicense2', { autoCapitalize: 'characters' })}
-        {inp(t('shop.dlValid'), 'drugLicenseValidTill', { placeholder: 'DD/MM/YYYY' })}
+        <DateField label={t('shop.dlValid')} value={dobToIso(f.drugLicenseValidTill) ?? ''} min={todayIso()} onChange={(v) => setF({ ...f, drugLicenseValidTill: v ? isoToDob(v) : '' })} clearable />
+        {f.drugLicenseValidTill && !dobToIso(f.drugLicenseValidTill) ? <Text style={[type.small, { color: colors.secondary, marginTop: -8, marginBottom: spacing.md }]}>{t('shop.dlSaved', { value: f.drugLicenseValidTill })}</Text> : null}
         {inp(t('shop.pharmacist'), 'pharmacistName', { autoCapitalize: 'words' })}
         {inp(t('shop.pharmacistReg'), 'pharmacistRegNo', { autoCapitalize: 'characters' })}
         {inp(t('shop.gstin'), 'gstin', { autoCapitalize: 'characters', maxLength: 15 })}

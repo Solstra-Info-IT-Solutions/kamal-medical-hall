@@ -1,4 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
+import { DateField, todayIso } from '../../components/Calendar';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Image, StyleSheet, Text, View } from 'react-native';
@@ -42,7 +43,10 @@ function ExpiryPicker({ days, custom, onDays, onCustom, allowNone = true }: { da
           </Tap>
         ))}
       </View>
-      <TextField label={t('ann.orDate')} value={custom} onChangeText={(v) => { onCustom(v); onDays(null); }} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" hint={days === NONE ? t('ann.noExpiryHint') : t('ann.dateHint')} />
+      <View style={{ marginTop: spacing.md }}>
+        <DateField label={t('ann.orDate')} value={custom} min={todayIso()} placeholder={t('ann.pickDate')} title={t('ann.expiresIn')}
+          onChange={(v) => { onCustom(v ?? ''); onDays(v ? null : NONE); }} clearable hint={days === NONE ? t('ann.noExpiryHint') : t('ann.dateHint')} />
+      </View>
     </View>
   );
 }
@@ -178,7 +182,7 @@ function SavedCard({ a, busy, edit, setEdit, onSave, onResend, onToggle, onDelet
           </ButtonRow>
         </View>
       ) : (
-        <ButtonRow>
+        <ButtonRow minItem={170 /* four labelled buttons: two per row on a phone or narrow card, never cut off */}>
           <View style={s.rowBtn}><Button small title={t('ann.pushReminder')} icon="notifications" onPress={onResend} loading={busy === `send-${a.id}`} disabled={a.status !== 'active' || !!busy} /></View>
           <View style={s.rowBtn}><Button small variant="outline" title={a.isActive ? t('ann.deactivate') : t('ann.activate')} icon={a.isActive ? 'pause-circle-outline' : 'play-circle-outline'} onPress={onToggle} loading={busy === `tog-${a.id}`} disabled={!!busy} /></View>
           <View style={s.rowBtn}><Button small variant="outline" title={t('ann.editDate')} icon="calendar" onPress={() => setEdit({ id: a.id, days: a.expiresAt ? 7 : NONE, custom: '' })} disabled={!!busy} /></View>
