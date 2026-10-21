@@ -1,3 +1,4 @@
+import { withAcceptPage } from './acceptPage.js';
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
@@ -41,9 +42,11 @@ async function newOrder(token: string, addressId: string, key: string) {
 }
 const settings = (extra: object = {}) => ({ isOpen: true, openingTime: '09:00', closingTime: '21:00', latitude: SHOP.lat, longitude: SHOP.lng, geofenceM: 150, ...extra });
 
+let restoreAccept: () => Promise<void> = async () => undefined;
 describe('order lifecycle with partner duty, acceptance and return-to-shop', () => {
   before(async () => {
     await bootstrap();
+    restoreAccept = await withAcceptPage();
     server = createServer().listen(0);
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     const admin = await login('9000000001');
@@ -57,6 +60,7 @@ describe('order lifecycle with partner duty, acceptance and return-to-shop', () 
     await pool.query("delete from attendance where partner_id in (select id from users where phone in ('9000000002','9000000003'))");
     await pool.query('update store_settings set latitude = null, longitude = null, upi_id = null, upi_name = null, bank_name = null, bank_account_name = null, bank_account_number = null, bank_ifsc = null where id = 1');
     closeRealtime(); server.close();
+    await restoreAccept();
     await pool.end();
   });
 

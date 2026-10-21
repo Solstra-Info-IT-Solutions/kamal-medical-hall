@@ -1,3 +1,4 @@
+import { withAcceptPage } from './acceptPage.js';
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
@@ -35,9 +36,11 @@ const open = async (token: string) => {
   return s;
 };
 
+let restoreAccept: () => Promise<void> = async () => undefined;
 describe('realtime, pincodes, coverage and account deletion', () => {
   before(async () => {
     await bootstrap();
+    restoreAccept = await withAcceptPage();
     server = createServer().listen(0);
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
@@ -47,7 +50,7 @@ describe('realtime, pincodes, coverage and account deletion', () => {
     await pool.query("delete from users where phone = $1 or (phone like 'deleted-%' and name is null and role = 'customer')", [CUSTOMER]);
     await pool.query("update delivery_partners set on_duty = false, state = 'off', is_available = false where user_id in (select id from users where phone in ('9000000002','9000000003'))");
     await pool.query("delete from partner_pincodes where partner_id in (select id from users where phone in ('9000000002','9000000003'))");
-    closeRealtime(); server.close(); await pool.end();
+    await restoreAccept(); closeRealtime(); server.close(); await pool.end();
   });
 
   it('rejects sockets without a valid token', async () => {

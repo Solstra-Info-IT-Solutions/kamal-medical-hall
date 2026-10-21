@@ -1,3 +1,4 @@
+import { withAcceptPage } from './acceptPage.js';
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
@@ -9,6 +10,7 @@ import { DAYS_AHEAD, isDateBookable, listDeliveryDates } from '../src/slots.js';
 /** A moment in India time: 2026-10-10 at the given hour:minute, as a Date. */
 const ist = (hh: number, mm = 0) => new Date(Date.UTC(2026, 9, 10, hh, mm) - 5.5 * 3600 * 1000);
 
+let restoreAccept: () => Promise<void> = async () => undefined;
 describe('delivery dates and the order cut-off time', () => {
   it('shows today and the next six days before the cut-off, and starts tomorrow after it', () => {
     const before = listDeliveryDates(ist(14, 0), '18:00');
@@ -54,6 +56,7 @@ describe('ordering by date, and one partner carrying several orders', () => {
 
   before(async () => {
     await bootstrap();
+    restoreAccept = await withAcceptPage();
     server = createServer().listen(0);
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     originalCutoff = (await pool.query('select order_cutoff_time from store_settings where id = 1')).rows[0].order_cutoff_time;
@@ -69,6 +72,7 @@ describe('ordering by date, and one partner carrying several orders', () => {
     await pool.query('delete from orders where customer_id in (select id from users where phone = $1)', [CUSTOMER]);
     await pool.query('delete from users where phone = any($1)', [[CUSTOMER, P1]]);
     closeRealtime(); server.close();
+    await restoreAccept();
     await pool.end();
   });
 

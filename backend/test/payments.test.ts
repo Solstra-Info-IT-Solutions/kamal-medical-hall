@@ -1,3 +1,4 @@
+import { withAcceptPage } from './acceptPage.js';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import type { AddressInfo } from 'node:net';
@@ -37,6 +38,7 @@ async function webhook(payload: object, secret = WEBHOOK_SECRET) {
 }
 const captured = (rzOrder: string, payId: string, paise: number) => ({ event: 'payment.captured', payload: { payment: { entity: { id: payId, order_id: rzOrder, amount: paise } } } });
 
+let restoreAccept: () => Promise<void> = async () => undefined;
 describe('online payment with Razorpay', () => {
   let admin = '', cust = '', other = '', addressId = '';
   const saved = { ...config.razorpay };
@@ -66,6 +68,7 @@ describe('online payment with Razorpay', () => {
       return { id: `order_test_${++seq}_${crypto.randomBytes(3).toString('hex')}`, amount: o.amount, currency: 'INR' };
     };
     await bootstrap();
+    restoreAccept = await withAcceptPage();
     server = createServer().listen(0);
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     admin = await login('9000000001');
@@ -79,6 +82,7 @@ describe('online payment with Razorpay', () => {
     await pool.query('delete from orders where customer_id in (select id from users where phone = any($1))', [[CUSTOMER, OTHER]]);
     await pool.query('delete from users where phone = any($1)', [[CUSTOMER, OTHER]]);
     closeRealtime(); server.close();
+    await restoreAccept();
     await pool.end();
   });
 

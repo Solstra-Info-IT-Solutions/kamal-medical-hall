@@ -1,3 +1,4 @@
+import { withAcceptPage } from './acceptPage.js';
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
@@ -24,10 +25,12 @@ async function login(phone: string) {
   return r.body.token as string;
 }
 
+let restoreAccept: () => Promise<void> = async () => undefined;
 describe('bills, order history tabs and the open / closed switch', () => {
   let admin = '', cust = '', addressId = '';
   before(async () => {
     await bootstrap();
+    restoreAccept = await withAcceptPage();
     server = createServer().listen(0);
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     admin = await login('9000000001'); cust = await login(CUSTOMER);
@@ -40,6 +43,7 @@ describe('bills, order history tabs and the open / closed switch', () => {
     await pool.query('delete from orders where customer_id in (select id from users where phone = $1)', [CUSTOMER]);
     await pool.query('delete from users where phone = $1', [CUSTOMER]);
     closeRealtime(); server.close();
+    await restoreAccept();
     await pool.end();
   });
 
@@ -66,6 +70,28 @@ describe('bills, order history tabs and the open / closed switch', () => {
     // Only the store admin can ask to upload a bill, and customers can still upload prescriptions.
     assert.equal((await call('POST', '/uploads/sign', cust, { purpose: 'bill' })).status, 403);
     assert.equal((await call('POST', '/uploads/sign', admin, { purpose: 'prescription' })).status, 403);
+  });
+
+  it('skips the customer accept page when the admin turns it off: confirmed as pay on delivery', async () => {
+    const settings = (await call('GET', '/admin/settings', admin)).body;
+    assert.equal(settings.customerAcceptRequired, true);
+    assert.equal((await call('PUT', '/admin/settings', admin, { ...settings, customerAcceptRequired: false })).status, 204);
+    assert.equal((await call('GET', '/admin/settings', admin)).body.customerAcceptRequired, false);
+    try {
+      const id = await place('bill-key-0009');
+      const ok = await call('POST', `/admin/orders/${id}/quote`, admin, { amount: 99, bill: BILL });
+      assert.equal(ok.status, 200);
+      assert.equal(ok.body.order.status, 'ready_to_dispatch');
+      const seen = (await call('GET', `/orders/${id}`, cust)).body.order;
+      assert.equal(seen.paymentMethod, 'cod'); assert.equal(seen.quotedAmount, 99); assert.equal(seen.bill.name, 'bill.pdf');
+      const pay = (await pool.query('select method, status, amount from payments where order_id = $1', [id])).rows;
+      assert.deepEqual(pay.map((r) => [r.method, r.status, Number(r.amount)]), [['cod', 'cod_pending', 99]]);
+      const note = (await pool.query("select type from notifications where order_id = $1 and type = 'order_confirmed'", [id])).rows;
+      assert.equal(note.length, 1, 'the customer is told the order is confirmed');
+      assert.equal((await call('POST', `/orders/${id}/accept-quote`, cust, { paymentMethod: 'cod' })).status, 409, 'nothing left to accept');
+    } finally {
+      assert.equal((await call('PUT', '/admin/settings', admin, { ...settings, customerAcceptRequired: true })).status, 204);
+    }
   });
 
   it('accepts a bill in any file type but not programs, and builds an invoice PDF', async () => {

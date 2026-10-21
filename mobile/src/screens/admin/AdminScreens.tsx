@@ -850,10 +850,10 @@ export function ReportsScreen() {
 export function StoreSettingsScreen({ navigation }: NativeStackScreenProps<AdminStackParamList, 'StoreSettings'>) {
   const { t } = useTranslation();
   const { data, error, loading, reload } = useLoad(() => endpoints.admin.settings());
-  const [f, setF] = useState<{ isOpen: boolean; openingTime: string; closingTime: string; address: string; phone: string; email: string; latitude: string; longitude: string; geofenceM: string; orderCutoffTime: string } | null>(null);
+  const [f, setF] = useState<{ isOpen: boolean; openingTime: string; closingTime: string; address: string; phone: string; email: string; latitude: string; longitude: string; geofenceM: string; orderCutoffTime: string; customerAcceptRequired: boolean } | null>(null);
   const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
   useErrorPopup(err); const [gps, setGps] = useState(false);
-  useEffect(() => { if (data && !f) setF({ isOpen: data.isOpen, openingTime: data.openingTime, closingTime: data.closingTime, address: data.address ?? '', phone: data.phone ?? '', email: data.email ?? '', latitude: data.latitude != null ? String(data.latitude) : '', longitude: data.longitude != null ? String(data.longitude) : '', geofenceM: String(data.geofenceM ?? 150), orderCutoffTime: data.orderCutoffTime ?? '18:00' }); }, [data, f]);
+  useEffect(() => { if (data && !f) setF({ isOpen: data.isOpen, openingTime: data.openingTime, closingTime: data.closingTime, address: data.address ?? '', phone: data.phone ?? '', email: data.email ?? '', latitude: data.latitude != null ? String(data.latitude) : '', longitude: data.longitude != null ? String(data.longitude) : '', geofenceM: String(data.geofenceM ?? 150), orderCutoffTime: data.orderCutoffTime ?? '18:00', customerAcceptRequired: data.customerAcceptRequired !== false }); }, [data, f]);
   if (loading && !data) return <ListSkeleton />;
   if (error && !data) return <ErrorView message={error} onRetry={reload} retryLabel={t('common.retry')} />;
   if (!f) return <ListSkeleton />;
@@ -879,7 +879,7 @@ export function StoreSettingsScreen({ navigation }: NativeStackScreenProps<Admin
     }
     setBusy(true); setErr('');
     try {
-      await endpoints.admin.saveSettings({ isOpen: f.isOpen, openingTime: f.openingTime, closingTime: f.closingTime, latitude: lat, longitude: lng, geofenceM: Number(f.geofenceM) || 150, orderCutoffTime: f.orderCutoffTime });
+      await endpoints.admin.saveSettings({ isOpen: f.isOpen, openingTime: f.openingTime, closingTime: f.closingTime, latitude: lat, longitude: lng, geofenceM: Number(f.geofenceM) || 150, orderCutoffTime: f.orderCutoffTime, customerAcceptRequired: f.customerAcceptRequired });
       tick('success'); navigation.goBack();
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
@@ -889,6 +889,13 @@ export function StoreSettingsScreen({ navigation }: NativeStackScreenProps<Admin
       <Enter index={1}><TextField label={t('admin.opening')} value={f.openingTime} onChangeText={set('openingTime')} placeholder="09:00" /></Enter>
       <Enter index={2}><TextField label={t('admin.closing')} value={f.closingTime} onChangeText={set('closingTime')} placeholder="21:00" /></Enter>
       <Enter index={2}><TextField label={t('admin.cutoff')} value={f.orderCutoffTime} onChangeText={set('orderCutoffTime')} placeholder="18:00" hint={t('admin.cutoffHint')} /></Enter>
+      <Enter index={2}><Card style={[s.block, s.personRow]}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[type.bodyMedium, { color: colors.text }]}>{t('admin.acceptPage')}</Text>
+          <Text style={[type.small, { color: colors.secondary }]}>{f.customerAcceptRequired ? t('admin.acceptPageOn') : t('admin.acceptPageOff')}</Text>
+        </View>
+        <Switch accessibilityLabel={t('admin.acceptPage')} value={f.customerAcceptRequired} onValueChange={(v) => setF({ ...f, customerAcceptRequired: v })} />
+      </Card></Enter>
       <Enter index={3}><Button title={t('shop.editDetails')} icon="storefront" variant="outline" onPress={() => navigation.navigate('ShopDetails')} style={{ marginBottom: spacing.md }} /></Enter>
       <Enter index={6}>
         <Card style={s.block}>

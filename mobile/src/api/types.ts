@@ -108,6 +108,8 @@ export interface PaymentDetails {
 export interface StoreSettings {
   isOpen: boolean; openingTime: string; closingTime: string; address: string | null; phone: string | null; email: string | null;
   latitude: number | null; longitude: number | null; geofenceM: number; orderCutoffTime?: string;
+  /** Whether customers see the page to accept the amount and choose how to pay. Off: the amount is confirmed as pay on delivery. */
+  customerAcceptRequired?: boolean;
 }
 
 export type ChatRole = 'customer' | 'admin' | 'bot';

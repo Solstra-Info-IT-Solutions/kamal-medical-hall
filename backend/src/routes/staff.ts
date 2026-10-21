@@ -92,12 +92,25 @@ adminRouter.post('/orders/:id/quote', async (req, res) => {
   if (!bill.publicId.startsWith('bills/') || isBlockedFile(bill.publicId) || isBlockedFile(bill.name ?? '')) throw bad('Invalid bill file.', 'invalid_file');
   const order = await loadOrder(String(req.params.id), req.user!);
   const expires = new Date(Date.now() + config.quoteValidHours * 3600000);
+  const fields = {
+    quoted_amount: amount, quote_expires_at: expires, reviewed_by: req.user!.id,
+    bill_public_id: bill.publicId, bill_mime: bill.mimeType, bill_resource_type: bill.resourceType, bill_name: bill.name ?? null, bill_size: bill.sizeBytes ?? null, bill_uploaded_at: new Date(),
+  };
+  // The admin decides whether customers see the "accept the amount" page. When they do not, the amount is confirmed
+  // straight away as pay on delivery (cash or UPI to the delivery partner) and the order is ready to dispatch.
+  const acceptRequired = (await pool.query('select customer_accept_required from store_settings where id = 1')).rows[0]?.customer_accept_required !== false;
   await tx(async (c) => {
-    await transition(c, order.id, ['requested', 'quoted'], 'quoted', req.user!.id, {
-      quoted_amount: amount, quote_expires_at: expires, reviewed_by: req.user!.id,
-      bill_public_id: bill.publicId, bill_mime: bill.mimeType, bill_resource_type: bill.resourceType, bill_name: bill.name ?? null, bill_size: bill.sizeBytes ?? null, bill_uploaded_at: new Date(),
-    });
-    await notify(order.customer!.id, order.id, 'quote_ready', 'Your order amount is ready', `${order.orderNumber}: pay ₹${amount} (free delivery). Please review and accept.`, c);
+    if (acceptRequired || order.status === 'quoted') {
+      await transition(c, order.id, ['requested', 'quoted'], 'quoted', req.user!.id, fields);
+      await notify(order.customer!.id, order.id, 'quote_ready', 'Your order amount is ready', `${order.orderNumber}: pay ₹${amount} (free delivery). Please review and accept.`, c);
+      return;
+    }
+    await transition(c, order.id, ['requested'], 'ready_to_dispatch', req.user!.id, { ...fields, payment_method: 'cod', payment_status: 'cod_pending' });
+    await c.query('delete from payments where order_id = $1 and status = $2', [order.id, 'pending']);
+    await c.query("insert into payments (order_id, method, amount, status) values ($1, 'cod', $2, 'cod_pending')", [order.id, amount]);
+    await notify(order.customer!.id, order.id, 'order_confirmed', 'Your order is confirmed', `${order.orderNumber}: ₹${amount} (free delivery). Pay on delivery by cash or UPI. The bill is in your order.`, c);
+    const partner = (await c.query('select partner_id from orders where id = $1', [order.id])).rows[0]?.partner_id as string | undefined;
+    if (partner) await notify(partner, order.id, 'order_confirmed', 'Order confirmed', `${order.orderNumber} is confirmed. You can start the delivery when you are ready.`, c);
   });
   res.json({ order: await loadOrder(order.id, req.user!) });
 });
@@ -345,18 +358,20 @@ const settingsSchema = z.object({
   geofenceM: z.number().int().min(30).max(2000).optional(),
   /** After this time of day customers can only choose dates from tomorrow; before it, today is included. */
   orderCutoffTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+  /** Whether customers see the page to accept the amount (and choose how to pay). Off: confirmed as pay on delivery. */
+  customerAcceptRequired: z.boolean().optional(),
 });
 adminRouter.get('/settings', async (_req, res) => {
   const { rows } = await pool.query('select * from store_settings where id = 1');
   const s = rows[0];
-  res.json({ isOpen: s.is_open, openingTime: s.opening_time, closingTime: s.closing_time, address: s.address, phone: s.phone, email: s.email, latitude: s.latitude, longitude: s.longitude, geofenceM: s.geofence_m, orderCutoffTime: s.order_cutoff_time });
+  res.json({ isOpen: s.is_open, openingTime: s.opening_time, closingTime: s.closing_time, address: s.address, phone: s.phone, email: s.email, latitude: s.latitude, longitude: s.longitude, geofenceM: s.geofence_m, orderCutoffTime: s.order_cutoff_time, customerAcceptRequired: s.customer_accept_required });
 });
 adminRouter.put('/settings', async (req, res) => {
   const s = parse(settingsSchema, req.body);
   await tx(async (c) => {
   const before = (await c.query('select is_open from store_settings where id = 1 for update')).rows[0]?.is_open as boolean | undefined;
-  await c.query('update store_settings set is_open=$1, opening_time=$2, closing_time=$3, address=coalesce($4, address), phone=coalesce($5, phone), email=coalesce($6, email), latitude=$7, longitude=$8, geofence_m=coalesce($9, geofence_m), order_cutoff_time=coalesce($10, order_cutoff_time) where id = 1',
-    [s.isOpen, s.openingTime, s.closingTime, s.address ?? null, s.phone ?? null, s.email ?? null, s.latitude ?? null, s.longitude ?? null, s.geofenceM ?? null, s.orderCutoffTime ?? null]);
+  await c.query('update store_settings set is_open=$1, opening_time=$2, closing_time=$3, address=coalesce($4, address), phone=coalesce($5, phone), email=coalesce($6, email), latitude=$7, longitude=$8, geofence_m=coalesce($9, geofence_m), order_cutoff_time=coalesce($10, order_cutoff_time), customer_accept_required=coalesce($11, customer_accept_required) where id = 1',
+    [s.isOpen, s.openingTime, s.closingTime, s.address ?? null, s.phone ?? null, s.email ?? null, s.latitude ?? null, s.longitude ?? null, s.geofenceM ?? null, s.orderCutoffTime ?? null, s.customerAcceptRequired ?? null]);
   if (before && !s.isOpen) await closeStore(c);
   else if (before === false && s.isOpen) await reopenStore(c);
   });

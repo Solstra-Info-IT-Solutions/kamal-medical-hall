@@ -273,7 +273,7 @@
     "downloadBill": "Download",
     "deliveredOn": "Delivered on {{time}}",
     "activity": "Order activity",
-    "viewBill": "View",
+    "viewBill": "View Bill",
     "invoice": "Download invoice",
     "hint_requested": "The pharmacy is checking your prescription and will send you the amount soon.",
     "hint_quoted": "Your amount is ready. Review it and accept to continue.",
@@ -639,7 +639,7 @@
     "billRequired": "Please attach the bill before sending the amount.",
     "quoteSentTitle": "Amount request sent",
     "quoteSentMsg": "{{order}}: {{amount}} and the bill have been sent to the customer.",
-    "viewBill": "View bill",
+    "viewBill": "View Bill",
     "secOrders": "Orders",
     "secMoney": "Money",
     "secPeople": "Customers and feedback",
@@ -727,7 +727,10 @@
     "assignBusyMsg": "{{order}} will be added to this partner's list. They already hold {{count}} order(s) and can deliver them in one trip.",
     "acceptedWaiting": "Accepted, waiting for customer",
     "assignEarlyHelp": "The customer has not confirmed this order yet. You can assign now; the partner is told and can start as soon as the customer confirms.",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "acceptPage": "Customer accepts the amount",
+    "acceptPageOn": "On: after you send the amount and bill, the customer accepts it and chooses how to pay (online or on delivery).",
+    "acceptPageOff": "Off: the customer does not see the accept page. Your amount is confirmed straight away as pay on delivery (cash or UPI) and the order is ready to dispatch."
   },
   "steps": {
     "address": "Address",
