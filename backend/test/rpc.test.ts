@@ -94,6 +94,18 @@ describe('everything over the socket', () => {
     assert.equal((await rpc(anon, 'GET', '/config')).s, 200);
   });
 
+  it('builds download links for the address the app connected to, not the internal loopback hop', async () => {
+    // as behind the hosting provider's proxy, which tells us the public name and that the app used HTTPS
+    const s = connect(base, { transports: ['websocket'], reconnection: false, extraHeaders: { 'x-forwarded-host': 'api.kmh.example', 'x-forwarded-proto': 'https' } });
+    sockets.push(s);
+    await new Promise<void>((resolve, reject) => { s.once('connect', resolve); s.once('connect_error', reject); });
+    const link = await rpc(s, 'GET', '/admin/export-link?kind=orders&days=30', undefined, admin);
+    assert.equal(link.s, 200);
+    assert.ok(link.b.url.startsWith('https://api.kmh.example/export/orders.csv?t='), link.b.url);
+    const direct = await rpc(anon, 'GET', '/admin/export-link?kind=orders&days=30', undefined, admin);
+    assert.ok(direct.b.url.startsWith(`${base}/export/orders.csv?t=`), direct.b.url);
+  });
+
   it('slows down a connection that floods it', async () => {
     const flooder = await open();
     const replies = await Promise.all(Array.from({ length: 90 }, () => rpc(flooder, 'GET', '/pincodes')));

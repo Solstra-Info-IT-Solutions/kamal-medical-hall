@@ -38,6 +38,22 @@ const clientIp = (socket: Socket) => {
   return first || socket.handshake.address || '127.0.0.1';
 };
 
+const firstHeader = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)?.split(',')[0]?.trim();
+
+/**
+ * The address the app reached us on, so links the API builds from the request (invoice PDF, CSV exports) point at the
+ * public server and not at the loopback hop (127.0.0.1), which a phone cannot open.
+ */
+const publicOrigin = (socket: Socket): Record<string, string> => {
+  const h = socket.handshake.headers;
+  const host = firstHeader(h['x-forwarded-host']) || firstHeader(h.host);
+  const proto = firstHeader(h['x-forwarded-proto']) || (socket.handshake.secure ? 'https' : 'http');
+  return {
+    ...(host && /^[\w.-]+(:\d{1,5})?$/.test(host) ? { host } : {}),
+    ...(proto === 'https' || proto === 'http' ? { 'x-forwarded-proto': proto } : {}),
+  };
+};
+
 const agent = new http.Agent({ keepAlive: true, maxSockets: 64 });
 
 interface LoopbackReply { status: number; headers: http.IncomingHttpHeaders; text: string }
@@ -86,6 +102,7 @@ export function attachRpc(socket: Socket, server: http.Server) {
       const res = await loopback(server, method, msg.p, {
         [INTERNAL_HEADER]: INTERNAL_SECRET,
         'x-forwarded-for': clientIp(socket),
+        ...publicOrigin(socket),
         'accept-encoding': 'identity',
         ...(payload ? { 'content-type': 'application/json', 'content-length': String(Buffer.byteLength(payload)) } : {}),
         ...(msg.a ? { authorization: msg.a } : {}),
