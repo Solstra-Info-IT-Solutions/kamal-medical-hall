@@ -1,0 +1,41 @@
+{
+  "name": "kamal-medical-hall-api-mongodb",
+  "version": "1.0.0",
+  "description": "MongoDB version of Kamal Medical Hall API",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sentry/node": "^11.4.0",
+    "@types/node": "^26.6.4",
+    "cloudinary": "^2.11.0",
+    "compression": "^1.8.2",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.5",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "firebase-admin": "^14.5.0",
+    "helmet": "^8.3.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.0.0",
+    "pdfkit": "^0.20.2",
+    "razorpay": "^2.9.8",
+    "socket.io": "^4.8.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/compression": "^1.8.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/pdfkit": "^0.17.6",
+    "socket.io-client": "^4.8.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

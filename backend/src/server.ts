@@ -8,7 +8,7 @@ import { observe } from './observability.js';
 import { cachePolicy, corsMiddleware, generalLimit, httpGate, uploadSignLimit, writeLimit } from './security.js';
 import { closingAlertTick } from './cash.js';
 import { config } from './config.js';
-import { pool } from './db.js';
+import { connectToMongo } from './db.js';
 import { errorHandler } from './http.js';
 import { sweepDuty } from './partnerState.js';
 import { attachRealtime } from './realtime.js';
@@ -22,17 +22,19 @@ import { smsAdmin } from './routes/sms.js';
 import { general } from './routes/general.js';
 import { orders, razorpayWebhook } from './routes/orders.js';
 import { adminRouter, partnerRouter } from './routes/staff.js';
+import { User } from './models/User.js';
+import { StoreSettings } from './models/StoreSettings.js';
 
 export function createApp() {
   const app = express();
   app.set('trust proxy', 1);
-  app.use(observe); // first: request id, timing and database statistics for everything below
-  app.use(httpGate); // in socket-only mode, plain HTTP is limited to health, webhooks and download links
+  app.use(observe); // first: request id, timing and database statistics
+  app.use(httpGate);
   app.use(helmet());
   app.use(corsMiddleware);
   app.use(compression());
   app.use(cachePolicy);
-  // Razorpay webhook needs the raw body, so it is mounted before the JSON parser.
+  // Razorpay webhook needs the raw body before JSON parser.
   app.use('/webhooks/razorpay', razorpayWebhook);
   app.use(express.json({ limit: '100kb' }));
   app.use('/auth', rateLimit({ windowMs: 60_000, limit: 30, standardHeaders: true, legacyHeaders: false }));
@@ -76,21 +78,41 @@ export function createServer() {
 
 /** Provisions the first admin(s) from env and, in dev auth mode only, two demo delivery partners. */
 export async function bootstrap() {
+  // MongoDB bootstrap
   for (const phone of config.bootstrapAdminPhones) {
-    await pool.query("insert into users (phone, role, name) values ($1,'admin','Store Admin') on conflict (phone) do update set role = 'admin'", [phone]);
+    await User.findOneAndUpdate(
+      { phone },
+      { $set: { role: 'admin', name: 'Store Admin' } },
+      { upsert: true, new: true }
+    );
   }
   if (config.authMode === 'dev') {
-    for (const [phone, name] of [['9000000002', 'Staff One'], ['9000000003', 'Staff Two']]) {
-      const u = await pool.query("insert into users (phone, role, name) values ($1,'delivery_partner',$2) on conflict (phone) do update set role = 'delivery_partner' returning id", [phone, name]);
-      await pool.query('insert into delivery_partners (user_id) values ($1) on conflict do nothing', [u.rows[0].id]);
+    for (const [phone, name] of [
+      ['9000000002', 'Staff One'],
+      ['9000000003', 'Staff Two'],
+    ]) {
+      await User.findOneAndUpdate(
+        { phone, role: 'delivery_partner' },
+        { name },
+        { upsert: true }
+      );
     }
   }
 }
 
 if (process.argv[1]?.endsWith('server.ts') || process.argv[1]?.endsWith('server.js')) {
+  // Connect to MongoDB
+  await connectToMongo();
+
   await bootstrap();
   await sweepDuty().catch((e) => console.error('duty sweep failed', e));
-  setInterval(() => { void closingAlertTick().catch((e) => console.error('closing alert failed', e)); }, 60 * 1000).unref();
-  setInterval(() => { void sweepDuty().catch((e) => console.error('duty sweep failed', e)); }, 10 * 60 * 1000).unref();
-  createServer().listen(config.port, () => console.log(`API listening on :${config.port} (auth: ${config.authMode})`));
+  setInterval(() => {
+    void closingAlertTick().catch((e) => console.error('closing alert failed', e));
+  }, 60 * 1000).unref();
+  setInterval(() => {
+    void sweepDuty().catch((e) => console.error('duty sweep failed', e));
+  }, 10 * 60 * 1000).unref();
+  createServer().listen(config.port, () =>
+    console.log(`✅ API listening on :${config.port} (auth: ${config.authMode})`)
+  );
 }
