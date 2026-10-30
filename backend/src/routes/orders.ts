@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { authed, requireRole } from '../auth.js';
 import { config } from '../config.js';
 import { pool, tx } from '../db.js';
-import { HttpError, bad, conflict, notFound, parse } from '../http.js';
+import { HttpError, bad, conflict, notFound, parse, publicBase } from '../http.js';
 import { notify, notifyAdmins } from '../notify.js';
 import { fillOrderCoordinates } from '../geocode.js';
 import { distanceMeters, etaMinutes, releasePartner, storeLocation } from '../partnerState.js';
@@ -125,7 +125,7 @@ orders.get('/:id/invoice-link', authed, async (req, res) => {
   const order = await loadOrder(String(req.params.id), req.user!);
   if (order.quotedAmount === null || !INVOICE_STATUSES.includes(order.status)) throw conflict('The invoice is available after you accept the amount.', 'no_invoice');
   const token = jwt.sign({ oid: order.id, purpose: 'invoice' }, config.jwtSecret, { expiresIn: '10m' });
-  res.json({ url: `${req.protocol}://${req.get('host')}/orders/${order.id}/invoice.pdf?t=${encodeURIComponent(token)}` });
+  res.json({ url: `${publicBase(req)}/orders/${order.id}/invoice.pdf?t=${encodeURIComponent(token)}` });
 });
 
 orders.get('/:id/invoice.pdf', async (req, res) => {

@@ -64,11 +64,11 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "owner": "bharti_1",
     "extra": {
       "eas": {
-        "projectId": "9d716daf-7d85-4d9d-8f97-84f835f49a29"
+        "projectId": "6671b19d-2a69-4888-8cea-de6caa499385"
       }
-    },
-    "owner": "bharti1s-team"
+    }
   }
 }

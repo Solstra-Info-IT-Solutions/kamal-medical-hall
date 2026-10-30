@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError, type ZodType } from 'zod';
+import { config } from './config.js';
 import { reportError } from './monitoring.js';
 
 export class HttpError extends Error {
@@ -9,6 +10,9 @@ export const bad = (message: string, code = 'bad_request') => new HttpError(400,
 export const notFound = (message = 'Not found') => new HttpError(404, 'not_found', message);
 export const forbidden = (message = 'Not allowed') => new HttpError(403, 'forbidden', message);
 export const conflict = (message: string, code = 'conflict') => new HttpError(409, code, message);
+
+/** Where a phone's browser can open a link this API hands out: PUBLIC_URL, else the address the request came in on. */
+export const publicBase = (req: Request) => config.publicUrl || `${req.protocol}://${req.get('host')}`;
 
 export function parse<T>(schema: ZodType<T>, data: unknown): T {
   const result = schema.safeParse(data);

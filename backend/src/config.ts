@@ -26,6 +26,11 @@ export const config = {
   twilio: { accountSid: env.TWILIO_ACCOUNT_SID ?? '', authToken: env.TWILIO_AUTH_TOKEN ?? '', verifyServiceSid: env.TWILIO_VERIFY_SERVICE_SID ?? '' },
   razorpay: { keyId: env.RAZORPAY_KEY_ID ?? '', keySecret: env.RAZORPAY_KEY_SECRET ?? '', webhookSecret: env.RAZORPAY_WEBHOOK_SECRET ?? '' },
   /** Origins allowed to call the API from a browser (the web admin). The mobile apps send no Origin header and are not affected. */
+  /**
+   * The address phones reach the API on (e.g. https://api.kamalmedicalhall.com). Download links (invoice PDF, CSV exports)
+   * are built from it. Empty: built from the request's Host, which is 127.0.0.1:4000 behind a proxy that does not pass it on.
+   */
+  publicUrl: (env.PUBLIC_URL ?? '').replace(/\/+$/, ''),
   corsOrigins: (env.CORS_ORIGINS ?? '').split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean),
   /** PEM text of the database's CA certificate. When set, the database connection is verified instead of merely encrypted. */
   databaseCa: (env.DATABASE_CA ?? '').replace(/\\n/g, '\n') || (env.DATABASE_SSL_VERIFY === 'on' ? bundledSupabaseCa() : ''),
@@ -38,6 +43,7 @@ export const config = {
 
 if (!config.databaseUrl) throw new Error('DATABASE_URL is required');
 if (!config.jwtSecret || config.jwtSecret.length < 32) throw new Error('JWT_SECRET (32+ chars) is required');
+if (config.publicUrl && !/^https?:\/\/[\w.-]+(:\d{1,5})?$/.test(config.publicUrl)) throw new Error('PUBLIC_URL must look like https://api.example.com (no path)');
 if (config.isProd && config.authMode === 'dev') throw new Error('AUTH_MODE=dev is not allowed when NODE_ENV=production');
 if (config.authMode === 'twilio' && !(config.twilio.accountSid && config.twilio.authToken && config.twilio.verifyServiceSid)) throw new Error('TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_VERIFY_SERVICE_SID are required when AUTH_MODE=twilio');
 if (config.authMode === 'firebase' && !config.firebaseProjectId) throw new Error('FIREBASE_PROJECT_ID is required when AUTH_MODE=firebase');

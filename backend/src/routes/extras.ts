@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { authed, requireRole } from '../auth.js';
 import { config } from '../config.js';
 import { pool, tx } from '../db.js';
-import { HttpError, conflict, notFound, parse } from '../http.js';
+import { HttpError, conflict, notFound, parse, publicBase } from '../http.js';
 import { notify, notifyAdmins, notifyMany } from '../notify.js';
 import { isBlockedFile, signedPrescriptionUrl, type ResourceType } from '../services.js';
 import { latencySnapshot } from '../observability.js';
@@ -186,7 +186,7 @@ async function buildExport(kind: Kind, days: number) {
 adminExtras.get('/export-link', (req, res) => {
   const { kind, days } = parse(z.object({ kind: z.enum(KINDS), days: z.coerce.number().int().min(1).max(365).default(30) }), req.query);
   const token = jwt.sign({ purpose: 'export', kind, days }, config.jwtSecret, { expiresIn: '10m' });
-  res.json({ url: `${req.protocol}://${req.get('host')}/export/${kind}.csv?t=${encodeURIComponent(token)}` });
+  res.json({ url: `${publicBase(req)}/export/${kind}.csv?t=${encodeURIComponent(token)}` });
 });
 
 /** Mounted outside the admin guard: the signed token is the credential. */
