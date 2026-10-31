@@ -10,6 +10,7 @@ import { secure, type OtpProvider } from './devProvider';
  * own 30-day session token is used instead.
  */
 const SESSION_KEY = 'kmh.sessionToken';
+const AUTH_REQUEST_TIMEOUT_MS = 65_000;
 export const serverOtpModes = ['sms', 'twilio'];
 
 export const serverProvider = (firebase?: OtpProvider): OtpProvider => {
@@ -18,10 +19,10 @@ export const serverProvider = (firebase?: OtpProvider): OtpProvider => {
     mode: 'sms',
     async sendOtp(p, purpose) {
       phone = p;
-      await api<void>('POST', '/auth/otp/send', { phone: p, purpose }, { auth: false, retry: 'never' });
+      await api<void>('POST', '/auth/otp/send', { phone: p, purpose }, { auth: false, retry: 'never', timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
     },
     async confirmOtp(code) {
-      const { token, firebaseToken } = await api<{ token: string; firebaseToken?: string }>('POST', '/auth/otp/verify', { phone, code }, { auth: false, retry: 'never' });
+      const { token, firebaseToken } = await api<{ token: string; firebaseToken?: string }>('POST', '/auth/otp/verify', { phone, code }, { auth: false, retry: 'never', timeoutMs: AUTH_REQUEST_TIMEOUT_MS });
       if (firebaseToken && firebase?.signInWithCustomToken) {
         try {
           const idToken = await firebase.signInWithCustomToken(firebaseToken);
@@ -51,7 +52,7 @@ export const autoProvider = (firebase: OtpProvider): OtpProvider => {
     get mode() { return active.mode; },
     async sendOtp(phone, purpose) {
       let useServer = false;
-      try { useServer = serverOtpModes.includes((await api<{ authMode?: string }>('GET', '/config', undefined, { auth: false })).authMode ?? ''); } catch { /* server unreachable: fall back to Firebase */ }
+      try { useServer = serverOtpModes.includes((await api<{ authMode?: string }>('GET', '/config', undefined, { auth: false, retry: 'never', timeoutMs: AUTH_REQUEST_TIMEOUT_MS })).authMode ?? ''); } catch { /* server unreachable: fall back to Firebase */ }
       active = useServer ? server : firebase;
       return active.sendOtp(phone, purpose);
     },
