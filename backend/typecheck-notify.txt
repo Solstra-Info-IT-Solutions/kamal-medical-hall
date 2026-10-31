@@ -1,0 +1,147 @@
+src/dutyService.ts(1,15): error TS2305: Module '"./db.js"' has no exported member 'Queryable'.
+src/dutyService.ts(4,27): error TS2305: Module '"./partnerState.js"' has no exported member 'TODAY_IST'.
+src/dutyService.ts(58,91): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/dutyService.ts(83,95): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/dutyService.ts(93,140): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/dutyService.ts(94,106): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/dutyService.ts(95,95): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/geocode.ts(1,10): error TS2305: Module '"./db.js"' has no exported member 'pool'.
+src/invoice.ts(77,17): error TS7006: Parameter 'it' implicitly has an 'any' type.
+src/invoice.ts(77,21): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/orderService.ts(1,21): error TS2307: Cannot find module 'pg' or its corresponding type declarations.
+src/orderService.ts(2,10): error TS2305: Module '"./db.js"' has no exported member 'pool'.
+src/orderService.ts(2,16): error TS2305: Module '"./db.js"' has no exported member 'hasAfterCommit'.
+src/orderService.ts(2,37): error TS2305: Module '"./db.js"' has no exported member 'Queryable'.
+src/orderService.ts(38,44): error TS7006: Parameter 'h' implicitly has an 'any' type.
+src/orderService.ts(63,75): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/otp.ts(6,10): error TS2305: Module '"./db.js"' has no exported member 'pool'.
+src/pincodes.ts(1,10): error TS2305: Module '"./db.js"' has no exported member 'pool'.
+src/pincodes.ts(10,52): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/realtime.ts(4,10): error TS2305: Module '"./db.js"' has no exported member 'pool'.
+src/routes/announcements.ts(4,10): error TS2305: Module '"../db.js"' has no exported member 'pool'.
+src/routes/announcements.ts(46,129): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/announcements.ts(94,25): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/chat.ts(4,10): error TS2305: Module '"../db.js"' has no exported member 'pool'.
+src/routes/chat.ts(41,36): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/chat.ts(43,32): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/chat.ts(47,41): error TS7006: Parameter 'w' implicitly has an 'any' type.
+src/routes/chat.ts(164,24): error TS7006: Parameter 't' implicitly has an 'any' type.
+src/routes/customers.ts(4,10): error TS2305: Module '"../db.js"' has no exported member 'pool'.
+src/routes/customers.ts(105,30): error TS7006: Parameter 'o' implicitly has an 'any' type.
+src/routes/customers.ts(107,36): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/routes/customers.ts(143,24): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/customers.ts(146,28): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/customers.ts(149,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/customers.ts(151,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/customers.ts(175,34): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/customers.ts(186,15): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/extras.ts(6,10): error TS2305: Module '"../db.js"' has no exported member 'pool'.
+src/routes/extras.ts(32,20): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/extras.ts(49,28): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/extras.ts(51,23): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/extras.ts(52,39): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/extras.ts(125,36): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/routes/extras.ts(125,39): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/extras.ts(126,40): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/routes/extras.ts(126,43): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/extras.ts(130,28): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/extras.ts(131,35): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/extras.ts(132,29): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/extras.ts(155,17): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/extras.ts(161,97): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/extras.ts(167,94): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/extras.ts(173,106): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/extras.ts(178,110): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/extras.ts(182,88): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/general.ts(5,10): error TS2305: Module '"../db.js"' has no exported member 'pool'.
+src/routes/general.ts(222,39): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/routes/general.ts(282,160): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/general.ts(284,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/general.ts(285,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/general.ts(286,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/general.ts(287,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/general.ts(288,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/general.ts(289,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/general.ts(290,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/orders.ts(2,21): error TS2307: Cannot find module 'pg' or its corresponding type declarations.
+src/routes/orders.ts(6,10): error TS2305: Module '"../db.js"' has no exported member 'pool'.
+src/routes/orders.ts(59,30): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/orders.ts(61,25): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/orders.ts(67,41): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/orders.ts(68,46): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/orders.ts(69,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/orders.ts(96,32): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/orders.ts(152,26): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/orders.ts(156,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/orders.ts(189,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/orders.ts(190,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/shop.ts(4,10): error TS2305: Module '"../db.js"' has no exported member 'pool'.
+src/routes/shop.ts(81,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/shop.ts(83,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/sms.ts(5,10): error TS2305: Module '"../db.js"' has no exported member 'pool'.
+src/routes/staff.ts(5,10): error TS2305: Module '"../db.js"' has no exported member 'pool'.
+src/routes/staff.ts(11,86): error TS2305: Module '"../partnerState.js"' has no exported member 'TODAY_IST'.
+src/routes/staff.ts(109,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(110,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(112,30): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(132,26): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(135,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(157,27): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(158,48): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/staff.ts(159,23): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(163,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(175,26): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(180,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(201,34): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/staff.ts(222,36): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/staff.ts(231,34): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/staff.ts(241,33): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/staff.ts(248,30): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(250,23): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(252,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(279,23): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(283,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(284,40): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(285,18): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(296,53): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/staff.ts(300,28): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(302,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(303,37): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(348,28): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/staff.ts(349,35): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/staff.ts(350,38): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/staff.ts(372,27): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(373,11): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(385,29): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(386,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(479,26): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/staff.ts(480,34): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/staff.ts(492,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(513,32): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/routes/staff.ts(519,23): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(532,23): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(588,15): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(591,13): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/routes/staff.ts(593,31): error TS2339: Property 'query' does not exist on type 'ClientSession'.
+src/sms.ts(1,10): error TS2305: Module '"./db.js"' has no exported member 'pool'.
+test/acceptPage.ts(1,10): error TS2305: Module '"../src/db.js"' has no exported member 'pool'.
+test/announcements.test.ts(4,10): error TS2305: Module '"../src/db.js"' has no exported member 'pool'.
+test/attendance.test.ts(6,10): error TS2305: Module '"../src/db.js"' has no exported member 'pool'.
+test/attendance.test.ts(128,97): error TS7006: Parameter 'r' implicitly has an 'any' type.
+test/attendance.test.ts(132,41): error TS7006: Parameter 'r' implicitly has an 'any' type.
+test/attendance.test.ts(133,67): error TS7006: Parameter 'r' implicitly has an 'any' type.
+test/attendance.test.ts(134,36): error TS7006: Parameter 'r' implicitly has an 'any' type.
+test/bills.test.ts(7,10): error TS2305: Module '"../src/db.js"' has no exported member 'pool'.
+test/bills.test.ts(88,33): error TS7006: Parameter 'r' implicitly has an 'any' type.
+test/cash.test.ts(5,10): error TS2305: Module '"../src/db.js"' has no exported member 'pool'.
+test/customers.test.ts(5,10): error TS2305: Module '"../src/db.js"' has no exported member 'pool'.
+test/extras.test.ts(6,10): error TS2305: Module '"../src/db.js"' has no exported member 'pool'.
+test/flow.test.ts(7,10): error TS2305: Module '"../src/db.js"' has no exported member 'pool'.
+test/hardening.test.ts(6,10): error TS2305: Module '"../src/db.js"' has no exported member 'pool'.
+test/otp.test.ts(5,10): error TS2305: Module '"../src/db.js"' has no exported member 'pool'.
+test/payments.test.ts(7,10): error TS2305: Module '"../src/db.js"' has no exported member 'pool'.
+test/realtime.test.ts(7,10): error TS2305: Module '"../src/db.js"' has no exported member 'pool'.
+test/rpc.test.ts(6,10): error TS2305: Module '"../src/db.js"' has no exported member 'pool'.
+test/scheduling.test.ts(5,10): error TS2305: Module '"../src/db.js"' has no exported member 'pool'.
+test/shop.test.ts(4,10): error TS2305: Module '"../src/db.js"' has no exported member 'pool'.
+test/sms.test.ts(5,10): error TS2305: Module '"../src/db.js"' has no exported member 'pool'.

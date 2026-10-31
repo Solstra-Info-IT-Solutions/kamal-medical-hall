@@ -63,10 +63,29 @@ export function streamInvoice(res: Response, o: OrderData, store: StoreInfo, pre
     my += 16;
   }
   const a = o.address;
-  const addr = [a.line1, a.line2, a.landmark, `${a.city} - ${a.pincode}`].filter(Boolean).join(', ');
-  doc.font('Helvetica-Bold').fontSize(11).fillColor(INK).text(o.customer?.name ?? a.recipientName, L + colW + 20, y, { width: colW });
-  doc.font('Helvetica').fontSize(10).fillColor(MUTED).text(addr, L + colW + 20, doc.y + 2, { width: colW });
-  if (a.phone ?? o.customer?.phone) doc.text(`Phone: ${a.phone ?? o.customer?.phone}`, L + colW + 20, doc.y + 2, { width: colW });
+const addr = [
+  a?.line1,
+  a?.line2,
+  a?.landmark,
+  a ? `${a.city} - ${a.pincode}` : null,
+]
+  .filter(Boolean)
+  .join(', ');
+
+doc.font('Helvetica-Bold').fontSize(11).fillColor(INK)
+  .text(o.customer?.name ?? a?.recipientName ?? 'Customer', L + colW + 20, y, { width: colW });
+
+const phone = a?.phone ?? o.customer?.phone;
+
+// if (phone) {
+//   doc.text(`Phone: ${phone}`, L + colW + 20, doc.y + 2, { width: colW });
+// }
+
+if (phone) {
+  doc.text(`Phone: ${phone}`, L + colW + 20, doc.y + 2, {
+    width: colW,
+  });
+}
   y = Math.max(my, doc.y) + 22;
 
   // Items table
@@ -119,7 +138,7 @@ export function streamInvoice(res: Response, o: OrderData, store: StoreInfo, pre
     doc.addPage();
     let py = 50;
     doc.font('Helvetica-Bold').fontSize(8.5).fillColor(MUTED).text('PRESCRIPTION SUBMITTED WITH THIS ORDER', L, py);
-    doc.font('Helvetica').fontSize(10).fillColor(MUTED).text(`Order ${o.orderNumber} · ${o.address.recipientName}`, L, py + 14);
+    doc.font('Helvetica').fontSize(10).fillColor(MUTED).text(`Order ${o.orderNumber} · ${o.address?.recipientName ?? 'Delivery address unavailable'}`, L, py + 14);
     py += 40;
     for (const buf of prescriptionImages) {
       let img: { width: number; height: number };

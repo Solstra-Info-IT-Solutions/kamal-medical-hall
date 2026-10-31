@@ -83,7 +83,7 @@ export async function bootstrap() {
     await User.findOneAndUpdate(
       { phone },
       { $set: { role: 'admin', name: 'Store Admin' } },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
   }
   if (config.authMode === 'dev') {

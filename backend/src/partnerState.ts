@@ -1,75 +1,339 @@
-import { pool, hasAfterCommit, type Queryable } from './db.js';
+
+import mongoose, { type ClientSession } from 'mongoose';
+import DeliveryPartner, { type PartnerState } from './models/DeliveryPartner.js';
+import Attendance from './models/Attendance.js';
+import StoreClosedDay from './models/StoreClosedDay.js';
+import { Order } from './models/Order.js';
+import { StoreSettings } from './models/StoreSettings.js';
+import { User } from './models/User.js';
 import { emitPartner } from './realtime.js';
+import { afterCommit } from './transactionHooks.js';
 
 /**
  * off        – not checked in today (absent)
  * available  – on duty and free: can be assigned an order
- * reserved   – an order was assigned (waiting for the partner to accept, or accepted but not yet riding)
+ * reserved   – an order was assigned
  * busy       – out on a delivery
- * returning  – delivered, riding back to the shop; becomes available automatically on arrival
- * break      – on duty but on a break; not assignable until the partner ends the break
+ * returning  – delivered, riding back to the shop
+ * break      – on duty but on a break
  */
-export type PartnerState = 'off' | 'available' | 'reserved' | 'busy' | 'returning' | 'break';
 
-/** Today's calendar date in India. */
-export const TODAY_IST = "(now() at time zone 'Asia/Kolkata')::date";
+/** Returns the current calendar date in India as YYYY-MM-DD. */
+export function getTodayISTDateKey(): string {
+  return getISTDateKey(new Date());
+}
 
-export async function setPartnerState(db: Queryable, partnerId: string, state: PartnerState) {
-  await db.query('update delivery_partners set state = $2, is_available = ($2 = \'available\') where user_id = $1', [partnerId, state]);
-  const emit = () => emitPartner(partnerId, state);
-  if (hasAfterCommit(db)) db.afterCommit(emit); else emit();
+/** Converts a JavaScript Date into an IST calendar date. */
+function getISTDateKey(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+/** Adds calendar days without applying the server's local timezone. */
+function addCalendarDays(day: string, amount: number): string {
+  const date = new Date(`${day}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + amount);
+  return date.toISOString().slice(0, 10);
+}
+
+function toObjectId(id: string): mongoose.Types.ObjectId {
+  if (!mongoose.isValidObjectId(id)) {
+    throw new Error(`Invalid MongoDB partner ID: ${id}`);
+  }
+
+  return new mongoose.Types.ObjectId(id);
 }
 
 /**
- * Works out a partner's state from what they are actually holding (a partner can have several orders at once):
- * any order out for delivery -> busy; otherwise any assigned order waiting to go out -> reserved; otherwise available
- * (on duty today and the shop open) or off. Call it after anything that adds or removes one of their orders.
+ * Updates a partner's state.
+ *
+ * Pass the current MongoDB session when this operation is part of a transaction.
  */
-export async function releasePartner(db: Queryable, partnerId: string) {
-  const { rows } = await db.query(`select
-      (select count(*) from orders where partner_id = $1 and status = 'out_for_delivery')::int as out,
-      (select count(*) from orders where partner_id = $1 and status in ('quoted', 'awaiting_payment', 'ready_to_dispatch'))::int as pending,
-      (d.on_duty and d.on_duty_day = ${TODAY_IST}) as duty, (select is_open from store_settings where id = 1) as open
-    from delivery_partners d where d.user_id = $1`, [partnerId]);
-  const r = rows[0];
-  const state: PartnerState = r?.out > 0 ? 'busy' : r?.pending > 0 ? 'reserved' : r?.duty && r?.open ? 'available' : 'off';
-  await setPartnerState(db, partnerId, state);
+export async function setPartnerState(
+  session: ClientSession | undefined,
+  partnerId: string,
+  state: PartnerState,
+): Promise<void> {
+  const partner = await DeliveryPartner.findOneAndUpdate(
+    { userId: toObjectId(partnerId) },
+    {
+      $set: {
+        state,
+        isAvailable: state === 'available',
+      },
+    },
+    {
+      returnDocument: 'after',
+      ...(session ? { session } : {}),
+    },
+  );
+
+  if (!partner) {
+    throw new Error(`Delivery partner not found: ${partnerId}`);
+  }
+
+  // Note: this emits immediately. If called inside a transaction, the event
+  // may be emitted before that transaction commits.
+  const deliver = () => emitPartner(partnerId, state);
+
+  if (session) {
+    afterCommit(session, deliver);
+  } else {
+    deliver();
+  }
+}
+
+/**
+ * Works out a partner's state from the orders they are holding:
+ * out for delivery -> busy;
+ * assigned and waiting -> reserved;
+ * otherwise on duty today and shop open -> available;
+ * otherwise -> off.
+ */
+export async function releasePartner(
+  session: ClientSession | undefined,
+  partnerId: string,
+): Promise<void> {
+  const userId = toObjectId(partnerId);
+
+  const [partner, storeSettings, outCount, pendingCount] = await Promise.all([
+    DeliveryPartner.findOne({ userId }).session(session ?? null),
+    StoreSettings.findOne().session(session ?? null),
+    Order.countDocuments({
+      partnerId: userId,
+      status: 'out_for_delivery',
+    }).session(session ?? null),
+    Order.countDocuments({
+      partnerId: userId,
+      status: {
+        $in: ['quoted', 'awaiting_payment', 'ready_to_dispatch'],
+      },
+    }).session(session ?? null),
+  ]);
+
+  const today = getTodayISTDateKey();
+
+  const state: PartnerState =
+    outCount > 0
+      ? 'busy'
+      : pendingCount > 0
+        ? 'reserved'
+        : partner?.onDuty &&
+            partner.onDutyDay === today &&
+            storeSettings?.isOpen
+          ? 'available'
+          : 'off';
+
+  await setPartnerState(session, partnerId, state);
 }
 
 /** Great-circle distance in metres. */
-export function distanceMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
-  const R = 6371000, rad = (d: number) => (d * Math.PI) / 180;
-  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+export function distanceMeters(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number },
+): number {
+  const R = 6371000;
+  const rad = (degrees: number) => (degrees * Math.PI) / 180;
+
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(a.lat)) *
+      Math.cos(rad(b.lat)) *
+      Math.sin(dLng / 2) ** 2;
+
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-/** Rough ETA for a scooter in city traffic (about 20 km/h) plus a couple of minutes to hand over. */
-export const etaMinutes = (metres: number) => Math.max(1, Math.round((metres / 1000 / 20) * 60) + 2);
+/** Rough scooter ETA at about 20 km/h plus handover time. */
+export const etaMinutes = (metres: number): number =>
+  Math.max(1, Math.round((metres / 1000 / 20) * 60) + 2);
 
-export async function storeLocation(db: Queryable = pool) {
-  const { rows } = await db.query('select latitude, longitude, geofence_m from store_settings where id = 1');
-  const r = rows[0];
-  return r?.latitude != null && r?.longitude != null ? { lat: r.latitude as number, lng: r.longitude as number, geofenceM: r.geofence_m as number } : null;
+/**
+ * Returns the configured store location, if available.
+ *
+ * Returns null if coordinates or geofence radius are not configured.
+ * No default geofence radius is assumed.
+ */
+export async function storeLocation(
+  session?: ClientSession,
+): Promise<{
+  lat: number;
+  lng: number;
+  geofenceM: number;
+} | null> {
+  const settings = await StoreSettings.findOne().session(session ?? null);
+
+  if (
+    settings?.latitude == null ||
+    settings.longitude == null ||
+    settings.geofenceM == null
+  ) {
+    return null;
+  }
+
+  return {
+    lat: settings.latitude,
+    lng: settings.longitude,
+    geofenceM: settings.geofenceM,
+  };
 }
 
-/** Ends yesterday's duty for anyone who forgot to check out, and records absences for working days with no attendance. */
-export async function sweepDuty() {
-  const { rows } = await pool.query(`
-    update delivery_partners set on_duty = false, state = 'off', is_available = false
-    where on_duty and on_duty_day < ${TODAY_IST} and state in ('available', 'returning', 'break') returning user_id`);
-  await pool.query(`update attendance set checked_out_at = coalesce(checked_out_at, now()),
-      break_minutes = break_minutes + coalesce(floor(extract(epoch from now() - break_started_at) / 60)::int, 0), break_started_at = null
-    where day < ${TODAY_IST} and checked_in_at is not null and (checked_out_at is null or break_started_at is not null)`);
-  // A working day (store not closed) with no attendance row at all is an absence. Looks back a week so a sleeping server catches up.
-  await pool.query(`
-    insert into attendance (partner_id, day, status, checked_in_at)
-    select u.id, g.day::date, 'absent', null
-    from users u join delivery_partners d on d.user_id = u.id
-    cross join generate_series(${TODAY_IST} - 7, ${TODAY_IST} - 1, interval '1 day') as g(day)
-    where d.active and (u.created_at at time zone 'Asia/Kolkata')::date <= g.day::date
-      and not exists (select 1 from store_closed_days s where s.day = g.day::date)
-      and not exists (select 1 from attendance a where a.partner_id = u.id and a.day = g.day::date)
-    on conflict do nothing`);
-  for (const r of rows) emitPartner(r.user_id, 'off');
+/**
+ * Ends previous days' duty for partners who forgot to check out.
+ *
+ * Also records absences for active partners on working days without attendance.
+ * Looks back seven days so a sleeping server can catch up.
+ */
+export async function sweepDuty(): Promise<void> {
+  const today = getTodayISTDateKey();
+  const now = new Date();
+
+  // 1. End previous days' duty for partners in states that can be safely reset.
+  const expiredPartners = await DeliveryPartner.find({
+    onDuty: true,
+    onDutyDay: { $lt: today },
+    state: { $in: ['available', 'returning', 'break'] },
+  }).select({ userId: 1 });
+
+  await DeliveryPartner.updateMany(
+    {
+      onDuty: true,
+      onDutyDay: { $lt: today },
+      state: { $in: ['available', 'returning', 'break'] },
+    },
+    {
+      $set: {
+        onDuty: false,
+        state: 'off',
+        isAvailable: false,
+      },
+    },
+  );
+
+  // 2. Close old attendance records and account for unfinished breaks.
+  const unfinishedAttendance = await Attendance.find({
+    day: { $lt: today },
+    checkedInAt: { $ne: null },
+    $or: [
+      { checkedOutAt: null },
+      { breakStartedAt: { $ne: null } },
+    ],
+  });
+
+  for (const attendance of unfinishedAttendance) {
+    const additionalBreakMinutes = attendance.breakStartedAt
+      ? Math.max(
+          0,
+          Math.floor(
+            (now.getTime() - attendance.breakStartedAt.getTime()) / 60000,
+          ),
+        )
+      : 0;
+
+    attendance.checkedOutAt ??= now;
+    attendance.breakMinutes =
+      (attendance.breakMinutes ?? 0) + additionalBreakMinutes;
+    attendance.breakStartedAt = null;
+
+    await attendance.save();
+  }
+
+  // 3. Identify active partners and their account creation dates.
+  const partners = await DeliveryPartner.find({ active: true })
+    .select({ userId: 1 })
+    .lean();
+
+  const partnerIds = partners.map((partner) => partner.userId);
+
+  if (partnerIds.length === 0) {
+    for (const partner of expiredPartners) {
+      emitPartner(partner.userId.toString(), 'off');
+    }
+
+    return;
+  }
+
+  const users = await User.find({
+    _id: { $in: partnerIds },
+  })
+    .select({ _id: 1, createdAt: 1 })
+    .lean();
+
+  const userCreatedDates = new Map<string, string>();
+
+  for (const user of users) {
+    if (user.createdAt) {
+      userCreatedDates.set(
+        user._id.toString(),
+        getISTDateKey(user.createdAt),
+      );
+    }
+  }
+
+  // 4. Skip store-closed days.
+  const pastDays = Array.from({ length: 7 }, (_, index) =>
+    addCalendarDays(today, -(index + 1)),
+  );
+
+  const closedDays = await StoreClosedDay.find({
+    day: { $in: pastDays },
+  })
+    .select({ day: 1 })
+    .lean();
+
+  const closedDaySet = new Set(
+    closedDays.map((record) => record.day),
+  );
+
+  // 5. Insert absences only when no attendance record exists.
+  // The unique partnerId + day index prevents duplicate records.
+  for (const partner of partners) {
+    const partnerId = partner.userId;
+    const createdDate = userCreatedDates.get(partnerId.toString());
+
+    if (!createdDate) continue;
+
+    for (const day of pastDays) {
+      if (day < createdDate || closedDaySet.has(day)) {
+        continue;
+      }
+
+      await Attendance.updateOne(
+        {
+          partnerId,
+          day,
+        },
+        {
+          $setOnInsert: {
+            partnerId,
+            day,
+            status: 'absent',
+            checkedInAt: null,
+            checkedOutAt: null,
+            breakMinutes: 0,
+            breakStartedAt: null,
+          },
+        },
+        { upsert: true },
+      );
+    }
+  }
+
+  // 6. Notify connected clients about partners whose duty ended.
+  for (const partner of expiredPartners) {
+    emitPartner(partner.userId.toString(), 'off');
+  }
 }

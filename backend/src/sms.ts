@@ -1,62 +1,143 @@
-import { pool } from './db.js';
+import SmsSettingsModel from './models/SmsSettings.js';
 
-/**
- * Text messages through the SMS gateway (PearlSMS). The admin sets the sender ID, SMS type, API key and the OTP
- * message (it must match the template approved on DLT) in the admin panel; they live in `sms_settings`.
- * The key is sent in a POST body over HTTPS, so it never appears in a URL or a proxy log.
- */
-/** otpChannel: 'sms' sends a real code through the gateway; 'static' (testing) sends nothing and the code is always 123456. */
-export interface SmsSettings { apiUrl: string; senderId: string; smsType: string; apiKey: string | null; otpTemplate: string; otpChannel: 'static' | 'sms'; updatedAt: string }
+export interface SmsSettings {
+  apiUrl: string;
+  senderId: string;
+  smsType: string;
+  apiKey: string | null;
+  otpTemplate: string;
+  otpChannel: 'static' | 'sms';
+  updatedAt: string;
+}
 
 type Fetch = typeof fetch;
-let http: Fetch = (...a) => fetch(...a);
-/** Tests replace the network call. */
-export const setSmsFetch = (f: Fetch) => { http = f; };
+
+let http: Fetch = (...args) => fetch(...args);
+
+export const setSmsFetch = (f: Fetch): void => {
+  http = f;
+};
 
 let cached: { value: SmsSettings; at: number } | null = null;
-export const forgetSmsSettings = () => { cached = null; };
+
+export const forgetSmsSettings = (): void => {
+  cached = null;
+};
 
 export async function smsSettings(): Promise<SmsSettings> {
-  if (cached && Date.now() - cached.at < 30_000) return cached.value;
-  const { rows } = await pool.query('select api_url, sender_id, sms_type, api_key, otp_template, otp_channel, updated_at from sms_settings where id = 1');
-  const r = rows[0] ?? {};
+  if (cached && Date.now() - cached.at < 30_000) {
+    return cached.value;
+  }
+
+  const record = await SmsSettingsModel.findOne({ key: 'default' }).lean();
+
   const value: SmsSettings = {
-    apiUrl: r.api_url ?? 'https://sms.pearlsms.com/public/sms/send', senderId: r.sender_id ?? '', smsType: r.sms_type ?? 'TRANS',
-    apiKey: r.api_key ?? null, otpTemplate: r.otp_template ?? 'Your OTP is {otp}.', otpChannel: r.otp_channel === 'sms' ? 'sms' : 'static', updatedAt: r.updated_at,
+    apiUrl: record?.apiUrl ?? 'https://sms.pearlsms.com/public/sms/send',
+    senderId: record?.senderId ?? '',
+    smsType: record?.smsType ?? 'TRANS',
+    apiKey: record?.apiKey ?? null,
+    otpTemplate: record?.otpTemplate ?? 'Your OTP is {otp}.',
+    otpChannel: record?.otpChannel === 'sms' ? 'sms' : 'static',
+    updatedAt: record?.updatedAt
+      ? new Date(record.updatedAt).toISOString()
+      : new Date(0).toISOString(),
   };
+
   cached = { value, at: Date.now() };
   return value;
 }
 
-export const renderOtp = (template: string, code: string) => template.replaceAll('{otp}', code);
+export const renderOtp = (template: string, code: string): string =>
+  template.replaceAll('{otp}', code);
 
 export class SmsError extends Error {
-  constructor(public reason: 'not_configured' | 'rejected' | 'unreachable', message: string) { super(message); }
+  constructor(
+    public reason: 'not_configured' | 'rejected' | 'unreachable',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'SmsError';
+  }
 }
 
-/** Sends one SMS to a 10-digit Indian number. Throws SmsError with the gateway's own reason when it refuses. */
-export async function sendSms(phone: string, message: string, settings?: SmsSettings): Promise<{ requestId: string | null }> {
+export async function sendSms(
+  phone: string,
+  message: string,
+  settings?: SmsSettings,
+): Promise<{ requestId: string | null }> {
   const s = settings ?? await smsSettings();
-  if (!s.apiKey || !s.senderId) throw new SmsError('not_configured', 'SMS sender ID or API key is not set');
+
+  if (!s.apiKey || !s.senderId) {
+    throw new SmsError(
+      'not_configured',
+      'SMS sender ID or API key is not set',
+    );
+  }
+
   let res: Response;
+
   try {
     res = await http(s.apiUrl, {
       method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
-      body: new URLSearchParams({ sender: s.senderId, smstype: s.smsType, numbers: phone, apikey: s.apiKey, message }).toString(),
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'application/json',
+      },
+      body: new URLSearchParams({
+        sender: s.senderId,
+        smstype: s.smsType,
+        numbers: phone,
+        apikey: s.apiKey,
+        message,
+      }).toString(),
       signal: AbortSignal.timeout(15_000),
     });
   } catch {
-    throw new SmsError('unreachable', 'The SMS gateway could not be reached');
+    throw new SmsError(
+      'unreachable',
+      'The SMS gateway could not be reached',
+    );
   }
-  const text = await res.text();
-  let body: { status?: string; errormsg?: string; requestid?: string | number | null } = {};
-  try { body = JSON.parse(text); } catch { /* some gateways answer in plain text */ }
-  const failed = !res.ok || String(body.status ?? '').toUpperCase() === 'ERROR' || (!text.trim().startsWith('{') && /error|invalid|fail/i.test(text));
+
+  const responseText = await res.text();
+
+  let body: {
+    status?: string;
+    errormsg?: string;
+    requestid?: string | number | null;
+  } = {};
+
+  try {
+    body = JSON.parse(responseText);
+  } catch {
+    // Some gateways return plain text.
+  }
+
+  const failed =
+    !res.ok ||
+    String(body.status ?? '').toUpperCase() === 'ERROR' ||
+    (
+      !responseText.trim().startsWith('{') &&
+      /error|invalid|fail/i.test(responseText)
+    );
+
   if (failed) {
-    const reason = body.errormsg ?? (text.slice(0, 200) || `HTTP ${res.status}`);
-    console.error(JSON.stringify({ level: 'error', msg: 'sms not sent', status: res.status, reason }));
+    const reason =
+      body.errormsg ??
+      (responseText.slice(0, 200) || `HTTP ${res.status}`);
+
+    console.error(JSON.stringify({
+      level: 'error',
+      msg: 'sms not sent',
+      status: res.status,
+      reason,
+    }));
+
     throw new SmsError('rejected', reason);
   }
-  return { requestId: body.requestid != null ? String(body.requestid) : null };
+
+  return {
+    requestId:
+      body.requestid != null ? String(body.requestid) : null,
+  };
 }

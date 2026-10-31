@@ -1,88 +1,427 @@
-import { pool, tx, type Queryable } from './db.js';
+
+import mongoose from 'mongoose';
+
+import { tx } from './db.js';
+import { Payment } from './models/Payment.js';
+import { Order } from './models/Order.js';
+import { StoreSettings } from './models/StoreSettings.js';
+
 import { notifyAdmins } from './notify.js';
 import { emitAdmins } from './realtime.js';
 
-const DAY_START = "date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata'";
-const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
+const IST_TIME_ZONE = 'Asia/Kolkata';
 
-export interface CashPartner { partnerId: string; name: string; phone: string; total: number; orders: { orderId: string; orderNumber: string; amount: number; collectedAt: string }[] }
+const inr = (n: number) =>
+  `₹${Math.round(n).toLocaleString('en-IN')}`;
 
-/** Cash the delivery partners collected from customers and have not yet handed to the shop. */
-export async function cashToCollect(db: Queryable = pool): Promise<{ total: number; partners: CashPartner[] }> {
-  const { rows } = await db.query(`
-    select p.collected_by as partner_id, u.name, u.phone, o.id as order_id, o.order_number, p.amount, p.collected_at
-    from payments p join orders o on o.id = p.order_id join users u on u.id = p.collected_by
-    where p.method = 'cod' and p.collected_via = 'cash' and p.cash_settled_at is null and p.status = 'cod_collected'
-    order by u.name, p.collected_at`);
-  const by = new Map<string, CashPartner>();
-  for (const r of rows) {
-    const e: CashPartner = by.get(r.partner_id) ?? { partnerId: r.partner_id, name: r.name ?? 'Delivery partner', phone: r.phone, total: 0, orders: [] };
-    e.total += Number(r.amount);
-    e.orders.push({ orderId: r.order_id, orderNumber: r.order_number, amount: Number(r.amount), collectedAt: r.collected_at });
-    by.set(r.partner_id, e);
-  }
-  const partners = [...by.values()];
-  return { total: partners.reduce((s, p) => s + p.total, 0), partners };
+export interface CashPartner {
+  partnerId: string;
+  name: string;
+  phone: string;
+  total: number;
+  orders: {
+    orderId: string;
+    orderNumber: string;
+    amount: number;
+    collectedAt: string;
+  }[];
 }
 
-/** Today's takings (delivered orders), split by how they were paid. */
-export async function todayRevenue(db: Queryable = pool) {
-  const { rows } = await db.query(`
-    select count(*)::int as orders, coalesce(sum(quoted_amount), 0) as total,
-           coalesce(sum(quoted_amount) filter (where payment_method = 'razorpay'), 0) as online,
-           coalesce(sum(quoted_amount) filter (where payment_method = 'cod'), 0) as cod
-    from orders where status = 'delivered' and updated_at >= ${DAY_START}`);
-  const r = rows[0];
-  return { orders: r.orders as number, total: Number(r.total), online: Number(r.online), cod: Number(r.cod) };
+interface PopulatedCashPayment {
+  _id: mongoose.Types.ObjectId;
+  amount: number;
+  collectedAt: Date | null;
+  orderId: {
+    _id: mongoose.Types.ObjectId;
+    orderNumber: string;
+  } | null;
+  collectedBy: {
+    _id: mongoose.Types.ObjectId;
+    name?: string;
+    phone?: string;
+  } | null;
 }
 
-export async function closingSummary(db: Queryable = pool) {
-  const [revenue, cash, store] = await Promise.all([todayRevenue(db), cashToCollect(db), db.query('select closing_time, is_open from store_settings where id = 1')]);
-  return { closingTime: store.rows[0]?.closing_time as string, isOpen: Boolean(store.rows[0]?.is_open), revenue, cash };
-}
+/**
+ * Cash delivery partners collected from customers
+ * but have not yet handed over to the shop.
+ */
+export async function cashToCollect(): Promise<{
+  total: number;
+  partners: CashPartner[];
+}> {
+  const payments = await Payment.find({
+    method: 'cod',
+    collectedVia: 'cash',
+    cashSettledAt: null,
+    status: 'cod_collected',
+    collectedBy: { $ne: null },
+  })
+    .populate('orderId', 'orderNumber')
+    .populate('collectedBy', 'name phone')
+    .lean<PopulatedCashPayment[]>();
 
-/** The one-line message admins get: today's revenue and who has to hand over how much. */
-export function closingMessage(s: Awaited<ReturnType<typeof closingSummary>>) {
-  const staff = s.cash.partners.length ? `Collect cash: ${s.cash.partners.map((p) => `${p.name} ${inr(p.total)}`).join(', ')} (total ${inr(s.cash.total)}).` : 'No cash to collect from staff.';
-  return `Today's revenue ${inr(s.revenue.total)} from ${s.revenue.orders} order${s.revenue.orders === 1 ? '' : 's'} (online ${inr(s.revenue.online)}, cash/UPI on delivery ${inr(s.revenue.cod)}). ${staff}`;
-}
+  const byPartner = new Map<string, CashPartner>();
 
-/** Marks the cash of a partner (all of it, or only the given orders) as handed over; those orders become fully paid. */
-export async function settleCash(adminId: string, partnerId: string, orderIds?: string[]) {
-  return tx(async (c) => {
-    const { rows } = await c.query(`
-      update payments p set cash_settled_at = now(), cash_settled_by = $1
-      where p.method = 'cod' and p.collected_via = 'cash' and p.cash_settled_at is null and p.status = 'cod_collected' and p.collected_by = $2
-        and ($3::uuid[] is null or p.order_id = any($3::uuid[]))
-      returning p.order_id, p.amount`, [adminId, partnerId, orderIds?.length ? orderIds : null]);
-    if (rows.length) {
-      await c.query("update payments set status = 'paid' where order_id = any($1::uuid[]) and method = 'cod'", [rows.map((r) => r.order_id)]);
-      await c.query("update orders set payment_status = 'paid', updated_at = now() where id = any($1::uuid[])", [rows.map((r) => r.order_id)]);
+  for (const payment of payments) {
+    if (!payment.orderId || !payment.collectedBy) {
+      continue;
     }
-    return { settled: rows.length, amount: rows.reduce((s, r) => s + Number(r.amount), 0) };
+
+    const partnerId = payment.collectedBy._id.toString();
+
+    const partner =
+      byPartner.get(partnerId) ?? {
+        partnerId,
+        name: payment.collectedBy.name ?? 'Delivery partner',
+        phone: payment.collectedBy.phone ?? '',
+        total: 0,
+        orders: [],
+      };
+
+    const amount = Number(payment.amount);
+    const collectedAt = payment.collectedAt
+      ? payment.collectedAt.toISOString()
+      : '';
+
+    partner.total += amount;
+
+    partner.orders.push({
+      orderId: payment.orderId._id.toString(),
+      orderNumber: payment.orderId.orderNumber,
+      amount,
+      collectedAt,
+    });
+
+    byPartner.set(partnerId, partner);
+  }
+
+  const partners = [...byPartner.values()];
+
+  for (const partner of partners) {
+    partner.orders.sort((a, b) =>
+      a.collectedAt.localeCompare(b.collectedAt)
+    );
+  }
+
+  partners.sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    total: partners.reduce((sum, partner) => sum + partner.total, 0),
+    partners,
+  };
+}
+
+/**
+ * Get the current IST calendar date and minutes since midnight.
+ */
+function istNow() {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: IST_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+
+  const get = (type: string) =>
+    parts.find((part) => part.type === type)?.value ?? '';
+
+  const year = get('year');
+  const month = get('month');
+  const day = get('day');
+
+  return {
+    day: `${year}-${month}-${day}`,
+    mins: Number(get('hour')) * 60 + Number(get('minute')),
+  };
+}
+
+/**
+ * Convert an IST date (YYYY-MM-DD) to its UTC midnight instant.
+ */
+function istMidnightUtc(day: string): Date {
+  const [year, month, date] = day.split('-').map(Number);
+
+  return new Date(
+    Date.UTC(year, month - 1, date) - 330 * 60 * 1000
+  );
+}
+
+/**
+ * Today's delivered-order revenue, split by payment method.
+ *
+ * The boundary is midnight in Asia/Kolkata, not UTC midnight.
+ */
+export async function todayRevenue() {
+  const now = istNow();
+  const start = istMidnightUtc(now.day);
+
+  const [result] = await Order.aggregate<{
+    orders: number;
+    total: number;
+    online: number;
+    cod: number;
+  }>([
+    {
+      $match: {
+        status: 'delivered',
+        deliveredAt: { $gte: start },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        orders: { $sum: 1 },
+        total: {
+          $sum: { $ifNull: ['$quotedAmount', 0] },
+        },
+        online: {
+          $sum: {
+            $cond: [
+              { $eq: ['$paymentMethod', 'razorpay'] },
+              { $ifNull: ['$quotedAmount', 0] },
+              0,
+            ],
+          },
+        },
+        cod: {
+          $sum: {
+            $cond: [
+              { $eq: ['$paymentMethod', 'cod'] },
+              { $ifNull: ['$quotedAmount', 0] },
+              0,
+            ],
+          },
+        },
+      },
+    },
+  ]);
+
+  return {
+    orders: result?.orders ?? 0,
+    total: Number(result?.total ?? 0),
+    online: Number(result?.online ?? 0),
+    cod: Number(result?.cod ?? 0),
+  };
+}
+
+/**
+ * Store closing summary.
+ */
+export async function closingSummary() {
+  const [revenue, cash, store] = await Promise.all([
+    todayRevenue(),
+    cashToCollect(),
+    StoreSettings.findOne().lean(),
+  ]);
+
+  return {
+    closingTime: store?.closingTime,
+    isOpen: Boolean(store?.isOpen),
+    revenue,
+    cash,
+  };
+}
+
+/**
+ * One-line message sent to administrators.
+ */
+export function closingMessage(
+  summary: Awaited<ReturnType<typeof closingSummary>>
+) {
+  const staff = summary.cash.partners.length
+    ? `Collect cash: ${summary.cash.partners
+        .map((partner) => `${partner.name} ${inr(partner.total)}`)
+        .join(', ')} (total ${inr(summary.cash.total)}).`
+    : 'No cash to collect from staff.';
+
+  return `Today's revenue ${inr(summary.revenue.total)} from ${
+    summary.revenue.orders
+  } order${summary.revenue.orders === 1 ? '' : 's'} (online ${inr(
+    summary.revenue.online
+  )}, cash/UPI on delivery ${inr(summary.revenue.cod)}). ${staff}`;
+}
+
+/**
+ * Mark a partner's collected cash as handed over.
+ *
+ * If orderIds are supplied, only those orders are settled.
+ * Otherwise, all outstanding cash collections for that partner are settled.
+ *
+ * Payment and order updates happen inside one MongoDB transaction.
+ */
+export async function settleCash(
+  adminId: string,
+  partnerId: string,
+  orderIds?: string[]
+) {
+  return tx(async (session) => {
+    const filter: Record<string, unknown> = {
+      method: 'cod',
+      collectedVia: 'cash',
+      cashSettledAt: null,
+      status: 'cod_collected',
+      collectedBy: new mongoose.Types.ObjectId(partnerId),
+    };
+
+    if (orderIds?.length) {
+      filter.orderId = {
+        $in: orderIds.map((id) => new mongoose.Types.ObjectId(id)),
+      };
+    }
+
+    const payments = await Payment.find(filter)
+      .select('_id orderId amount')
+      .session(session)
+      .lean();
+
+    if (!payments.length) {
+      return {
+        settled: 0,
+        amount: 0,
+      };
+    }
+
+    const paymentIds = payments.map((payment) => payment._id);
+
+    const settledAt = new Date();
+
+    const settlement = await Payment.updateMany(
+      {
+        _id: { $in: paymentIds },
+        cashSettledAt: null,
+        status: 'cod_collected',
+      },
+      {
+        $set: {
+          cashSettledAt: settledAt,
+          cashSettledBy: new mongoose.Types.ObjectId(adminId),
+          status: 'paid',
+        },
+      },
+      { session }
+    );
+
+    // Never assume updateMany modified documents in the same order
+    // as the original query. Abort if any payment was not settled.
+    if (settlement.modifiedCount !== payments.length) {
+      throw new Error(
+        'Cash settlement mismatch. Transaction must be retried.'
+      );
+    }
+
+    const settledPayments = payments;
+
+    const settledOrderIds = [
+      ...new Map(
+        settledPayments.map((payment) => [
+          payment.orderId.toString(),
+          payment.orderId,
+        ])
+      ).values(),
+    ];
+
+    const orderUpdate = await Order.updateMany(
+      {
+        _id: { $in: settledOrderIds },
+      },
+      {
+        $set: {
+          paymentStatus: 'paid',
+        },
+      },
+      { session }
+    );
+
+    // Ensure every settled payment has a corresponding order.
+    if (orderUpdate.matchedCount !== settledOrderIds.length) {
+      throw new Error(
+        'Cash settlement order mismatch. Transaction aborted.'
+      );
+    }
+
+    return {
+      settled: settlement.modifiedCount,
+      amount: settledPayments.reduce(
+        (sum, payment) => sum + Number(payment.amount),
+        0
+      ),
+    };
   });
 }
 
-/** "HH:MM" -> minutes since midnight. */
-const minutes = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return (h ?? 0) * 60 + (m ?? 0); };
-const istNow = () => { const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()); const g = (t: string) => p.find((x) => x.type === t)!.value; return { day: `${g('year')}-${g('month')}-${g('day')}`, mins: Number(g('hour')) * 60 + Number(g('minute')) }; };
+/**
+ * Convert HH:MM into minutes since midnight.
+ */
+const minutes = (hhmm: string) => {
+  const [hours, mins] = hhmm.split(':').map(Number);
+
+  return (hours ?? 0) * 60 + (mins ?? 0);
+};
 
 /**
- * Runs every minute. From one hour before closing time the admins get one alert a day (push + live popup) with the
- * day's revenue and how much cash each staff member still has to hand in. The day is recorded first, so a restart
- * or a second instance cannot send it twice.
+ * Runs every minute.
+ *
+ * Sends one closing alert per IST calendar day, starting one hour
+ * before closing time and ending 30 minutes after closing time.
+ *
+ * The alert date is atomically claimed before notifications are sent.
  */
 export async function closingAlertTick() {
-  const { rows } = await pool.query('select closing_time, is_open, closing_alert_day::text as done from store_settings where id = 1');
-  const s = rows[0];
-  if (!s?.is_open || !s.closing_time) return;
   const now = istNow();
-  const closes = minutes(s.closing_time);
-  if (s.done === now.day || now.mins < closes - 60 || now.mins > closes + 30) return;
-  const claimed = await pool.query("update store_settings set closing_alert_day = $1::date where id = 1 and closing_alert_day is distinct from $1::date returning 1", [now.day]);
-  if (!claimed.rows.length) return;
+
+  const store = await StoreSettings.findOne().lean();
+
+  if (!store?.isOpen || !store.closingTime) {
+    return;
+  }
+
+  const closes = minutes(store.closingTime);
+
+  if (
+    now.mins < closes - 60 ||
+    now.mins > closes + 30
+  ) {
+    return;
+  }
+
+  // Atomic claim: only one server instance can claim this date.
+  const claimed = await StoreSettings.findOneAndUpdate(
+    {
+      _id: store._id,
+      isOpen: true,
+      closingTime: store.closingTime,
+      closingAlertDay: { $ne: now.day },
+    },
+    {
+      $set: {
+        closingAlertDay: now.day,
+      },
+    },
+    {
+      returnDocument: 'after',
+    }
+  ).lean();
+
+  if (!claimed) {
+    return;
+  }
+
   const summary = await closingSummary();
   const message = closingMessage(summary);
-  await notifyAdmins(null, 'closing_alert', 'Store closes in 1 hour', message);
-  emitAdmins('closing:alert', { message, ...summary });
+
+  await notifyAdmins(
+    null,
+    'closing_alert',
+    'Store closes in 1 hour',
+    message
+  );
+
+  emitAdmins('closing:alert', {
+    message,
+    ...summary,
+  });
 }

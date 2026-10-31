@@ -1,5 +1,9 @@
 
-import { Schema, model, Types, Model } from 'mongoose';
+import mongoose, {
+  Schema,
+  Types,
+  type Model,
+} from 'mongoose';
 
 export interface IUser {
   _id?: Types.ObjectId;
@@ -14,25 +18,30 @@ export interface IUser {
   dateOfBirth: Date | null;
   city: string | null;
   isActive: boolean;
+  deactivatedAt: Date | null;
   firebaseUid: string | null;
   signedUpAt: Date | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
+function normalizePhone(value: string): string {
+  const digits = value.replace(/\D/g, '');
+
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return digits.slice(2);
+  }
+
+  return digits;
+}
+
 const userSchema = new Schema<IUser>(
   {
-    _id: {
-      type: Schema.Types.ObjectId,
-      auto: true,
-    },
-
     phone: {
       type: String,
-      unique: true,
       required: true,
       trim: true,
-      index: true,
+      set: normalizePhone,
     },
 
     role: {
@@ -44,7 +53,7 @@ const userSchema = new Schema<IUser>(
     name: {
       type: String,
       trim: true,
-      maxLength: 80,
+      maxlength: 80,
       default: null,
     },
 
@@ -52,7 +61,7 @@ const userSchema = new Schema<IUser>(
       type: String,
       lowercase: true,
       trim: true,
-      maxLength: 120,
+      maxlength: 120,
       default: null,
     },
 
@@ -85,7 +94,7 @@ const userSchema = new Schema<IUser>(
     city: {
       type: String,
       trim: true,
-      maxLength: 60,
+      maxlength: 60,
       default: null,
     },
 
@@ -94,10 +103,14 @@ const userSchema = new Schema<IUser>(
       default: true,
     },
 
+    deactivatedAt: {
+      type: Date,
+      default: null,
+    },
+
     firebaseUid: {
       type: String,
-      unique: true,
-      sparse: true,
+      trim: true,
       default: null,
     },
 
@@ -109,30 +122,23 @@ const userSchema = new Schema<IUser>(
   {
     timestamps: true,
     versionKey: false,
-  }
+  },
 );
 
-// ==========================================
-// PHONE NUMBER NORMALIZATION
-// ==========================================
+userSchema.index({ phone: 1 }, { unique: true });
 
-userSchema.pre('save', async function () {
-  if (this.phone) {
-    // Normalize Indian phone numbers.
-    // Store 10 digits without the +91 country prefix.
-    const digits = this.phone.toString().replace(/\D/g, '');
-
-    if (digits.length === 12 && digits.startsWith('91')) {
-      this.phone = digits.slice(2);
-    }
-  }
-});
-
-// ==========================================
-// MODEL REGISTRATION
-// ==========================================
-
-export const User: Model<IUser> = model<IUser>(
-  'User',
-  userSchema
+userSchema.index(
+  { firebaseUid: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      firebaseUid: { $type: 'string' },
+    },
+  },
 );
+
+export const User: Model<IUser> =
+  (mongoose.models.User as Model<IUser>) ||
+  mongoose.model<IUser>('User', userSchema);
+
+export default User;

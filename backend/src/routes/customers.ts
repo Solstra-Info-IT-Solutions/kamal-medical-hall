@@ -1,192 +1,667 @@
 import { Router } from 'express';
+import { isValidObjectId, Types } from 'mongoose';
 import { z } from 'zod';
 import { authed, invalidateUser, normalisePhone, requireRole } from '../auth.js';
-import { pool, tx } from '../db.js';
+import { tx } from '../db.js';
 import { HttpError, notFound, parse } from '../http.js';
 import { notify, notifyAdmins } from '../notify.js';
+import { AccountRequest } from '../models/AccountRequest.js';
+import { Address } from '../models/Address.js';
+import { Order } from '../models/Order.js';
+import { User } from '../models/User.js';
 import { accountRequestView, profileSchema } from './general.js';
 
-/**
- * Customer accounts.
- *  - A customer asks to deactivate their account (or, once deactivated, to activate it again) with a short form.
- *    Nothing changes until the admin approves; the customer is told the outcome either way.
- *  - The admin manages customers: list with search and status filter, add, edit, activate / deactivate directly,
- *    and decide on requests.
- * A deactivated customer can sign in but only sees their account status and the reactivation form (see `authed`).
- */
 export const accountRouter = Router();
 accountRouter.use(authed, requireRole('customer'));
 
-const REQUEST_COLUMNS = 'id, kind, reason, details, status, admin_note, created_at, decided_at';
+const objectIdParam = (value: string): Types.ObjectId => {
+  if (!isValidObjectId(value)) throw notFound('Not found');
+  return new Types.ObjectId(value);
+};
+
+const requestRow = (r: any) =>
+  accountRequestView({
+    id: r._id.toString(),
+    kind: r.kind,
+    reason: r.reason,
+    details: r.details ?? null,
+    status: r.status,
+    admin_note: r.adminNote ?? null,
+    created_at: r.createdAt,
+    decided_at: r.decidedAt ?? null,
+  });
 
 accountRouter.get('/requests', async (req, res) => {
-  const { rows } = await pool.query(`select ${REQUEST_COLUMNS} from account_requests where user_id = $1 order by created_at desc limit 20`, [req.user!.id]);
-  res.json({ requests: rows.map(accountRequestView) });
+  const rows = await AccountRequest.find({
+    userId: new Types.ObjectId(req.user!.id),
+  })
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .lean()
+    .exec();
+
+  res.json({ requests: rows.map(requestRow) });
 });
 
 accountRouter.post('/requests', async (req, res) => {
-  const b = parse(z.object({
-    kind: z.enum(['deactivate', 'reactivate']),
-    reason: z.string().trim().min(3, 'Please choose or write a reason').max(120),
-    details: z.string().trim().max(1000).optional(),
-  }), req.body);
+  const b = parse(
+    z.object({
+      kind: z.enum(['deactivate', 'reactivate']),
+      reason: z
+        .string()
+        .trim()
+        .min(3, 'Please choose or write a reason')
+        .max(120),
+      details: z.string().trim().max(1000).optional(),
+    }),
+    req.body,
+  );
+
   const user = req.user!;
   const active = user.is_active !== false;
-  if (b.kind === 'deactivate' && !active) throw new HttpError(409, 'already_deactivated', 'Your account is already deactivated.');
-  if (b.kind === 'reactivate' && active) throw new HttpError(409, 'already_active', 'Your account is already active.');
-  let row;
-  try {
-    row = (await pool.query(
-      `insert into account_requests (user_id, kind, reason, details) values ($1, $2, $3, nullif($4, '')) returning ${REQUEST_COLUMNS}`,
-      [user.id, b.kind, b.reason, b.details ?? null],
-    )).rows[0];
-  } catch (e) {
-    if ((e as { code?: string }).code === '23505') throw new HttpError(409, 'request_pending', 'You already have a request waiting for the store. You can cancel it first.');
-    throw e;
+
+  if (b.kind === 'deactivate' && !active) {
+    throw new HttpError(
+      409,
+      'already_deactivated',
+      'Your account is already deactivated.',
+    );
   }
+
+  if (b.kind === 'reactivate' && active) {
+    throw new HttpError(
+      409,
+      'already_active',
+      'Your account is already active.',
+    );
+  }
+
+  let saved;
+
+  try {
+    saved = await new AccountRequest({
+      userId: new Types.ObjectId(user.id),
+      kind: b.kind,
+      reason: b.reason,
+      details: b.details || null,
+    }).save();
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: number }).code === 11000
+    ) {
+      throw new HttpError(
+        409,
+        'request_pending',
+        'You already have a request waiting for the store. You can cancel it first.',
+      );
+    }
+
+    throw error;
+  }
+
   const who = `${user.name ?? 'A customer'} (+91 ${user.phone})`;
-  await notifyAdmins(null, 'account_request', b.kind === 'deactivate' ? 'Account deactivation request' : 'Account reactivation request', `${who}: ${b.reason}`);
-  res.status(201).json({ request: accountRequestView(row) });
+
+  await notifyAdmins(
+    null,
+    'account_request',
+    b.kind === 'deactivate'
+      ? 'Account deactivation request'
+      : 'Account reactivation request',
+    `${who}: ${b.reason}`,
+  );
+
+  res.status(201).json({ request: requestRow(saved) });
 });
 
 accountRouter.delete('/requests/:id', async (req, res) => {
-  const { rowCount } = await pool.query("update account_requests set status = 'cancelled', decided_at = now() where id = $1 and user_id = $2 and status = 'pending'", [req.params.id, req.user!.id]);
-  if (!rowCount) throw notFound('No pending request to cancel');
+  const result = await AccountRequest.updateOne(
+    {
+      _id: objectIdParam(String(req.params.id)),
+      userId: new Types.ObjectId(req.user!.id),
+      status: 'pending',
+    },
+    {
+      $set: {
+        status: 'cancelled',
+        decidedAt: new Date(),
+      },
+    },
+  );
+
+  if (!result.modifiedCount) {
+    throw notFound('No pending request to cancel');
+  }
+
   res.status(204).end();
 });
 
-// ============================================================ Admin
+// -----------------------------------------------------------------------------
+// Admin customer management
+// -----------------------------------------------------------------------------
+
 export const customersAdmin = Router();
 customersAdmin.use(authed, requireRole('admin'));
 
-const CUSTOMER_COLUMNS = `u.id, u.name, u.phone, u.email, u.gender, to_char(u.date_of_birth, 'YYYY-MM-DD') as date_of_birth, u.city, u.is_active, u.deactivated_at, u.created_at, u.signed_up_at`;
-const customerView = (r: Record<string, unknown>) => ({
-  id: r.id, name: r.name ?? null, phone: r.phone, email: r.email ?? null, gender: r.gender ?? null, dateOfBirth: r.date_of_birth ?? null, city: r.city ?? null,
-  isActive: r.is_active !== false, deactivatedAt: r.deactivated_at ?? null, joinedAt: r.created_at, signedUp: Boolean(r.signed_up_at),
-  orderCount: r.order_count === undefined ? undefined : Number(r.order_count), pendingRequest: r.pending_kind ? { kind: r.pending_kind } : null,
+const customerView = (
+  u: any,
+  orderCount?: number,
+  pendingKind?: string | null,
+) => ({
+  id: u._id.toString(),
+  name: u.name ?? null,
+  phone: u.phone,
+  email: u.email ?? null,
+  gender: u.gender ?? null,
+  dateOfBirth: u.dateOfBirth
+    ? new Date(u.dateOfBirth).toISOString().slice(0, 10)
+    : null,
+  city: u.city ?? null,
+  isActive: u.isActive !== false,
+  deactivatedAt: u.deactivatedAt ?? null,
+  joinedAt: u.createdAt,
+  signedUp: Boolean(u.signedUpAt),
+  ...(orderCount === undefined ? {} : { orderCount }),
+  pendingRequest: pendingKind ? { kind: pendingKind } : null,
 });
+
+const OPEN_STATUSES = [
+  'requested',
+  'quoted',
+  'accepted',
+  'awaiting_payment',
+  'ready_to_dispatch',
+  'out_for_delivery',
+];
 
 customersAdmin.get('/customers', async (req, res) => {
-  const q = parse(z.object({
-    search: z.string().trim().max(40).optional(),
-    status: z.enum(['all', 'active', 'deactivated']).default('all'),
-    limit: z.coerce.number().int().min(1).max(100).default(50),
-    offset: z.coerce.number().int().min(0).default(0),
-  }), req.query);
-  const where = `u.role = 'customer' and u.phone not like 'deleted-%'
-    and ($1::text is null or u.phone like '%' || $1 || '%' or u.name ilike '%' || $1 || '%' or u.email ilike '%' || $1 || '%' or u.city ilike '%' || $1 || '%')
-    and ($2 = 'all' or ($2 = 'active') = u.is_active)`;
-  const [list, counts] = await Promise.all([
-    pool.query(
-      `select ${CUSTOMER_COLUMNS}, (select count(*) from orders o where o.customer_id = u.id) as order_count,
-         (select r.kind from account_requests r where r.user_id = u.id and r.status = 'pending' limit 1) as pending_kind
-       from users u where ${where} order by u.created_at desc limit $3 offset $4`,
-      [q.search ?? null, q.status, q.limit, q.offset]),
-    pool.query(`select count(*) filter (where is_active) as active, count(*) filter (where not is_active) as deactivated,
-        (select count(*) from account_requests where status = 'pending') as pending
-      from users where role = 'customer' and phone not like 'deleted-%'`),
-  ]);
-  const c = counts.rows[0];
-  res.json({ customers: list.rows.map(customerView), counts: { active: +c.active, deactivated: +c.deactivated, pendingRequests: +c.pending } });
-});
+  const q = parse(
+    z.object({
+      search: z.string().trim().max(40).optional(),
+      status: z.enum(['all', 'active', 'deactivated']).default('all'),
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+      offset: z.coerce.number().int().min(0).default(0),
+    }),
+    req.query,
+  );
 
-customersAdmin.get('/customers/:id', async (req, res) => {
-  const u = (await pool.query(`select ${CUSTOMER_COLUMNS} from users u where u.id = $1 and u.role = 'customer'`, [req.params.id])).rows[0];
-  if (!u) throw notFound('Customer not found');
-  const [orders, totals, requests, addresses] = await Promise.all([
-    pool.query('select id, order_number, status, quoted_amount, created_at from orders where customer_id = $1 order by created_at desc limit 20', [u.id]),
-    pool.query(`select count(*) as orders, count(*) filter (where status = 'delivered') as delivered, coalesce(sum(quoted_amount) filter (where status = 'delivered'), 0) as lifetime from orders where customer_id = $1`, [u.id]),
-    pool.query(`select ${REQUEST_COLUMNS} from account_requests where user_id = $1 order by created_at desc limit 20`, [u.id]),
-    pool.query('select line1, line2, landmark, pincode, city from addresses where user_id = $1 order by created_at limit 5', [u.id]),
+  const filter: Record<string, any> = {
+    role: 'customer',
+    phone: { $not: /^deleted-/ },
+  };
+
+  if (q.status === 'active') filter.isActive = true;
+  if (q.status === 'deactivated') filter.isActive = false;
+
+  if (q.search) {
+    const rx = new RegExp(
+      q.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+      'i',
+    );
+
+    filter.$or = [
+      { phone: rx },
+      { name: rx },
+      { email: rx },
+      { city: rx },
+    ];
+  }
+
+  const [users, active, deactivated, pendingRequests] = await Promise.all([
+    User.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(q.offset)
+      .limit(q.limit)
+      .lean()
+      .exec(),
+
+    User.countDocuments({
+      role: 'customer',
+      phone: { $not: /^deleted-/ },
+      isActive: true,
+    }),
+
+    User.countDocuments({
+      role: 'customer',
+      phone: { $not: /^deleted-/ },
+      isActive: false,
+    }),
+
+    AccountRequest.countDocuments({ status: 'pending' }),
   ]);
+
+  const ids = users.map((u) => u._id);
+
+  const [orderCounts, pending] = await Promise.all([
+    Order.aggregate([
+      { $match: { customerId: { $in: ids } } },
+      {
+        $group: {
+          _id: '$customerId',
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+
+    AccountRequest.find({
+      userId: { $in: ids },
+      status: 'pending',
+    })
+      .select({ userId: 1, kind: 1 })
+      .lean()
+      .exec(),
+  ]);
+
+  const countMap = new Map(
+    orderCounts.map((x) => [x._id.toString(), x.count]),
+  );
+
+  const pendingMap = new Map(
+    pending.map((x) => [x.userId.toString(), x.kind]),
+  );
+
   res.json({
-    customer: customerView(u),
-    orderCount: +totals.rows[0].orders, deliveredCount: +totals.rows[0].delivered, lifetimeValue: Number(totals.rows[0].lifetime),
-    orders: orders.rows.map((o) => ({ id: o.id, orderNumber: o.order_number, status: o.status, amount: o.quoted_amount === null ? null : Number(o.quoted_amount), createdAt: o.created_at })),
-    requests: requests.rows.map(accountRequestView),
-    addresses: addresses.rows.map((a) => [a.line1, a.line2, a.landmark, a.city, a.pincode].filter(Boolean).join(', ')),
+    customers: users.map((u) =>
+      customerView(
+        u,
+        countMap.get(u._id.toString()) ?? 0,
+        pendingMap.get(u._id.toString()) ?? null,
+      ),
+    ),
+    counts: {
+      active,
+      deactivated,
+      pendingRequests,
+    },
   });
 });
 
-/** The admin adds a customer (for example someone who phoned the shop). They sign in later with this number. */
+customersAdmin.get('/customers/:id', async (req, res) => {
+  const id = objectIdParam(String(req.params.id));
+
+  const u = await User.findOne({
+    _id: id,
+    role: 'customer',
+  })
+    .lean()
+    .exec();
+
+  if (!u) throw notFound('Customer not found');
+
+  const [orders, totals, requests, addresses] = await Promise.all([
+    Order.find({ customerId: id })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .select({
+        orderNumber: 1,
+        status: 1,
+        quotedAmount: 1,
+        createdAt: 1,
+      })
+      .lean()
+      .exec(),
+
+    Order.aggregate([
+      { $match: { customerId: id } },
+      {
+        $group: {
+          _id: null,
+          orders: { $sum: 1 },
+          delivered: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0],
+            },
+          },
+          lifetime: {
+            $sum: {
+              $cond: [
+                { $eq: ['$status', 'delivered'] },
+                { $ifNull: ['$quotedAmount', 0] },
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]),
+
+    AccountRequest.find({ userId: id })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean()
+      .exec(),
+
+    Address.find({ userId: id })
+      .sort({ createdAt: 1 })
+      .limit(5)
+      .lean()
+      .exec(),
+  ]);
+
+  const t = totals[0] ?? {
+    orders: 0,
+    delivered: 0,
+    lifetime: 0,
+  };
+
+  res.json({
+    customer: customerView(u),
+    orderCount: t.orders,
+    deliveredCount: t.delivered,
+    lifetimeValue: Number(t.lifetime),
+
+    orders: orders.map((o) => ({
+      id: o._id.toString(),
+      orderNumber: o.orderNumber,
+      status: o.status,
+      amount: o.quotedAmount ?? null,
+      createdAt: o.createdAt,
+    })),
+
+    requests: requests.map(requestRow),
+
+    addresses: addresses.map((a) =>
+      [a.line1, a.line2, a.landmark, a.city, a.pincode]
+        .filter(Boolean)
+        .join(', '),
+    ),
+  });
+});
+
 customersAdmin.post('/customers', async (req, res) => {
-  const b = parse(profileSchema.extend({ phone: z.string().min(10).max(15) }), req.body);
+  const b = parse(
+    profileSchema.extend({
+      phone: z.string().min(10).max(15),
+    }),
+    req.body,
+  );
+
   const phone = normalisePhone(b.phone);
-  const { rows } = await pool.query(
-    `insert into users (phone, role, name, email, gender, date_of_birth, city, signed_up_at)
-     values ($1, 'customer', $2, nullif($3, ''), $4, $5::date, nullif($6, ''), now()) on conflict (phone) do nothing returning id`,
-    [phone, b.name, b.email ?? null, b.gender ?? null, b.dateOfBirth ?? null, b.city ?? null]);
-  if (!rows[0]) throw new HttpError(409, 'already_registered', 'This mobile number already has an account.');
-  const u = (await pool.query(`select ${CUSTOMER_COLUMNS} from users u where u.id = $1`, [rows[0].id])).rows[0];
-  res.status(201).json({ customer: customerView(u) });
+
+  try {
+    const u = await User.create({
+      phone,
+      role: 'customer',
+      name: b.name,
+      email: b.email || null,
+      gender: b.gender ?? null,
+      dateOfBirth: b.dateOfBirth
+        ? new Date(`${b.dateOfBirth}T00:00:00.000Z`)
+        : null,
+      city: b.city || null,
+      signedUpAt: new Date(),
+    });
+
+    res.status(201).json({
+      customer: customerView(u.toObject()),
+    });
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: number }).code === 11000
+    ) {
+      throw new HttpError(
+        409,
+        'already_registered',
+        'This mobile number already has an account.',
+      );
+    }
+
+    throw error;
+  }
 });
 
 customersAdmin.patch('/customers/:id', async (req, res) => {
   const b = parse(profileSchema.partial(), req.body);
-  const { rows } = await pool.query(
-    `update users set name = coalesce($2, name), email = case when $3::text is null then email else nullif($3, '') end,
-       gender = case when $4 then $5 else gender end, date_of_birth = case when $6 then $7::date else date_of_birth end,
-       city = case when $8::text is null then city else nullif($8, '') end, updated_at = now()
-     where id = $1 and role = 'customer' returning phone`,
-    [req.params.id, b.name ?? null, b.email ?? null, b.gender !== undefined, b.gender ?? null, b.dateOfBirth !== undefined, b.dateOfBirth ?? null, b.city ?? null]);
-  if (!rows[0]) throw notFound('Customer not found');
-  invalidateUser(rows[0].phone);
-  const u = (await pool.query(`select ${CUSTOMER_COLUMNS} from users u where u.id = $1`, [req.params.id])).rows[0];
+
+  const update: Record<string, unknown> = {};
+
+  if (b.name !== undefined) update.name = b.name;
+  if (b.email !== undefined) update.email = b.email || null;
+  if (b.gender !== undefined) update.gender = b.gender;
+
+  if (b.dateOfBirth !== undefined) {
+    update.dateOfBirth = b.dateOfBirth
+      ? new Date(`${b.dateOfBirth}T00:00:00.000Z`)
+      : null;
+  }
+
+  if (b.city !== undefined) update.city = b.city || null;
+
+  const u = await User.findOneAndUpdate(
+    {
+      _id: objectIdParam(String(req.params.id)),
+      role: 'customer',
+    },
+    {
+      $set: update,
+    },
+    {
+      returnDocument: 'after',
+      runValidators: true,
+    },
+  )
+    .lean()
+    .exec();
+
+  if (!u) throw notFound('Customer not found');
+
+  invalidateUser(u.phone);
+
   res.json({ customer: customerView(u) });
 });
 
-const OPEN_STATUSES = "('requested','quoted','accepted','awaiting_payment','ready_to_dispatch','out_for_delivery')";
+async function setActive(
+  userId: string,
+  active: boolean,
+  adminId: string,
+  note: string | null,
+  requestId?: string,
+): Promise<string> {
+  return tx(async (session) => {
+    const id = objectIdParam(userId);
 
-/** Sets a customer active or not. Shared by the direct switch and by approving a request. */
-async function setActive(userId: string, active: boolean, adminId: string, note: string | null, requestId?: string) {
-  return tx(async (c) => {
-    const u = (await c.query("select id, phone, is_active from users where id = $1 and role = 'customer' for update", [userId])).rows[0];
+    const u = await User.findOne({
+      _id: id,
+      role: 'customer',
+    })
+      .session(session)
+      .lean()
+      .exec();
+
     if (!u) throw notFound('Customer not found');
+
     if (!active) {
-      const open = await c.query(`select order_number from orders where customer_id = $1 and status in ${OPEN_STATUSES} limit 1`, [userId]);
-      if (open.rows[0]) throw new HttpError(409, 'active_orders', `Order #${open.rows[0].order_number} is still in progress. Finish or cancel it before deactivating this account.`);
+      const open = await Order.findOne({
+        customerId: id,
+        status: { $in: OPEN_STATUSES },
+      } as any)
+        .select({ orderNumber: 1 })
+        .session(session)
+        .lean<{ orderNumber: string }>()
+        .exec();
+
+      if (open) {
+        throw new HttpError(
+          409,
+          'active_orders',
+          `Order #${open.orderNumber} is still in progress. Finish or cancel it before deactivating this account.`,
+        );
+      }
     }
-    await c.query('update users set is_active = $2, deactivated_at = case when $2 then null else now() end, updated_at = now() where id = $1', [userId, active]);
-    // A direct switch also settles a matching pending request; any other pending request no longer applies.
-    await c.query(
-      `update account_requests set status = case when id = $2 or kind = $3 then 'approved' else 'cancelled' end, admin_note = coalesce($4, admin_note), decided_by = $5, decided_at = now()
-       where user_id = $1 and status = 'pending'`,
-      [userId, requestId ?? null, active ? 'reactivate' : 'deactivate', note, adminId]);
-    await notify(userId, null, active ? 'account_reactivated' : 'account_deactivated',
+
+    await User.updateOne(
+      { _id: id },
+      {
+        $set: {
+          isActive: active,
+          deactivatedAt: active ? null : new Date(),
+        },
+      },
+      { session },
+    );
+
+    const pending = await AccountRequest.find({
+      userId: id,
+      status: 'pending',
+    })
+      .session(session)
+      .exec();
+
+    for (const r of pending) {
+      r.status =
+        (requestId && r._id.toString() === requestId) ||
+        r.kind === (active ? 'reactivate' : 'deactivate')
+          ? 'approved'
+          : 'cancelled';
+
+      if (note) r.adminNote = note;
+
+      r.decidedBy = objectIdParam(adminId);
+      r.decidedAt = new Date();
+
+      await r.save({ session });
+    }
+
+    await notify(
+      userId,
+      null,
+      active ? 'account_reactivated' : 'account_deactivated',
       active ? 'Your account is active again' : 'Your account has been deactivated',
-      (active ? 'Welcome back! You can order again.' : 'You can ask the store to activate it again from the app at any time.') + (note ? ` Note from the store: ${note}` : ''), c);
-    return u.phone as string;
+      (active
+        ? 'Welcome back! You can order again.'
+        : 'You can ask the store to activate it again from the app at any time.') +
+        (note ? ` Note from the store: ${note}` : ''),
+      session,
+    );
+
+    return u.phone;
   });
 }
 
 customersAdmin.post('/customers/:id/status', async (req, res) => {
-  const b = parse(z.object({ active: z.boolean(), note: z.string().trim().max(300).optional() }), req.body);
-  const phone = await setActive(req.params.id as string, b.active, req.user!.id, b.note || null);
+  const b = parse(
+    z.object({
+      active: z.boolean(),
+      note: z.string().trim().max(300).optional(),
+    }),
+    req.body,
+  );
+
+  const phone = await setActive(
+    String(req.params.id),
+    b.active,
+    req.user!.id,
+    b.note || null,
+  );
+
   invalidateUser(phone);
+
   res.status(204).end();
 });
 
 customersAdmin.get('/account-requests', async (req, res) => {
-  const q = parse(z.object({ status: z.enum(['pending', 'all']).default('pending') }), req.query);
-  const { rows } = await pool.query(
-    `select r.id, r.kind, r.reason, r.details, r.status, r.admin_note, r.created_at, r.decided_at, u.id as user_id, u.name, u.phone, u.is_active
-     from account_requests r join users u on u.id = r.user_id
-     where ($1 = 'all' or r.status = 'pending') order by (r.status = 'pending') desc, r.created_at desc limit 100`, [q.status]);
-  res.json({ requests: rows.map((r) => ({ ...accountRequestView(r), customer: { id: r.user_id, name: r.name, phone: r.phone, isActive: r.is_active } })) });
+  const q = parse(
+    z.object({
+      status: z.enum(['pending', 'all']).default('pending'),
+    }),
+    req.query,
+  );
+
+  const filter: Record<string, unknown> =
+    q.status === 'all' ? {} : { status: 'pending' };
+
+  const requests = await AccountRequest.find(filter as any)
+    .sort({ status: 1, createdAt: -1 })
+    .limit(100)
+    .populate({
+      path: 'userId',
+      select: 'name phone isActive',
+    })
+    .lean()
+    .exec();
+
+  res.json({
+    requests: requests.map((r: any) => ({
+      ...requestRow(r),
+      customer: {
+        id: r.userId?._id?.toString(),
+        name: r.userId?.name ?? null,
+        phone: r.userId?.phone,
+        isActive: r.userId?.isActive !== false,
+      },
+    })),
+  });
 });
 
 customersAdmin.post('/account-requests/:id/decide', async (req, res) => {
-  const b = parse(z.object({ approve: z.boolean(), note: z.string().trim().max(300).optional() }), req.body);
-  const r = (await pool.query("select id, user_id, kind from account_requests where id = $1 and status = 'pending'", [req.params.id])).rows[0];
+  const b = parse(
+    z.object({
+      approve: z.boolean(),
+      note: z.string().trim().max(300).optional(),
+    }),
+    req.body,
+  );
+
+  const r = await AccountRequest.findOne({
+    _id: objectIdParam(String(req.params.id)),
+    status: 'pending',
+  })
+    .lean()
+    .exec();
+
   if (!r) throw notFound('This request was already handled');
+
   if (b.approve) {
-    invalidateUser(await setActive(r.user_id, r.kind === 'reactivate', req.user!.id, b.note || null, r.id));
+    invalidateUser(
+      await setActive(
+        r.userId.toString(),
+        r.kind === 'reactivate',
+        req.user!.id,
+        b.note || null,
+        r._id!.toString(),
+      ),
+    );
   } else {
-    await tx(async (c) => {
-      await c.query("update account_requests set status = 'rejected', admin_note = $2, decided_by = $3, decided_at = now() where id = $1", [r.id, b.note || null, req.user!.id]);
-      await notify(r.user_id, null, 'account_request_rejected', r.kind === 'deactivate' ? 'Deactivation request declined' : 'Reactivation request declined',
-        b.note ? `Note from the store: ${b.note}` : 'Please contact the store for details.', c);
+    await tx(async (session) => {
+      const updated = await AccountRequest.updateOne(
+        {
+          _id: r._id,
+          status: 'pending',
+        },
+        {
+          $set: {
+            status: 'rejected',
+            adminNote: b.note || null,
+            decidedBy: objectIdParam(req.user!.id),
+            decidedAt: new Date(),
+          },
+        },
+        { session },
+      );
+
+      if (!updated.modifiedCount) {
+        throw notFound('This request was already handled');
+      }
+
+      await notify(
+        r.userId.toString(),
+        null,
+        'account_request_rejected',
+        r.kind === 'deactivate'
+          ? 'Deactivation request declined'
+          : 'Reactivation request declined',
+        b.note
+          ? `Note from the store: ${b.note}`
+          : 'Please contact the store for details.',
+        session,
+      );
     });
   }
+
   res.status(204).end();
 });
