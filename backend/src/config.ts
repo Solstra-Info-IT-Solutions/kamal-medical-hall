@@ -13,6 +13,17 @@ const allowedAuthModes = ['dev', 'firebase', 'twilio', 'sms'] as const;
 type AuthMode = (typeof allowedAuthModes)[number];
 
 const authModeValue = env.AUTH_MODE ?? 'firebase';
+const configuredCorsOrigins = (env.CORS_ORIGINS ?? '')
+  .split(',')
+  .map((origin) => origin.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
+// The admin app is hosted on its own production subdomain. Keep it allowed even
+// when an older deployment environment variable only lists the public website.
+const corsOrigins = [...new Set([
+  'https://admin.kamalmedicalhall.com',
+  ...configuredCorsOrigins,
+])];
 
 if (!allowedAuthModes.includes(authModeValue as AuthMode)) {
   throw new Error(
@@ -78,10 +89,7 @@ export const config = {
 
   publicUrl: (env.PUBLIC_URL ?? '').replace(/\/+$/, ''),
 
-  corsOrigins: (env.CORS_ORIGINS ?? '')
-    .split(',')
-    .map((origin) => origin.trim().replace(/\/$/, ''))
-    .filter(Boolean),
+  corsOrigins,
 
   socketOnly: env.API_TRANSPORT === 'socket',
 
