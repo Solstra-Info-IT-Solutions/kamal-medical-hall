@@ -39,8 +39,8 @@ export const useSession = create<SessionState>((set, get) => ({
     if (!token) return set({ status: 'out', user: null });
     try {
       // Render's free API instance can take 50+ seconds to wake after idling.
-      // Keep session restoration alive long enough for its first socket connection.
-      const { user, accountRequest } = await endpoints.me({ timeoutMs: 75_000 });
+      // Bound session restoration to one wait so a broken socket cannot trap the app on its splash.
+      const { user, accountRequest } = await endpoints.me({ timeoutMs: 65_000, retry: 'never' });
       set({ status: 'in', user, accountRequest: accountRequest ?? null });
       setMonitoringUser(user);
       connectRealtime();

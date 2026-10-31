@@ -23,7 +23,7 @@ export function configureApi(opts: { getToken: () => Promise<string | null>; ref
 const http = createHttpClient({
   baseUrl: API_URL,
   // Every request goes over the live socket; EXPO_PUBLIC_API_TRANSPORT=http switches back to plain HTTPS.
-  fetchImpl: API_TRANSPORT === 'socket' ? createSocketFetch({ baseUrl: API_URL, getSocket, connectWaitMs: 70_000 }) : undefined,
+  fetchImpl: API_TRANSPORT === 'socket' ? createSocketFetch({ baseUrl: API_URL, getSocket, connectWaitMs: 60_000 }) : undefined,
   getToken: () => tokenProvider(),
   refreshToken: () => tokenRefresher(),
   onUnauthorized: () => onUnauthorized(),
