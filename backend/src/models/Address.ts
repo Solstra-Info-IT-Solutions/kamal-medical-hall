@@ -60,11 +60,7 @@ const AddressSchema = new Schema<IAddress>(
       required: true,
       match: /^\d{6}$/,
     },
-    city: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+    city: string | null,
     latitude: {
       type: Number,
       default: null,
