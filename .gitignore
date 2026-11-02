@@ -14,3 +14,8 @@ id_rsa*
 kamal
 kamal.pub
 .env
+
+.github/workflows/*.yml.backup
+
+# Local configuration backups
+mobile/app.json.backup

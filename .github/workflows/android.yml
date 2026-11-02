@@ -1,26 +1,49 @@
-name: Android CI
+name: Android EAS Preview Build
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+    paths:
+      - "mobile/**"
+      - ".github/workflows/android.yml"
   pull_request:
-    branches: [ "main" ]
+    branches:
+      - main
+    paths:
+      - "mobile/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
 
 jobs:
-  build:
-
+  android-build:
+    name: Build Android App
     runs-on: ubuntu-latest
 
-    steps:
-    - uses: actions/checkout@v4
-    - name: set up JDK 11
-      uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-        cache: gradle
+    defaults:
+      run:
+        working-directory: mobile
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-    - name: Build with Gradle
-      run: ./gradlew build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify Expo project
+        run: npx eas-cli project:info --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EAS_ACCESS_TOKEN }}
+
+      - name: Start Android preview build
+        run: npx eas-cli build --platform android --profile preview --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EAS_ACCESS_TOKEN }}

@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Kamal Medical Hall",
-    "slug": "bharti",
+    "slug": "kamal-medical-hall",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -64,10 +64,10 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "owner": "bharti_1",
+    "owner": "kamal-medical-hall",
     "extra": {
       "eas": {
-        "projectId": "6671b19d-2a69-4888-8cea-de6caa499385"
+        "projectId": "8582f469-4c7c-4fe4-8230-f7149b9081c6"
       }
     }
   }
